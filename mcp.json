@@ -1,0 +1,10 @@
+{
+    "mcpServers": {
+      "GearDesign_agent": {
+        "command": "D:\\SW\\Streamlit\\venv\\Scripts\\python.exe",
+        "args": [
+          "D:\\SW\\Streamlit\\agents\\GearDesign_agent.py"
+        ]
+      }
+    }
+  }
