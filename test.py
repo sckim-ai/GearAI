@@ -39,12 +39,21 @@ asm = clr.AddReference(str(dll))    # 여기서 불러온 dll이 참고하고 �
 import System.Windows.Forms as WinForms
 from GearDesign import GearDesignForm
 import System.Threading as Th
+from System.Threading.Tasks import TaskScheduler
 import json
 from Newtonsoft.Json.Linq import JObject
 from GearDesign.Utility import SimpleSizing, SimpleSizingInput, SimpleSizingOutput
 
 # WinForms는 STA(Single-Threaded Apartment) 모드여야 함
 Th.Thread.CurrentThread.TrySetApartmentState(Th.ApartmentState.STA)
+print(f"Current thread apartment state: {Th.Thread.CurrentThread.ApartmentState}")
+print(f"Current thread ID: {Th.Thread.CurrentThread.ManagedThreadId}")
+
+# SynchronizationContext 제거 (async 작업 문제 해결)
+from System.Threading import SynchronizationContext
+print(f"Current SynchronizationContext: {SynchronizationContext.Current}")
+SynchronizationContext.SetSynchronizationContext(None)
+print(f"SynchronizationContext after reset: {SynchronizationContext.Current}")
 
 form = GearDesignForm(str(base))                 # ← 인스턴스 생성
 
@@ -120,6 +129,7 @@ _input.helix_angle = 0
 _input.pressure_angle = 20
 _input.min_contact_safety_factor = 1.2
 _input.min_bending_safety_factor = 1.6
+_input.mainForm = form
 
 import asyncio
 import System.Threading.Tasks as Tasks
@@ -131,9 +141,10 @@ useParallel = False  # Boolean parameter for parallel processing (set to false a
 # Import necessary .NET types for delegates and cancellation
 from System import Action
 from System.Threading import CancellationTokenSource
+from System.Threading.Tasks import Task
 
 # Create cancellation token source
-_cancellationTokenSource = CancellationTokenSource()
+_cancellatiookenSource = CancellationTokenSource()
 
 # Define progress callback function with new signature
 def progress_callback(current, total):
@@ -169,18 +180,67 @@ def calculate_simple_sizing_sync():
     try:
         print("Starting SimpleSizing calculation (synchronous approach)...")
         
-        # Create the .NET Task
-        task = SimpleSizing.Calculate(_input, withRating, useParallel, UpdateProgress, _cancellationTokenSource.Token)
+        # Create the .NET Task wrapped in Task.Run to avoid SynchronizationContext issues
+        def create_calculation_task():
+            return SimpleSizing.Calculate(_input, withRating, useParallel, UpdateProgress, _cancellationTokenSource.Token)
+        
+        # Wrap in Task.Run to force execution on ThreadPool
+        from System import Func
+        task_func = Func[Tasks.Task[SimpleSizingOutput]](create_calculation_task)
+        task = Task.Run[SimpleSizingOutput](task_func)
         print(f"Task created: {task}")
         print(f"Task type: {type(task)}")
         
-        # Simple approach: try to wait for task completion
+        # Force task to start on ThreadPool
+        print(f"Current TaskScheduler: {TaskScheduler.Current}")
+        print(f"Default TaskScheduler: {TaskScheduler.Default}")
+        
+        # Try to start the task explicitly
+        if hasattr(task, 'Start'):
+            try:
+                print("Attempting to start task explicitly...")
+                task.Start(TaskScheduler.Default)
+            except Exception as start_error:
+                print(f"Could not start task explicitly: {start_error}")
+        
+        # Improved approach with timeout and cancellation
         try:
             print("Attempting to wait for task completion...")
-            task_completed = task.Wait(300000)  # Wait up to 5 minutes
+            
+            # Set up cancellation after shorter timeout
+            import threading
+            def cancel_after_timeout():
+                import time
+                time.sleep(30)  # 30초 후 취소
+                if not task.IsCompleted:
+                    print("Force canceling task after 30 seconds...")
+                    _cancellationTokenSource.Cancel()
+            
+            cancel_thread = threading.Thread(target=cancel_after_timeout)
+            cancel_thread.daemon = True
+            cancel_thread.start()
+            
+            # 주기적으로 Task 상태 확인
+            timeout_ms = 35000
+            check_interval = 2000  # 2초마다 확인
+            elapsed = 0
+            
+            while elapsed < timeout_ms:
+                if task.Wait(check_interval):
+                    task_completed = True
+                    break
+                elapsed += check_interval
+                print(f"Still waiting... elapsed: {elapsed/1000}s, Task status: {task.Status}")
+            else:
+                task_completed = False
             
             if task_completed:
                 print("Task completed!")
+                print(f"Task Status: {task.Status}")
+                print(f"IsCompleted: {task.IsCompleted}")
+                print(f"IsFaulted: {task.IsFaulted}")
+                print(f"IsCanceled: {task.IsCanceled}")
+                
                 if task.IsFaulted:
                     exception_msg = str(task.Exception) if task.Exception else "Unknown error"
                     print(f"Task faulted: {exception_msg}")
@@ -190,7 +250,15 @@ def calculate_simple_sizing_sync():
                     return None
                 else:
                     print("Task succeeded!")
-                    return task.Result
+                    print("Attempting to access task.Result...")
+                    try:
+                        result = task.Result
+                        print(f"Result type: {type(result)}")
+                        print(f"Result is None: {result is None}")
+                        return result
+                    except Exception as result_error:
+                        print(f"Error accessing task.Result: {result_error}")
+                        return None
             else:
                 print("Task did not complete within timeout")
                 return None
