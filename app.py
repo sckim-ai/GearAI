@@ -85,27 +85,7 @@ if agent_config:
             selected_temp = 1.0 # o4-mini는 온도 1.0 고정   
         
         updated_config["temperature"] = selected_temp
-        
-    # Chain 에이전트 설정
-    elif agent_type == "chain":
-        # 모델 선택
-        models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"]
-        selected_model = st.sidebar.selectbox(
-            "모델 선택",
-            models,
-            index=models.index(st.session_state.agent_settings[agent_type].get("model", "gpt-4o-mini"))
-            if st.session_state.agent_settings[agent_type].get("model") in models else 0
-        )
-        updated_config["model"] = selected_model
-        # 체인 길이 설정
-        selected_length = st.sidebar.slider(
-            "체인 길이", 
-            min_value=1, 
-            max_value=5, 
-            value=st.session_state.agent_settings[agent_type].get("chain_length", 3),
-            step=1
-        )
-        updated_config["chain_length"] = selected_length
+            
     
     # 설정 업데이트
     st.session_state.agent_settings[agent_type].update(updated_config)

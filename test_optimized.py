@@ -70,6 +70,7 @@ def main():
         getimage = manager.get_gearimage(output_file)
         if getimage:
             print("success!")
+            
         # SimpleSizing 계산 수행
         print("7. SimpleSizing 계산 수행 중...")
         sizing_input = manager.create_simple_sizing_input()

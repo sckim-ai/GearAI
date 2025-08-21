@@ -1,3 +1,11 @@
+# Claude Code Project Setup
+ 
+## Version Control
+* Whenever code changes are made, you must record a one-line description with emoji in korean of the change in `.commit_message.txt` with Edit Tool.
+   - Read `.commit_message.txt` first, and then Edit.
+   - Overwrite regardless of existing content.
+   - If it was a git revert related operation, make the .commit_message.txt file empty.
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
