@@ -13,6 +13,7 @@ from openai import AsyncOpenAI
 import os
 import streamlit as st
 import time
+from langsmith import traceable
 
 # OpenAI 클라이언트 초기화
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -29,6 +30,7 @@ class GPTAgent(BaseAgent):
         self.model = self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.7)
     
+    @traceable
     async def process_with_callback(self, input_text: str, callback: Callable[[str], None]) -> str:
         """콜백 방식으로 처리합니다. 청크가 도착할 때마다 콜백 함수를 호출합니다."""
         try:

@@ -11,7 +11,6 @@ sys.path.insert(0, project_root)
 
 from agents.base_agent import BaseAgent
 from agents.gpt_agent import GPTAgent
-from agents.deep_research_agent import DeepResearchAgent
 
 class AgentService:
     """
@@ -26,20 +25,13 @@ class AgentService:
         
     def _initialize_agents(self):
         """기본 에이전트들을 초기화합니다."""
+        
         # GPT 에이전트 설정
         gpt_config = {
             "model": "gpt-4o-mini",
             "temperature": 0.7
         }
-        self.register_agent("Single LLM", GPTAgent(gpt_config))
-        
-        # Deep research 설정
-        Deep_research_config = {            
-            "model": "gpt-4o-mini",
-            "Research width": 2,
-            "Research depth": 2,
-        }
-        self.register_agent("Deep research", DeepResearchAgent(Deep_research_config))
+        self.register_agent("Gear Agent", GPTAgent(gpt_config)) 
         
     def register_agent(self, name: str, agent: BaseAgent):
         """새로운 에이전트를 등록합니다."""

@@ -15,7 +15,12 @@ dependencies = [
     "openai-agents",
     "youtube-transcript-api",
     "nest-asyncio",
-    "pythonnet"
+    "pythonnet",
+    "langchain-openai>=0.3.31",
+    "langchain-core>=0.3.74",
+    "langgraph>=0.6.6",
+    "langchain-teddynote>=0.4.4",
+    "ipython>=8.37.0",
 ]
 
 [project.optional-dependencies]

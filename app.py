@@ -10,7 +10,7 @@ import time
 nest_asyncio.apply()
 
 # 페이지 설정
-st.set_page_config(page_title="AI Agent Chat", layout="wide")
+st.set_page_config(page_title="Gear AI Agent Chat", layout="wide")
 
 # Session state 설정 (사용할 변수 선언과 유사, dict 형태로 사용)
 if "messages" not in st.session_state:
@@ -41,8 +41,6 @@ def get_agent_service():
 # 캐시를 피하기 위한 타임스탬프 추가
 agent_service = get_agent_service()
 
-
-
 # 사이드바 설정
 st.sidebar.title("🔧 설정")
 agent_type = st.sidebar.selectbox(
@@ -61,7 +59,7 @@ if agent_config:
     updated_config = {}
     
     # GPT 에이전트 설정
-    if agent_type == "Single LLM":
+    if agent_type == "Gear Agent":
         # 모델 선택
         models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"]
         selected_model = st.sidebar.selectbox(
