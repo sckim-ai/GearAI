@@ -12,17 +12,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Common Development Commands
 
-### Virtual Environment Setup
+### Project Setup with UV
 ```bash
-# Create virtual environment
-python -m venv venv
+# Install dependencies (automatically creates virtual environment)
+uv sync
 
-# Activate virtual environment
-venv\Scripts\activate  # Windows
-source venv/bin/activate  # macOS/Linux
+# Add new dependencies
+uv add package_name
+
+# Install development dependencies
+uv sync --dev
+
+# Activate virtual environment (if needed manually)
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # macOS/Linux
 ```
 
-### Package Installation
+### Package Installation (Legacy pip method - use uv instead)
 ```bash
 # Main dependencies
 pip install streamlit>=1.28.0 openai>=1.3.0 python-dotenv>=1.0.0 asyncio>=3.4.3 typing-extensions>=4.5.0
@@ -36,16 +42,21 @@ pip install mcp openai-agents streamlit youtube-transcript-api python-dotenv
 
 ### Running Applications
 ```bash
-# Main Streamlit app
-streamlit run app.py
+# Main Streamlit app (with uv)
+uv run streamlit run app.py
 
-# Deep Research module
+# Deep Research module (with uv)
 cd Deep_research
-python main.py
+uv run python main.py
 
-# Test files
+# Test files (with uv)
+uv run python test.py
+uv run python Deep_research/test.py
+
+# Legacy method (if not using uv)
+streamlit run app.py
+python main.py
 python test.py
-python Deep_research/test.py
 ```
 
 ### Environment Variables Required
