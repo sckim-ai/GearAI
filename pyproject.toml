@@ -3,7 +3,7 @@ name = "streamlit-ai-agent"
 version = "0.1.0"
 description = "Streamlit AI agent application with MCP and Deep Research modules"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "streamlit>=1.28.0",
     "openai>=1.3.0",
@@ -21,6 +21,12 @@ dependencies = [
     "langgraph>=0.6.6",
     "langchain-teddynote>=0.4.4",
     "ipython>=8.37.0",
+    "langchain-anthropic>=0.3.19",
+    "langchain-google-genai>=2.1.9",
+    "langchain-community>=0.3.27",
+    "jq>=1.10.0",
+    "fuzzywuzzy>=0.18.0",
+    "python-levenshtein>=0.27.1",
 ]
 
 [project.optional-dependencies]

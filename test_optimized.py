@@ -17,8 +17,8 @@ def main():
     """메인 실행 함수"""
     
     # 경로 설정
-    gear_design_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
-    default_json_path = r"D:\SW\Streamlit\agents\data\schema\Default.json"
+    gear_design_path = r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
+    default_json_path = r"C:\SW\GearAI\agents\data\schema\Default.json"
     
     print("=== GearDesign 최적화 테스트 시작 ===")
     
@@ -65,7 +65,7 @@ def main():
         # 기어 이미지 추출
         print("기어 이미지 추출 중...")
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        original_dir = r"D:\SW\Streamlit"   # 경로 지정
+        original_dir = r"C:\SW\GearAI"   # 경로 지정
         output_file = os.path.join(original_dir, f"gear_image_{timestamp}.png") 
         getimage = manager.get_gearimage(output_file)
         if getimage:
@@ -131,7 +131,6 @@ def main():
                     
                     # CSV로 저장
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    original_dir = r"D:\SW\Streamlit"   # 경로 지정
                     output_file = os.path.join(original_dir, f"gear_results_optimized_{timestamp}.csv") 
                     df.to_csv(output_file, index=False, encoding='utf-8-sig')
                     print(f"\n결과가 '{output_file}'에 저장되었습니다")
