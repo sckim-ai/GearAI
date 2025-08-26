@@ -49,7 +49,7 @@ class GPTAgent(BaseAgent):
                     model=self.model_name,
                     temperature=self.temperature,
                     api_key=os.getenv("OPENAI_API_KEY"),
-                    streaming=True
+                    streaming=False
                 )
             elif self.provider == "anthropic":
                 return ChatAnthropic(
@@ -71,7 +71,7 @@ class GPTAgent(BaseAgent):
                     model=self.model_name,
                     temperature=self.temperature,
                     api_key=os.getenv("OPENAI_API_KEY"),
-                    streaming=True
+                    streaming=False
                 )
         except Exception as e:
             print(f"LLM 초기화 오류: {e}")
@@ -80,7 +80,7 @@ class GPTAgent(BaseAgent):
                 model="gpt-4o-mini",
                 temperature=0.7,
                 api_key=os.getenv("OPENAI_API_KEY"),
-                streaming=True
+                streaming=False
             )
         
     def update_config(self, new_config: Dict[str, Any]):
@@ -121,12 +121,19 @@ class GPTAgent(BaseAgent):
             
             full_response = ""
             
-            # LangChain을 통한 스트리밍 응답 - callbacks 제거
-            async for chunk in self.llm.astream(messages):
-                if hasattr(chunk, 'content') and chunk.content:
-                    full_response += chunk.content
-                    # 콜백 함수를 직접 호출
-                    callback(chunk.content)
+            # 프로바이더에 따른 응답 처리
+            if self.provider == "openai":
+                # OpenAI는 스트리밍 비활성화로 인해 일반 응답 사용
+                response = await self.llm.ainvoke(messages)
+                full_response = response.content if hasattr(response, 'content') else str(response)
+                callback(full_response)
+            else:
+                # 다른 프로바이더는 스트리밍 유지
+                async for chunk in self.llm.astream(messages):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        full_response += chunk.content
+                        # 콜백 함수를 직접 호출
+                        callback(chunk.content)
             
             # 최종 응답을 메시지에 추가
             self.add_message("assistant", full_response)
