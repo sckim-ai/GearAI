@@ -43,15 +43,16 @@ agent_service = get_agent_service()
 
 # 사이드바 설정
 st.sidebar.title("🔧 설정")
+st.sidebar.subheader("에이전트 설정")
 agent_type = st.sidebar.selectbox(
-    "AI Agent 선택",
+    "에이전트 선택",
     agent_service.get_available_agents()
 )
 
 # 에이전트 설정 표시
 agent_config = agent_service.get_agent_config(agent_type)
 if agent_config:
-    st.sidebar.subheader("에이전트 설정")
+    st.sidebar.subheader("LLM 모델 설정")
     # 에이전트 타입에 따른 설정 초기화
     if agent_type not in st.session_state.agent_settings:
         st.session_state.agent_settings[agent_type] = agent_config.copy()
@@ -60,12 +61,37 @@ if agent_config:
     
     # GPT 에이전트 설정
     if agent_type == "Gear Agent":
-        # 모델 선택
-        models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o4-mini"]
+        # 프로바이더 선택
+        providers = {
+            "OpenAI": "openai",
+            "Anthropic": "anthropic", 
+            "Google": "google"
+        }
+        
+        selected_provider_name = st.sidebar.selectbox(
+            "LLM 프로바이더",
+            list(providers.keys()),
+            index=list(providers.values()).index(
+                st.session_state.agent_settings[agent_type].get("provider", "openai")
+            ) if st.session_state.agent_settings[agent_type].get("provider") in providers.values() else 0
+        )
+        selected_provider = providers[selected_provider_name]
+        updated_config["provider"] = selected_provider
+        
+        # 프로바이더별 모델 선택
+        if selected_provider == "openai":
+            models = ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"]
+        elif selected_provider == "anthropic":
+            models = ["claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+        elif selected_provider == "google":
+            models = ["gemini-2.5-pro", "gemini-2.5-flash"]
+        else:
+            models = ["gpt-5"]  # 기본값
+            
         selected_model = st.sidebar.selectbox(
             "모델 선택",
             models,
-            index=models.index(st.session_state.agent_settings[agent_type].get("model", "gpt-4o-mini"))
+            index=models.index(st.session_state.agent_settings[agent_type].get("model", models[0]))
             if st.session_state.agent_settings[agent_type].get("model") in models else 0
         )
         updated_config["model"] = selected_model
@@ -75,14 +101,28 @@ if agent_config:
             "온도(Temperature)", 
             min_value=0.0, 
             max_value=1.0, 
-            value=st.session_state.agent_settings[agent_type].get("temperature", 0.7),
+            value=st.session_state.agent_settings[agent_type].get("temperature", 0.0),
             step=0.1
         )
 
-        if selected_model == "o4-mini":
-            selected_temp = 1.0 # o4-mini는 온도 1.0 고정   
+        # # o1 모델들은 온도 설정이 고정됨
+        # if "o1" in selected_model:
+        #     selected_temp = 1.0
+        #     st.sidebar.info("o1 모델은 온도가 1.0으로 고정됩니다.")
         
         updated_config["temperature"] = selected_temp
+        
+        # API 키 상태 표시
+        st.sidebar.subheader("API 키 상태")
+        if selected_provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            st.sidebar.write("🔑 OpenAI:", "✅ 설정됨" if api_key else "❌ 미설정")
+        elif selected_provider == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY") 
+            st.sidebar.write("🔑 Anthropic:", "✅ 설정됨" if api_key else "❌ 미설정")
+        elif selected_provider == "google":
+            api_key = os.getenv("GEMINI_API_KEY")
+            st.sidebar.write("🔑 Google:", "✅ 설정됨" if api_key else "❌ 미설정")
             
     
     # 설정 업데이트

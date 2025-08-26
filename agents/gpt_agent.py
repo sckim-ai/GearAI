@@ -8,27 +8,106 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from .base_agent import BaseAgent
-from utils.llm import llm_call, llm_call_stream
-from openai import AsyncOpenAI
-import os
 import streamlit as st
 import time
 from langsmith import traceable
+from dotenv import load_dotenv
 
-# OpenAI 클라이언트 초기화
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+load_dotenv()
+
+
+# LangChain imports
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.callbacks import AsyncCallbackHandler
+from langchain_core.outputs import LLMResult
+
+# 스트리밍 콜백 핸들러
+class StreamingCallbackHandler(AsyncCallbackHandler):
+    def __init__(self, callback: Callable[[str], None]):
+        self.callback = callback
+        
+    async def on_llm_new_token(self, token: str, **kwargs) -> None:
+        """새로운 토큰이 생성될 때마다 콜백 함수 호출"""
+        self.callback(token)
 
 class GPTAgent(BaseAgent):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.model = config.get("model", "gpt-4o-mini")
+        self.model_name = config.get("model", "gpt-4o-mini")
         self.temperature = config.get("temperature", 0.7)
+        self.provider = config.get("provider", "openai")
+        self.llm = self._initialize_llm()
+        
+    def _initialize_llm(self):
+        """LLM 모델 초기화"""
+        try:
+            if self.provider == "openai":
+                return ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=True
+                )
+            elif self.provider == "anthropic":
+                return ChatAnthropic(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("ANTHROPIC_API_KEY"),
+                    streaming=True
+                )
+            elif self.provider == "google":
+                return ChatGoogleGenerativeAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    google_api_key=os.getenv("GEMINI_API_KEY"),
+                    streaming=True
+                )
+            else:
+                # 기본값은 OpenAI
+                return ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=True
+                )
+        except Exception as e:
+            print(f"LLM 초기화 오류: {e}")
+            # 오류 시 기본 OpenAI 모델로 fallback
+            return ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.7,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                streaming=True
+            )
         
     def update_config(self, new_config: Dict[str, Any]):
         """설정을 업데이트하고 내부 변수를 갱신합니다."""
         super().update_config(new_config)
-        self.model = self.config.get("model", "gpt-4o-mini")
+        old_provider = self.provider
+        old_model = self.model_name
+        
+        self.model_name = self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.7)
+        self.provider = self.config.get("provider", "openai")
+        
+        # 모델이나 프로바이더가 변경된 경우 LLM 재초기화
+        if old_provider != self.provider or old_model != self.model_name:
+            self.llm = self._initialize_llm()
+    
+    def _convert_messages_to_langchain(self):
+        """BaseAgent의 메시지를 LangChain 메시지 형식으로 변환"""
+        langchain_messages = []
+        for msg in self.get_messages():
+            if msg["role"] == "system":
+                langchain_messages.append(SystemMessage(content=msg["content"]))
+            elif msg["role"] == "user":
+                langchain_messages.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                langchain_messages.append(AIMessage(content=msg["content"]))
+        return langchain_messages
     
     @traceable
     async def process_with_callback(self, input_text: str, callback: Callable[[str], None]) -> str:
@@ -37,25 +116,17 @@ class GPTAgent(BaseAgent):
             # 사용자 메시지 추가
             self.add_message("user", input_text)
             
+            # LangChain 메시지 형식으로 변환
+            messages = self._convert_messages_to_langchain()
+            
             full_response = ""
             
-            # 직접 OpenAI API 호출
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=self.get_messages(),
-                temperature=self.temperature,
-                stream=True
-            )
-            
-            # 스트림 응답 처리
-            async for chunk in response:
-                if chunk.choices and len(chunk.choices) > 0:
-                    if chunk.choices[0].delta and chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        if content:
-                            full_response += content
-                            # 콜백으로 청크 전달
-                            callback(content)
+            # LangChain을 통한 스트리밍 응답 - callbacks 제거
+            async for chunk in self.llm.astream(messages):
+                if hasattr(chunk, 'content') and chunk.content:
+                    full_response += chunk.content
+                    # 콜백 함수를 직접 호출
+                    callback(chunk.content)
             
             # 최종 응답을 메시지에 추가
             self.add_message("assistant", full_response)
