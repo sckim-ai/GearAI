@@ -101,6 +101,8 @@ class GearClassifierAgent(BaseAgent):
         
         try:
             response = self.llm.invoke(messages)
+            state["messages"] = response
+
             classification_result = response.content.strip()
             
             if "GEAR_RELATED" in classification_result:
@@ -117,7 +119,8 @@ class GearClassifierAgent(BaseAgent):
     
     def _handle_gear_related(self, state: GearClassifierState) -> GearClassifierState:
         """기어 설계 관련 질문 처리"""
-        state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
+        # state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
+        state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['messages']}'\n\n다음 단계로 진행합니다..."
         return state
     
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:
