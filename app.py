@@ -60,7 +60,7 @@ if agent_config:
     updated_config = {}
     
     # Chat 에이전트 설정
-    if agent_type == "Chatbot":
+    if agent_type == "Chatbot" or agent_type == "Gear Classifier":
         # 프로바이더 선택
         providers = {
             "OpenAI": "openai",

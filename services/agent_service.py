@@ -11,6 +11,7 @@ sys.path.insert(0, project_root)
 
 from agents.base_agent import BaseAgent
 from agents.chat_agent import ChatAgent
+from agents.gear_classifier_agent import GearClassifierAgent
 
 class AgentService:
     """
@@ -26,12 +27,19 @@ class AgentService:
     def _initialize_agents(self):
         """기본 에이전트들을 초기화합니다."""
         
-        # GPT 에이전트 설정
-        gpt_config = {
+        # Chat 에이전트 설정
+        chat_config = {
             "model": "gpt-4o-mini",
             "temperature": 0.7
         }
-        self.register_agent("Chatbot", ChatAgent(gpt_config)) 
+        self.register_agent("Chatbot", ChatAgent(chat_config))
+        
+        # Gear Classifier 에이전트 설정
+        gear_config = {
+            "model": "gpt-4o-mini",
+            "temperature": 0.3
+        }
+        self.register_agent("Gear Classifier", GearClassifierAgent(gear_config)) 
         
     def register_agent(self, name: str, agent: BaseAgent):
         """새로운 에이전트를 등록합니다."""

@@ -1,4 +1,4 @@
 from .base_agent import BaseAgent
-from .gpt_agent import GPTAgent
+from .chat_agent import ChatAgent
 
-__all__ = ['BaseAgent', 'GPTAgent'] 
+__all__ = ['BaseAgent', 'ChatAgent'] 
