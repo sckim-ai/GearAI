@@ -167,8 +167,18 @@ class GearClassifierAgent(BaseAgent):
         
         return workflow.compile()
     
+    def get_graph_image(self):
+        """LangGraph에서 그래프 이미지를 생성하여 반환"""
+        try:
+            # LangGraph의 get_graph() 메서드 사용
+            graph_image = self.graph.get_graph()
+            return graph_image
+        except Exception as e:
+            print(f"그래프 이미지 생성 오류: {e}")
+            return None
+    
     def get_mermaid_graph(self) -> str:
-        """LangGraph 워크플로우를 Mermaid 형식으로 반환"""
+        """LangGraph 워크플로우를 Mermaid 형식으로 반환 (fallback용)"""
         return """
 graph TD
     A[사용자 입력] --> B[분류 분석]

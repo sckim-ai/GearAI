@@ -205,18 +205,32 @@ with col2:
     # LangGraph가 있는 에이전트만 시각화
     if agent_type == "Gear Classifier":
         try:
-            # 에이전트에서 Mermaid 그래프 가져오기
+            # 에이전트에서 그래프 이미지 가져오기
             selected_agent = agent_service.agents[agent_type]
-            if hasattr(selected_agent, 'get_mermaid_graph'):
-                mermaid_graph = selected_agent.get_mermaid_graph()
-                
-                # Mermaid 다이어그램 표시
+            if hasattr(selected_agent, 'get_graph_image'):
                 st.markdown("### 에이전트 워크플로우")
-                st.markdown(f"""
-                ```mermaid
-                {mermaid_graph}
-                ```
-                """)
+                
+                # LangGraph의 그래프 이미지 시도
+                try:
+                    graph_image = selected_agent.get_graph_image()
+                    if graph_image is not None:
+                        # PIL Image이나 다른 형태의 이미지 객체를 Streamlit에서 표시
+                        st.image(graph_image, caption="LangGraph 워크플로우", use_column_width=True)
+                    else:
+                        raise Exception("그래프 이미지 생성 실패")
+                        
+                except Exception as graph_error:
+                    # 그래프 이미지 생성 실패 시 Mermaid fallback
+                    st.warning("그래프 이미지 생성에 실패했습니다. Mermaid 다이어그램을 표시합니다.")
+                    if hasattr(selected_agent, 'get_mermaid_graph'):
+                        mermaid_graph = selected_agent.get_mermaid_graph()
+                        st.markdown(f"""
+                        ```mermaid
+                        {mermaid_graph}
+                        ```
+                        """)
+                    else:
+                        st.error(f"워크플로우 시각화 오류: {str(graph_error)}")
             else:
                 st.info("이 에이전트는 워크플로우 시각화를 지원하지 않습니다.")
         except Exception as e:
