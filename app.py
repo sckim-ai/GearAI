@@ -215,7 +215,7 @@ with col2:
                     graph_image = selected_agent.get_graph_image()
                     if graph_image is not None:
                         # PIL Image이나 다른 형태의 이미지 객체를 Streamlit에서 표시
-                        st.image(graph_image, caption="LangGraph 워크플로우", use_column_width=True)
+                        st.image(graph_image, caption="LangGraph 워크플로우", use_container_width=True)
                     else:
                         raise Exception("그래프 이미지 생성 실패")
                         
