@@ -33,7 +33,7 @@ class StreamingCallbackHandler(AsyncCallbackHandler):
         """새로운 토큰이 생성될 때마다 콜백 함수 호출"""
         self.callback(token)
 
-class GPTAgent(BaseAgent):
+class ChatAgent(BaseAgent):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.model_name = config.get("model", "gpt-4o-mini")

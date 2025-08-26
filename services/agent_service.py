@@ -10,7 +10,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from agents.base_agent import BaseAgent
-from agents.gpt_agent import GPTAgent
+from agents.chat_agent import ChatAgent
 
 class AgentService:
     """
@@ -31,7 +31,7 @@ class AgentService:
             "model": "gpt-4o-mini",
             "temperature": 0.7
         }
-        self.register_agent("Gear Agent", GPTAgent(gpt_config)) 
+        self.register_agent("Chatbot", ChatAgent(gpt_config)) 
         
     def register_agent(self, name: str, agent: BaseAgent):
         """새로운 에이전트를 등록합니다."""

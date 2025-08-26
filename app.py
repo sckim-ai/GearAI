@@ -59,8 +59,8 @@ if agent_config:
     
     updated_config = {}
     
-    # GPT 에이전트 설정
-    if agent_type == "Gear Agent":
+    # Chat 에이전트 설정
+    if agent_type == "Chatbot":
         # 프로바이더 선택
         providers = {
             "OpenAI": "openai",
