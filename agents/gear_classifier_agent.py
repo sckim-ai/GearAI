@@ -2,6 +2,8 @@ from typing import Dict, Any, Callable
 import sys
 import os
 import asyncio
+from io import BytesIO
+from PIL import Image
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -170,9 +172,12 @@ class GearClassifierAgent(BaseAgent):
     def get_graph_image(self):
         """LangGraph에서 그래프 이미지를 생성하여 반환"""
         try:
-            # LangGraph의 get_graph() 메서드 사용
-            graph_image = self.graph.get_graph()
-            return graph_image
+            # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
+            png_data = self.graph.get_graph(xray=True).draw_mermaid_png()
+            
+            # PNG 데이터를 PIL Image로 변환
+            image = Image.open(BytesIO(png_data))
+            return image
         except Exception as e:
             print(f"그래프 이미지 생성 오류: {e}")
             return None
