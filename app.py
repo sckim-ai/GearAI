@@ -130,66 +130,120 @@ if agent_config:
     
     agent_service.agents[agent_type].update_config(st.session_state.agent_settings[agent_type])
     
-# 메인 채팅 인터페이스
-st.title("AI Agent Chat")
+# 메인 레이아웃 설정
+col1, col2 = st.columns([3, 1])
 
-# 기존 대화 표시
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+with col1:
+    # 메인 채팅 인터페이스
+    st.title("AI Agent Chat")
 
-# 사용자 입력 처리
-if user_input := st.chat_input("메시지를 입력하세요..."):
-    # 사용자 메시지 표시
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
-        
-    # 에이전트 응답 처리
-    try:
-        # 어시스턴트 메시지 컨테이너 생성
-        with st.chat_message("assistant"):
-            # 응답 컨테이너 생성
-            response_placeholder = st.empty()
+    # 기존 대화 표시
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 사용자 입력 처리
+    if user_input := st.chat_input("메시지를 입력하세요..."):
+        # 사용자 메시지 표시
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
             
-            # 스피너와 응답 표시
-            with st.spinner("AI가 응답을 생성하고 있습니다..."):
-                # 현재 설정 가져오기
-                current_config = st.session_state.agent_settings[agent_type]
+        # 에이전트 응답 처리
+        try:
+            # 어시스턴트 메시지 컨테이너 생성
+            with st.chat_message("assistant"):
+                # 응답 컨테이너 생성
+                response_placeholder = st.empty()
                 
-                try:
-                    # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
-                    response_parts = []
+                # 스피너와 응답 표시
+                with st.spinner("AI가 응답을 생성하고 있습니다..."):
+                    # 현재 설정 가져오기
+                    current_config = st.session_state.agent_settings[agent_type]
                     
-                    # 콜백 함수 정의
-                    def update_response(chunk):
-                        response_parts.append(chunk)
-                        # 현재까지의 전체 응답 표시
-                        response_placeholder.markdown("".join(response_parts))
-                    
-                    # 비동기 함수를 동기적으로 실행
-                    loop = asyncio.get_event_loop()
-                    loop.run_until_complete(
-                        agent_service.process_with_callback(
-                            agent_type, 
-                            user_input, 
-                            update_response
+                    try:
+                        # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
+                        response_parts = []
+                        
+                        # 콜백 함수 정의
+                        def update_response(chunk):
+                            response_parts.append(chunk)
+                            # 현재까지의 전체 응답 표시
+                            response_placeholder.markdown("".join(response_parts))
+                        
+                        # 비동기 함수를 동기적으로 실행
+                        loop = asyncio.get_event_loop()
+                        loop.run_until_complete(
+                            agent_service.process_with_callback(
+                                agent_type, 
+                                user_input, 
+                                update_response
+                            )
                         )
-                    )
-                    
-                    # 최종 응답 조합
-                    response_text = "".join(response_parts)
-                    
-                except Exception as e:
-                    st.error(f"처리 중 오류 발생: {str(e)}")
-                    import traceback
-                    st.error(traceback.format_exc())
-                    response_text = f"오류가 발생했습니다: {str(e)}"
+                        
+                        # 최종 응답 조합
+                        response_text = "".join(response_parts)
+                        
+                    except Exception as e:
+                        st.error(f"처리 중 오류 발생: {str(e)}")
+                        import traceback
+                        st.error(traceback.format_exc())
+                        response_text = f"오류가 발생했습니다: {str(e)}"
+                
+                # 최종 응답을 세션 상태에 추가
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response_text}
+                )
             
-            # 최종 응답을 세션 상태에 추가
-            st.session_state.messages.append(
-                {"role": "assistant", "content": response_text}
-            )
+        except Exception as e:
+            st.error(f"에러 발생: {str(e)}")
+
+# 오른쪽 사이드바
+with col2:
+    st.header("🔍 워크플로우 시각화")
+    
+    # LangGraph가 있는 에이전트만 시각화
+    if agent_type == "Gear Classifier":
+        try:
+            # 에이전트에서 Mermaid 그래프 가져오기
+            selected_agent = agent_service.agents[agent_type]
+            if hasattr(selected_agent, 'get_mermaid_graph'):
+                mermaid_graph = selected_agent.get_mermaid_graph()
+                
+                # Mermaid 다이어그램 표시
+                st.markdown("### 에이전트 워크플로우")
+                st.markdown(f"""
+                ```mermaid
+                {mermaid_graph}
+                ```
+                """)
+            else:
+                st.info("이 에이전트는 워크플로우 시각화를 지원하지 않습니다.")
+        except Exception as e:
+            st.error(f"워크플로우 시각화 오류: {str(e)}")
+    else:
+        st.info("LangGraph 기반 에이전트를 선택하면 워크플로우를 확인할 수 있습니다.")
         
-    except Exception as e:
-        st.error(f"에러 발생: {str(e)}") 
+    # 에이전트 상태 정보
+    st.markdown("### 📊 에이전트 정보")
+    st.write(f"**선택된 에이전트:** {agent_type}")
+    if agent_type in st.session_state.agent_settings:
+        config = st.session_state.agent_settings[agent_type]
+        st.write(f"**모델:** {config.get('model', 'N/A')}")
+        st.write(f"**온도:** {config.get('temperature', 'N/A')}")
+        st.write(f"**프로바이더:** {config.get('provider', 'N/A')}")
+    
+    # 대화 통계
+    st.markdown("### 💬 대화 통계")
+    user_messages = len([msg for msg in st.session_state.messages if msg["role"] == "user"])
+    assistant_messages = len([msg for msg in st.session_state.messages if msg["role"] == "assistant"])
+    st.write(f"**사용자 메시지:** {user_messages}")
+    st.write(f"**AI 응답:** {assistant_messages}")
+    
+    # 대화 초기화 버튼
+    if st.button("🗑️ 대화 초기화"):
+        st.session_state.messages = []
+        # 선택된 에이전트의 메시지 히스토리도 초기화
+        if agent_type in agent_service.agents:
+            agent_service.agents[agent_type].clear_messages()
+        st.rerun() 

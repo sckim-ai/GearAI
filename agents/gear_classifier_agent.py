@@ -167,6 +167,29 @@ class GearClassifierAgent(BaseAgent):
         
         return workflow.compile()
     
+    def get_mermaid_graph(self) -> str:
+        """LangGraph 워크플로우를 Mermaid 형식으로 반환"""
+        return """
+graph TD
+    A[사용자 입력] --> B[분류 분석]
+    B --> C{기어 설계 관련?}
+    C -->|예| D[기어 관련 처리]
+    C -->|아니오| E[비관련 응답]
+    D --> F[다음 단계 진행]
+    E --> G[대화 종료 안내]
+    F --> H[완료]
+    G --> H[완료]
+    
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+    style C fill:#f3e5f5
+    style D fill:#e8f5e8
+    style E fill:#ffebee
+    style F fill:#e8f5e8
+    style G fill:#ffebee
+    style H fill:#f5f5f5
+"""
+    
     def update_config(self, new_config: Dict[str, Any]):
         """설정을 업데이트하고 내부 변수를 갱신합니다."""
         super().update_config(new_config)
