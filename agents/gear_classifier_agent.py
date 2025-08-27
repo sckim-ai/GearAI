@@ -36,6 +36,7 @@ class GearClassifierState(TypedDict):
     classification: str  # "gear_related", "not_gear_related"
     gear_type: str  # "designable", "not_designable"
     detected_gear_type: str  # "gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary", "unknown"
+    has_speed_info: bool  # 입출력 속도 정보 유무
     has_power_info: bool  # 입출력 파워 정보 유무
     has_ratio_info: bool  # 기어비 또는 기어 잇수 정보 유무
     missing_info: str  # "power", "ratio", "both", "none"
@@ -248,8 +249,31 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
 사용자의 입력에서 다음 정보가 포함되어 있는지 확인해주세요:
 
-1. **입출력 파워 정보**: 
-   - 입력 파워, 출력 파워, 토크, 회전수 등
+1. **입출력 파워 정보**:     
+   1) CASE1: Gear Pair 인 경우 아래의 정보가 모두 포함되어야 함
+    - 입/출력 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - 입/출력 파워 중 1개, 또는 입/출력 토크 중 1개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - 예시1: 입력속도 1000 rpm, 출력토크 50Nm -> OK
+    - 예시2: 입력속도 1000 rpm, 출력속도 500 rpm, 출력토크 50Nm -> NG (입출력 속도 모두 주어짐)
+    - 예시3: 입력속도 1000 rpm, 입력파워 100W, 출력토크 50Nm -> NG (입력 파워와 토크 모두 주어짐)
+
+   2) CASE2: Three Gear 
+    - Gear1/Gear2/Gear3 의 입력 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3 의 입력 파워 중 2개, 또는 토크 중 2개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - 예시1: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 토크 50Nm -> OK
+    - 예시2: Gear1 속도 1000 rpm, Gear2 속도 500 rpm, Gear3 토크 50Nm -> NG (입출력 속도 모두 주어짐)
+    - 예시3: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 파워 50W -> NG (입력 파워와 토크 모두 주어짐)
+
+   3) CASE3: Simple Planetary, Double Pinion Planetary
+    - Sun/Carrier/Ring 의 입력 속도 중 2개 (유성기어의 속도는 3개의 입력 중 2개로 결정되기 때문에 반드시 2개 입력 필요)
+    - Sun/Carrier/Ring 의 입력 파워 중 1개, 또는 토크 중 1개 (유성기어의 파워 또는 토크는 1개의 입력과 입력된 속도로 나머지가 모두 계산됨)
+
+    ### 입출력 작동조건 단위 (아래 단위가 아닌 경우 환산된 정보가 포함되어야 함)
+    - 속도 단위: "rpm" (예: "1000rpm", "3600rpm" 등)
+    - 파워 단위: "kW" (예: "100 kW", "5kW" 등) 
+    - 토크 단위: "Nm" (예: "50Nm", "200Nm" 등)
+
+   - 
    - 예: "100W", "50kW", "1000rpm", "200Nm" 등
 
 2. **기어비 또는 기어 잇수 정보**:
@@ -257,17 +281,20 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
    - 기어 잇수 (예: "20치", "30개 이", "teeth 40")
 
 다음 형식으로만 응답하세요:
+SPEED_INFO: YES 또는 NO
 POWER_INFO: YES 또는 NO
 RATIO_INFO: YES 또는 NO
 
 응답 예시:
 사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
+SPEED_INFO: NO    
 POWER_INFO: YES
 RATIO_INFO: YES
 
 사용자 입력: "기어쌍 설계 부탁드립니다"
 응답:
+SPEED_INFO: NO
 POWER_INFO: NO  
 RATIO_INFO: NO
 """
@@ -300,28 +327,40 @@ RATIO_INFO: NO
 
             print(f"필수 정보 확인 결과: {info_check_result}")
 
+            # 속도 정보 확인
+            state["has_speed_info"] = "SPEED_INFO: YES" in info_check_result
+            
             # 파워 정보 확인
             state["has_power_info"] = "POWER_INFO: YES" in info_check_result
             
             # 기어비/잇수 정보 확인  
             state["has_ratio_info"] = "RATIO_INFO: YES" in info_check_result
             
-            # 누락된 정보 분류
-            if not state["has_power_info"] and not state["has_ratio_info"]:
-                state["missing_info"] = "both"
-            elif not state["has_power_info"]:
-                state["missing_info"] = "power"
-            elif not state["has_ratio_info"]:
-                state["missing_info"] = "ratio"
-            else:
+            # 누락된 정보 분류 - speed, power, ratio 모두 고려
+            missing_items = []
+            if not state["has_speed_info"]:
+                missing_items.append("speed")
+            if not state["has_power_info"]:
+                missing_items.append("power")
+            if not state["has_ratio_info"]:
+                missing_items.append("ratio")
+            
+            if len(missing_items) == 0:
                 state["missing_info"] = "none"
+            elif len(missing_items) == 1:
+                state["missing_info"] = missing_items[0]
+            elif len(missing_items) == 2:
+                state["missing_info"] = "_".join(missing_items)
+            else:  # 모든 정보 누락
+                state["missing_info"] = "all"
                 
         except Exception as e:
             print(f"필수 정보 확인 중 오류 발생: {e}")
             # 오류 시 모든 정보가 없다고 가정
+            state["has_speed_info"] = False
             state["has_power_info"] = False
             state["has_ratio_info"] = False
-            state["missing_info"] = "both"
+            state["missing_info"] = "all"
         
         return state
 
@@ -340,7 +379,8 @@ RATIO_INFO: NO
 
 🔧 **설계 타입**: {gear_name}\n\r
 📋 **요청사항**: {state['user_input']}\n\r
-⚡ **파워 정보**: 포함됨\n\r
+🏃 **속도 정보**: 포함됨\n\r
+⚡ **파워/토크 정보**: 포함됨\n\r
 ⚙️ **기어비/잇수 정보**: 포함됨
 
 다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
@@ -357,23 +397,53 @@ RATIO_INFO: NO
         
         gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
         
-        if state["missing_info"] == "both":
-            missing_text = "**입출력 파워 정보**와 **기어비/잇수 정보**가"
+        # 누락된 정보에 따른 메시지 생성
+        missing_items = []
+        if not state["has_speed_info"]:
+            missing_items.append("속도")
+        if not state["has_power_info"]:
+            missing_items.append("파워/토크")
+        if not state["has_ratio_info"]:
+            missing_items.append("기어비/잇수")
+        
+        if len(missing_items) == 3:
+            missing_text = "**속도 정보**, **파워/토크 정보**, **기어비/잇수 정보**가"
             examples = """
-📋 **입력 예시**:
-• "100W 입력으로 기어비 3:1인 기어쌍 설계"\n\r
-• "1000rpm에서 감속비 10인 유성기어 설계"\n\r 
-• "50Nm 토크로 20치와 60치 기어쌍 설계"""
-        elif state["missing_info"] == "power":
-            missing_text = "**입출력 파워 정보**가"
-            examples = """
-📋 **파워 정보 예시**:
-• 입력/출력 파워: "100W", "5kW"
-• 회전수: "1000rpm", "3600rpm"  
+📋 **종합 입력 예시**:
+• "1000rpm 입력속도, 100W 파워로 기어비 3:1인 기어쌍 설계"
+• "입력속도 1500rpm, 출력토크 50Nm, 감속비 10인 유성기어 설계"
+• "Sun속도 1000rpm, Carrier속도 500rpm, Ring파워 2kW인 유성기어 설계\""""
+        elif len(missing_items) == 2:
+            missing_text = f"**{missing_items[0]} 정보**와 **{missing_items[1]} 정보**가"
+            if "속도" in missing_items and "파워/토크" in missing_items:
+                examples = """
+📋 **속도/파워 정보 예시**:
+• 속도: "1000rpm", "3600rpm" (입력 또는 출력)
+• 파워: "100W", "5kW" / 토크: "50Nm", "200Nm\""""
+            elif "속도" in missing_items and "기어비/잇수" in missing_items:
+                examples = """
+📋 **속도/기어비 정보 예시**:
+• 속도: "1000rpm", "3600rpm"
+• 기어비: "3:1", "감속비 10" / 잇수: "20치", "40 teeth\""""
+            else:  # 파워/토크와 기어비/잇수
+                examples = """
+📋 **파워/기어비 정보 예시**:
+• 파워: "100W", "5kW" / 토크: "50Nm", "200Nm"
+• 기어비: "3:1", "감속비 10" / 잇수: "20치", "40 teeth\""""
+        else:  # 1개 누락
+            missing_text = f"**{missing_items[0]} 정보**가"
+            if missing_items[0] == "속도":
+                examples = """
+📋 **속도 정보 예시**:
+• 입력/출력 속도: "1000rpm", "3600rpm"
+• 유성기어의 경우: "Sun속도 1000rpm", "Carrier속도 500rpm\""""
+            elif missing_items[0] == "파워/토크":
+                examples = """
+📋 **파워/토크 정보 예시**:
+• 파워: "100W", "5kW"  
 • 토크: "50Nm", "200Nm\""""
-        else:  # ratio
-            missing_text = "**기어비/잇수 정보**가"
-            examples = """
+            else:  # 기어비/잇수
+                examples = """
 📋 **기어비/잇수 정보 예시**:
 • 기어비: "3:1", "감속비 10", "기어비 2.5"
 • 기어 잇수: "20치", "30개 이", "40 teeth\""""
@@ -532,6 +602,7 @@ RATIO_INFO: NO
                 "classification": "",
                 "gear_type": "",
                 "detected_gear_type": "",
+                "has_speed_info": False,
                 "has_power_info": False,
                 "has_ratio_info": False,
                 "missing_info": "",
