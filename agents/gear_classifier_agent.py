@@ -115,17 +115,37 @@ class GearClassifierAgent(BaseAgent):
 응답: NOT_GEAR_RELATED
 """
 
-        chat_template = ChatPromptTemplate.from_messages(
-            [
-                # role, message
-                ("system", system_prompt),
-                ("human", "사용자 입력: {user_input}"),
-            ]
-)
+        # 메시지 히스토리가 있는 경우와 없는 경우를 구분하여 처리
+        if state["messages"] and len(state["messages"]) > 1:
+            # 대화 히스토리가 있는 경우 - 전체 컨텍스트 포함
+            chat_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system_prompt + "\n\n이전 대화 맥락을 고려하여 현재 사용자 입력을 분류해주세요."),
+                    MessagesPlaceholder("conversation_history"),
+                    ("human", "현재 사용자 입력: {user_input}"),
+                ]
+            )
+        else:
+            # 첫 번째 메시지인 경우 - 기존 방식 유지
+            chat_template = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system_prompt),
+                    ("human", "사용자 입력: {user_input}"),
+                ]
+            )
         
         try:
             chain = chat_template | self.llm
-            response_chain = chain.invoke({"user_input": state["user_input"]})
+            # 메시지 히스토리 포함하여 invoke
+            if state["messages"] and len(state["messages"]) > 1:
+                # 마지막 사용자 메시지를 제외한 이전 대화 히스토리
+                conversation_history = state["messages"][:-1]
+                response_chain = chain.invoke({
+                    "user_input": state["user_input"],
+                    "conversation_history": conversation_history
+                })
+            else:
+                response_chain = chain.invoke({"user_input": state["user_input"]})
             classification_result = response_chain.content.strip()
 
             print(f"분류 결과: {classification_result}")
@@ -162,7 +182,7 @@ class GearClassifierAgent(BaseAgent):
 GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
 응답 예시:
-사용자 입력: "두 개의 기어 맞물림 설계해주세요"
+사용자 입력: "두 개의 기어가 맞물리는 기어 한 쌍을 설계해주세요"
 응답: GEAR_PAIR
 
 사용자 입력: "유성기어 설계 도움"  
@@ -170,16 +190,35 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
 사용자 입력: "웜기어 설계"
 응답: UNKNOWN
+
+사용자 입력: "기어 설계 해줘"
+응답: UNKNOWN
 """
 
-        chat_template = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "사용자 입력: {user_input}"),
-        ])
+        # 메시지 히스토리 고려한 템플릿 생성
+        if state["messages"] and len(state["messages"]) > 1:
+            chat_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt + "\n\n이전 대화 맥락을 고려하여 기어 타입을 분류해주세요."),
+                MessagesPlaceholder("conversation_history"),
+                ("human", "현재 사용자 입력: {user_input}"),
+            ])
+        else:
+            chat_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("human", "사용자 입력: {user_input}"),
+            ])
         
         try:
             chain = chat_template | self.llm
-            response_chain = chain.invoke({"user_input": state["user_input"]})
+            # 메시지 히스토리 포함하여 invoke
+            if state["messages"] and len(state["messages"]) > 1:
+                conversation_history = state["messages"][:-1]
+                response_chain = chain.invoke({
+                    "user_input": state["user_input"],
+                    "conversation_history": conversation_history
+                })
+            else:
+                response_chain = chain.invoke({"user_input": state["user_input"]})
             gear_type_result = response_chain.content.strip()
 
             print(f"기어 타입 분류 결과: {gear_type_result}")
@@ -233,14 +272,30 @@ POWER_INFO: NO
 RATIO_INFO: NO
 """
 
-        chat_template = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "사용자 입력: {user_input}"),
-        ])
+        # 메시지 히스토리 고려한 템플릿 생성
+        if state["messages"] and len(state["messages"]) > 1:
+            chat_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt + "\n\n이전 대화 맥락을 고려하여 필수 정보를 확인해주세요. 이전 메시지에서 언급된 파워나 기어비 정보도 포함하여 판단해주세요."),
+                MessagesPlaceholder("conversation_history"),
+                ("human", "현재 사용자 입력: {user_input}"),
+            ])
+        else:
+            chat_template = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("human", "사용자 입력: {user_input}"),
+            ])
         
         try:
             chain = chat_template | self.llm
-            response_chain = chain.invoke({"user_input": state["user_input"]})
+            # 메시지 히스토리 포함하여 invoke
+            if state["messages"] and len(state["messages"]) > 1:
+                conversation_history = state["messages"][:-1]
+                response_chain = chain.invoke({
+                    "user_input": state["user_input"],
+                    "conversation_history": conversation_history
+                })
+            else:
+                response_chain = chain.invoke({"user_input": state["user_input"]})
             info_check_result = response_chain.content.strip()
 
             print(f"필수 정보 확인 결과: {info_check_result}")
@@ -283,9 +338,9 @@ RATIO_INFO: NO
         
         state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
-🔧 **설계 타입**: {gear_name}
-📋 **요청사항**: {state['user_input']}
-⚡ **파워 정보**: 포함됨
+🔧 **설계 타입**: {gear_name}\n\r
+📋 **요청사항**: {state['user_input']}\n\r
+⚡ **파워 정보**: 포함됨\n\r
 ⚙️ **기어비/잇수 정보**: 포함됨
 
 다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
@@ -306,8 +361,8 @@ RATIO_INFO: NO
             missing_text = "**입출력 파워 정보**와 **기어비/잇수 정보**가"
             examples = """
 📋 **입력 예시**:
-• "100W 입력으로 기어비 3:1인 기어쌍 설계"
-• "1000rpm에서 감속비 10인 유성기어 설계" 
+• "100W 입력으로 기어비 3:1인 기어쌍 설계"\n\r
+• "1000rpm에서 감속비 10인 유성기어 설계"\n\r 
 • "50Nm 토크로 20치와 60치 기어쌍 설계"""
         elif state["missing_info"] == "power":
             missing_text = "**입출력 파워 정보**가"
@@ -470,9 +525,9 @@ RATIO_INFO: NO
             # 사용자 메시지 추가
             self.add_message("user", input_text)
             
-            # 초기 상태 설정
+            # 초기 상태 설정 - 전체 메시지 히스토리 포함
             initial_state = {
-                "messages": [],
+                "messages": self.messages.copy(),  # 전체 메시지 히스토리 사용
                 "user_input": input_text,
                 "classification": "",
                 "gear_type": "",
