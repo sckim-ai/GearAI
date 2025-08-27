@@ -239,6 +239,13 @@ with col1:
                         # 최종 응답 조합
                         response_text = "".join(response_parts)
                         
+                        # 기어 선택 옵션 플래그 확인
+                        if "[SHOW_GEAR_OPTIONS]" in response_text:
+                            st.session_state.show_gear_options = True
+                            st.session_state.gear_selection_made = False
+                            # 플래그 제거
+                            response_text = response_text.replace("[SHOW_GEAR_OPTIONS]", "")
+                        
                     except Exception as e:
                         st.error(f"처리 중 오류 발생: {str(e)}")
                         import traceback

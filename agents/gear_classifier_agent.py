@@ -207,17 +207,14 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
     def _handle_non_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
         """설계 불가능한 기어 처리"""  
         
-        # Streamlit 세션 상태에 선택 옵션 표시 플래그 설정
-        if 'st' in globals():
-            import streamlit as st
-            st.session_state.show_gear_options = True
-            st.session_state.gear_selection_made = False
-        
+        # 특별한 응답 플래그를 포함하여 app.py에서 UI를 표시하도록 함
         state["response"] = f"""❌ 죄송합니다. 현재 요청하신 기어는 설계가 어렵습니다.
 
 📝 요청사항: {state['user_input']}
 
-🔧 **설계 가능한 기어 타입을 선택해 주세요:**"""
+🔧 **설계 가능한 기어 타입을 선택해 주세요:**
+
+[SHOW_GEAR_OPTIONS]"""
         return state
     
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:
