@@ -254,9 +254,40 @@ with col2:
     st.write(f"**사용자 메시지:** {user_messages}")
     st.write(f"**AI 응답:** {assistant_messages}")
     
+    # 메시지 히스토리 확인 버튼
+    if st.button("📋 메시지 히스토리 보기"):
+        st.session_state.show_message_history = not st.session_state.get("show_message_history", False)
+    
+    # 메시지 히스토리 표시
+    if st.session_state.get("show_message_history", False):
+        st.markdown("#### 전체 메시지 히스토리")
+        with st.expander("메시지 목록", expanded=True):
+            if st.session_state.messages:
+                for i, message in enumerate(st.session_state.messages):
+                    role_icon = "👤" if message["role"] == "user" else "🤖"
+                    role_text = "사용자" if message["role"] == "user" else "AI"
+                    
+                    # 메시지 내용 미리보기 (첫 50자만)
+                    preview = message["content"][:50] + "..." if len(message["content"]) > 50 else message["content"]
+                    
+                    with st.container():
+                        st.write(f"{role_icon} **{role_text} #{i+1}**")
+                        st.text_area(
+                            label="",
+                            value=message["content"],
+                            height=100,
+                            disabled=True,
+                            key=f"msg_{i}",
+                            label_visibility="collapsed"
+                        )
+                        st.markdown("---")
+            else:
+                st.info("아직 메시지가 없습니다.")
+    
     # 대화 초기화 버튼
     if st.button("🗑️ 대화 초기화"):
         st.session_state.messages = []
+        st.session_state.show_message_history = False
         # 선택된 에이전트의 메시지 히스토리도 초기화
         if agent_type in agent_service.agents:
             agent_service.agents[agent_type].clear_messages()
