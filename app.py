@@ -142,62 +142,64 @@ with col1:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+# 사용자 입력 처리 (중앙 컬럼에만, 하단 고정)
 with col1:
-    # 사용자 입력 처리 (중앙 컬럼에만)
-    if user_input := st.chat_input("메시지를 입력하세요..."):
-        # 사용자 메시지 표시
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
+    user_input = st.chat_input("메시지를 입력하세요...")
+
+if user_input:
+    # 사용자 메시지 표시
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+        
+    # 에이전트 응답 처리
+    try:
+        # 어시스턴트 메시지 컨테이너 생성
+        with st.chat_message("assistant"):
+            # 응답 컨테이너 생성
+            response_placeholder = st.empty()
             
-        # 에이전트 응답 처리
-        try:
-            # 어시스턴트 메시지 컨테이너 생성
-            with st.chat_message("assistant"):
-                # 응답 컨테이너 생성
-                response_placeholder = st.empty()
+            # 스피너와 응답 표시
+            with st.spinner("AI가 응답을 생성하고 있습니다..."):
+                # 현재 설정 가져오기
+                current_config = st.session_state.agent_settings[agent_type]
                 
-                # 스피너와 응답 표시
-                with st.spinner("AI가 응답을 생성하고 있습니다..."):
-                    # 현재 설정 가져오기
-                    current_config = st.session_state.agent_settings[agent_type]
+                try:
+                    # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
+                    response_parts = []
                     
-                    try:
-                        # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
-                        response_parts = []
-                        
-                        # 콜백 함수 정의
-                        def update_response(chunk):
-                            response_parts.append(chunk)
-                            # 현재까지의 전체 응답 표시
-                            response_placeholder.markdown("".join(response_parts))
-                        
-                        # 비동기 함수를 동기적으로 실행
-                        loop = asyncio.get_event_loop()
-                        loop.run_until_complete(
-                            agent_service.process_with_callback(
-                                agent_type, 
-                                user_input, 
-                                update_response
-                            )
+                    # 콜백 함수 정의
+                    def update_response(chunk):
+                        response_parts.append(chunk)
+                        # 현재까지의 전체 응답 표시
+                        response_placeholder.markdown("".join(response_parts))
+                    
+                    # 비동기 함수를 동기적으로 실행
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(
+                        agent_service.process_with_callback(
+                            agent_type, 
+                            user_input, 
+                            update_response
                         )
-                        
-                        # 최종 응답 조합
-                        response_text = "".join(response_parts)
-                        
-                    except Exception as e:
-                        st.error(f"처리 중 오류 발생: {str(e)}")
-                        import traceback
-                        st.error(traceback.format_exc())
-                        response_text = f"오류가 발생했습니다: {str(e)}"
-                
-                # 최종 응답을 세션 상태에 추가
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": response_text}
-                )
+                    )
+                    
+                    # 최종 응답 조합
+                    response_text = "".join(response_parts)
+                    
+                except Exception as e:
+                    st.error(f"처리 중 오류 발생: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
+                    response_text = f"오류가 발생했습니다: {str(e)}"
             
-        except Exception as e:
-            st.error(f"에러 발생: {str(e)}")
+            # 최종 응답을 세션 상태에 추가
+            st.session_state.messages.append(
+                {"role": "assistant", "content": response_text}
+            )
+        
+    except Exception as e:
+        st.error(f"에러 발생: {str(e)}")
 
 # 오른쪽 사이드바
 with col2:
