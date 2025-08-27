@@ -80,6 +80,20 @@ class GearClassifierAgent(BaseAgent):
     def _classify_input(self, state: GearClassifierState) -> GearClassifierState:
         """사용자 입력이 기어 설계 관련인지 분류"""
         
+        # 먼저 사용자가 선택 옵션에서 designable gear를 선택했는지 확인
+        designable_gear_keywords = [
+            "두 개의 기어가 맞물리는 기본 구조로 설계해 주세요",
+            "세 개의 기어가 연결된 구조로 설계해 주세요",
+            "태양기어, 유성기어, 링기어로 구성된 유성기어로 설계해 주세요",
+            "2단계 유성기어 시스템으로 설계해 주세요"
+        ]
+        
+        # 사용자가 선택 옵션에서 designable gear를 선택한 경우
+        if any(keyword in state["user_input"] for keyword in designable_gear_keywords):
+            state["classification"] = "gear_related"
+            print("사용자가 선택 옵션에서 designable gear를 선택함")
+            return state
+        
         system_prompt = """당신은 기어 설계 관련 질문을 분류하는 전문가입니다.
         
 사용자의 입력이 다음과 같은 기어 설계 관련 내용인지 판단해주세요:

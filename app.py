@@ -131,7 +131,7 @@ if agent_config:
     agent_service.agents[agent_type].update_config(st.session_state.agent_settings[agent_type])
     
 # 메인 레이아웃 설정
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns([2, 1])
 
 with col1:
     # 메인 채팅 인터페이스
