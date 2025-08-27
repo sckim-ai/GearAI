@@ -36,6 +36,9 @@ class GearClassifierState(TypedDict):
     classification: str  # "gear_related", "not_gear_related"
     gear_type: str  # "designable", "not_designable"
     detected_gear_type: str  # "gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary", "unknown"
+    has_power_info: bool  # 입출력 파워 정보 유무
+    has_ratio_info: bool  # 기어비 또는 기어 잇수 정보 유무
+    missing_info: str  # "power", "ratio", "both", "none"
     response: str
 
 class GearClassifierAgent(BaseAgent):
@@ -185,8 +188,76 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
         
         return state
 
-    def _handle_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
-        """설계 가능한 기어 처리"""
+    def _check_required_info(self, state: GearClassifierState) -> GearClassifierState:
+        """필수 설계 정보(Power, 기어비/잇수) 확인"""
+        
+        system_prompt = """당신은 기어 설계에 필요한 정보를 확인하는 전문가입니다.
+
+사용자의 입력에서 다음 정보가 포함되어 있는지 확인해주세요:
+
+1. **입출력 파워 정보**: 
+   - 입력 파워, 출력 파워, 토크, 회전수 등
+   - 예: "100W", "50kW", "1000rpm", "200Nm" 등
+
+2. **기어비 또는 기어 잇수 정보**:
+   - 기어비 (예: "3:1", "감속비 10", "기어비 2.5")
+   - 기어 잇수 (예: "20치", "30개 이", "teeth 40")
+
+다음 형식으로만 응답하세요:
+POWER_INFO: YES 또는 NO
+RATIO_INFO: YES 또는 NO
+
+응답 예시:
+사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
+응답: 
+POWER_INFO: YES
+RATIO_INFO: YES
+
+사용자 입력: "기어쌍 설계 부탁드립니다"
+응답:
+POWER_INFO: NO  
+RATIO_INFO: NO
+"""
+
+        chat_template = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "사용자 입력: {user_input}"),
+        ])
+        
+        try:
+            chain = chat_template | self.llm
+            response_chain = chain.invoke({"user_input": state["user_input"]})
+            info_check_result = response_chain.content.strip()
+
+            print(f"필수 정보 확인 결과: {info_check_result}")
+
+            # 파워 정보 확인
+            state["has_power_info"] = "POWER_INFO: YES" in info_check_result
+            
+            # 기어비/잇수 정보 확인  
+            state["has_ratio_info"] = "RATIO_INFO: YES" in info_check_result
+            
+            # 누락된 정보 분류
+            if not state["has_power_info"] and not state["has_ratio_info"]:
+                state["missing_info"] = "both"
+            elif not state["has_power_info"]:
+                state["missing_info"] = "power"
+            elif not state["has_ratio_info"]:
+                state["missing_info"] = "ratio"
+            else:
+                state["missing_info"] = "none"
+                
+        except Exception as e:
+            print(f"필수 정보 확인 중 오류 발생: {e}")
+            # 오류 시 모든 정보가 없다고 가정
+            state["has_power_info"] = False
+            state["has_ratio_info"] = False
+            state["missing_info"] = "both"
+        
+        return state
+
+    def _handle_complete_info(self, state: GearClassifierState) -> GearClassifierState:
+        """모든 필수 정보가 있는 경우 처리"""
         gear_type_names = {
             "gear_pair": "기어 쌍",
             "three_gear": "3단 기어",
@@ -196,21 +267,65 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
         
         gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
         
-        state["response"] = f"""✅ {gear_name} 설계가 가능합니다!
+        state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
-🔧 감지된 기어 타입: {gear_name}
-📋 요청사항: {state['user_input']}
+🔧 **설계 타입**: {gear_name}
+📋 **요청사항**: {state['user_input']}
+⚡ **파워 정보**: 포함됨
+⚙️ **기어비/잇수 정보**: 포함됨
 
-다음 단계로 기어 설계 사양을 생성하겠습니다..."""
+다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
+        return state
+
+    def _handle_missing_info(self, state: GearClassifierState) -> GearClassifierState:
+        """필수 정보가 누락된 경우 처리"""
+        gear_type_names = {
+            "gear_pair": "기어 쌍",
+            "three_gear": "3단 기어", 
+            "simple_planetary": "단순 유성기어",
+            "double_pinion_planetary": "이중 피니언 유성기어"
+        }
+        
+        gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
+        
+        if state["missing_info"] == "both":
+            missing_text = "**입출력 파워 정보**와 **기어비/잇수 정보**가"
+            examples = """
+📋 **입력 예시**:
+• "100W 입력으로 기어비 3:1인 기어쌍 설계"
+• "1000rpm에서 감속비 10인 유성기어 설계" 
+• "50Nm 토크로 20치와 60치 기어쌍 설계"""
+        elif state["missing_info"] == "power":
+            missing_text = "**입출력 파워 정보**가"
+            examples = """
+📋 **파워 정보 예시**:
+• 입력/출력 파워: "100W", "5kW"
+• 회전수: "1000rpm", "3600rpm"  
+• 토크: "50Nm", "200Nm\""""
+        else:  # ratio
+            missing_text = "**기어비/잇수 정보**가"
+            examples = """
+📋 **기어비/잇수 정보 예시**:
+• 기어비: "3:1", "감속비 10", "기어비 2.5"
+• 기어 잇수: "20치", "30개 이", "40 teeth\""""
+
+        state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.
+
+🔧 **설계 타입**: {gear_name}
+📝 **현재 요청**: {state['user_input']}
+
+❌ **누락된 정보**: {missing_text} 필요합니다.
+{examples}
+
+위 정보를 포함하여 다시 요청해 주세요! 🙂"""
+        
         return state
 
     def _handle_non_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
         """설계 불가능한 기어 처리"""  
         
         # 특별한 응답 플래그를 포함하여 app.py에서 UI를 표시하도록 함
-        state["response"] = f"""❌ 죄송합니다. 현재 요청하신 기어는 설계가 어렵습니다.
-
-📝 요청사항: {state['user_input']}
+        state["response"] = f"""기어설계 AI Agent가 설계 가능한 기어는 다음과 같습니다.
 
 🔧 **설계 가능한 기어 타입을 선택해 주세요:**
 
@@ -241,9 +356,16 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
     def _route_gear_type(self, state: GearClassifierState) -> str:
         """기어 타입에 따라 라우팅"""
         if state["gear_type"] == "designable":
-            return "designable_gear"
+            return "check_required_info"
         else:
             return "not_designable_gear"
+    
+    def _route_required_info(self, state: GearClassifierState) -> str:
+        """필수 정보 확인 결과에 따라 라우팅"""
+        if state["missing_info"] == "none":
+            return "complete_info"
+        else:
+            return "missing_info"
     
     def _build_graph(self):
         """LangGraph 워크플로우 구성"""
@@ -252,7 +374,9 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
         # 노드 추가
         workflow.add_node("classify", self._classify_input)
         workflow.add_node("classify_gear_type", self._classify_gear_type)
-        workflow.add_node("designable_gear", self._handle_designable_gear)
+        workflow.add_node("check_required_info", self._check_required_info)
+        workflow.add_node("complete_info", self._handle_complete_info)
+        workflow.add_node("missing_info", self._handle_missing_info)
         workflow.add_node("not_designable_gear", self._handle_non_designable_gear)
         workflow.add_node("not_gear_related", self._handle_non_gear_related)
         
@@ -274,13 +398,24 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
             "classify_gear_type",
             self._route_gear_type,
             {
-                "designable_gear": "designable_gear",
+                "check_required_info": "check_required_info",
                 "not_designable_gear": "not_designable_gear"
             }
         )
         
+        # 조건부 라우팅 - 세 번째 분류 (필수 정보 확인)
+        workflow.add_conditional_edges(
+            "check_required_info",
+            self._route_required_info,
+            {
+                "complete_info": "complete_info",
+                "missing_info": "missing_info"
+            }
+        )
+        
         # 종료점 설정
-        workflow.add_edge("designable_gear", END)
+        workflow.add_edge("complete_info", END)
+        workflow.add_edge("missing_info", END)
         workflow.add_edge("not_designable_gear", END)
         workflow.add_edge("not_gear_related", END)
         
@@ -328,6 +463,9 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
                 "classification": "",
                 "gear_type": "",
                 "detected_gear_type": "",
+                "has_power_info": False,
+                "has_ratio_info": False,
+                "missing_info": "",
                 "response": ""
             }
             
