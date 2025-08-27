@@ -206,17 +206,18 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
     def _handle_non_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
         """설계 불가능한 기어 처리"""  
+        
+        # Streamlit 세션 상태에 선택 옵션 표시 플래그 설정
+        if 'st' in globals():
+            import streamlit as st
+            st.session_state.show_gear_options = True
+            st.session_state.gear_selection_made = False
+        
         state["response"] = f"""❌ 죄송합니다. 현재 요청하신 기어는 설계가 어렵습니다.
 
 📝 요청사항: {state['user_input']}
 
-현재 지원 가능한 기어 설계 타입 (인볼류트 치형):
-• **기어 쌍** - 2개 기어가 맞물리는 기본 구조
-• **3단 기어** - 3개 기어가 연결된 구조  
-• **단순 유성기어** - 태양기어, 유성기어, 링기어 구조
-• **이중 피니언 유성기어** - 2단계 유성기어 시스템
-
-위 타입 중 하나로 다시 요청해 주시면 도움을 드릴 수 있습니다! 🙂"""
+🔧 **설계 가능한 기어 타입을 선택해 주세요:**"""
         return state
     
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:

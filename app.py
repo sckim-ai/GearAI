@@ -142,6 +142,61 @@ with col1:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
+    # 기어 선택 옵션 표시 (Gear Classifier Agent에서 not designable일 때)
+    if st.session_state.get("show_gear_options", False) and not st.session_state.get("gear_selection_made", False):
+        st.markdown("---")
+        
+        gear_options = {
+            "기어 쌍 (Gear Pair)": "두 개의 기어가 맞물리는 기본 구조로 설계해 주세요",
+            "3단 기어 (Three Gear)": "세 개의 기어가 연결된 구조로 설계해 주세요", 
+            "단순 유성기어 (Simple Planetary)": "태양기어, 유성기어, 링기어로 구성된 유성기어로 설계해 주세요",
+            "이중 피니언 유성기어 (Double Pinion Planetary)": "2단계 유성기어 시스템으로 설계해 주세요"
+        }
+        
+        st.markdown("### 🔧 설계 가능한 기어 타입 선택")
+        
+        # 버튼 그리드 생성
+        col1_opt, col2_opt = st.columns(2)
+        
+        with col1_opt:
+            if st.button("🔧 기어 쌍 (Gear Pair)", key="gear_pair_btn", use_container_width=True):
+                selected_option = gear_options["기어 쌍 (Gear Pair)"]
+                st.session_state.messages.append({"role": "user", "content": selected_option})
+                st.session_state.show_gear_options = False
+                st.session_state.gear_selection_made = True
+                st.rerun()
+                
+            if st.button("🌍 단순 유성기어 (Simple Planetary)", key="simple_planetary_btn", use_container_width=True):
+                selected_option = gear_options["단순 유성기어 (Simple Planetary)"]
+                st.session_state.messages.append({"role": "user", "content": selected_option})
+                st.session_state.show_gear_options = False
+                st.session_state.gear_selection_made = True
+                st.rerun()
+        
+        with col2_opt:
+            if st.button("⚙️ 3단 기어 (Three Gear)", key="three_gear_btn", use_container_width=True):
+                selected_option = gear_options["3단 기어 (Three Gear)"]
+                st.session_state.messages.append({"role": "user", "content": selected_option})
+                st.session_state.show_gear_options = False
+                st.session_state.gear_selection_made = True
+                st.rerun()
+                
+            if st.button("🔄 이중 피니언 유성기어 (Double Pinion)", key="double_pinion_btn", use_container_width=True):
+                selected_option = gear_options["이중 피니언 유성기어 (Double Pinion Planetary)"]
+                st.session_state.messages.append({"role": "user", "content": selected_option})
+                st.session_state.show_gear_options = False
+                st.session_state.gear_selection_made = True
+                st.rerun()
+        
+        # 대화 종료 옵션
+        if st.button("❌ 대화 종료", key="end_conversation_btn", use_container_width=True):
+            st.session_state.messages.append({"role": "assistant", "content": "대화를 종료합니다. 기어 설계가 필요하시면 언제든 다시 문의해 주세요! 😊"})
+            st.session_state.show_gear_options = False
+            st.session_state.gear_selection_made = True
+            st.rerun()
+        
+        st.markdown("---")
+    
     # 사용자 입력 처리 (중앙 컬럼 하단)
     if user_input := st.chat_input("메시지를 입력하세요..."):
         # 사용자 메시지 표시
@@ -291,6 +346,8 @@ with col2:
     if st.button("🗑️ 대화 초기화"):
         st.session_state.messages = []
         st.session_state.show_message_history = False
+        st.session_state.show_gear_options = False
+        st.session_state.gear_selection_made = False
         # 선택된 에이전트의 메시지 히스토리도 초기화
         if agent_type in agent_service.agents:
             agent_service.agents[agent_type].clear_messages()
