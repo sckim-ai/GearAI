@@ -29,15 +29,15 @@ class AgentService:
         
         # Chat 에이전트 설정
         chat_config = {
-            "model": "gpt-4o-mini",
-            "temperature": 0.7
+            "model": "gpt-5-mini",
+            "temperature": 0.0
         }
         self.register_agent("Chatbot", ChatAgent(chat_config))
         
         # Gear Classifier 에이전트 설정
         gear_config = {
-            "model": "gpt-4o-mini",
-            "temperature": 0.3
+            "model": "gpt-5-mini",
+            "temperature": 0.0
         }
         self.register_agent("Gear Classifier", GearClassifierAgent(gear_config)) 
         
