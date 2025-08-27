@@ -34,6 +34,8 @@ class GearClassifierState(TypedDict):
     messages: Annotated[list, add_messages]
     user_input: str
     classification: str  # "gear_related", "not_gear_related"
+    gear_type: str  # "designable", "not_designable"
+    detected_gear_type: str  # "gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary", "unknown"
     response: str
 
 class GearClassifierAgent(BaseAgent):
@@ -123,10 +125,98 @@ class GearClassifierAgent(BaseAgent):
         
         return state
     
-    def _handle_gear_related(self, state: GearClassifierState) -> GearClassifierState:
-        """기어 설계 관련 질문 처리"""
-        # state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
-        state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
+    def _classify_gear_type(self, state: GearClassifierState) -> GearClassifierState:
+        """기어 설계 가능 여부 및 기어 타입 분류"""
+        
+        system_prompt = """당신은 기어 설계 타입을 분류하는 전문가입니다.
+
+사용자의 입력에서 다음 중 어떤 기어 타입에 해당하는지 판단해주세요:
+
+설계 가능한 기어 타입 (인볼류트 치형):
+1. "GEAR_PAIR" - 기어 쌍 (2개 기어가 맞물리는 구조)
+2. "THREE_GEAR" - 3단 기어 (3개 기어가 연결된 구조) 
+3. "SIMPLE_PLANETARY" - 단순 유성기어 (태양기어, 유성기어, 링기어)
+4. "DOUBLE_PINION_PLANETARY" - 이중 피니언 유성기어 (2단계 유성기어 시스템)
+
+설계 불가능한 경우:
+5. "UNKNOWN" - 위 타입에 해당하지 않거나 명확하지 않은 경우
+
+다음 중 하나로만 응답하세요:
+GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
+
+응답 예시:
+사용자 입력: "두 개의 기어 맞물림 설계해주세요"
+응답: GEAR_PAIR
+
+사용자 입력: "유성기어 설계 도움"  
+응답: SIMPLE_PLANETARY
+
+사용자 입력: "웜기어 설계"
+응답: UNKNOWN
+"""
+
+        chat_template = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "사용자 입력: {user_input}"),
+        ])
+        
+        try:
+            chain = chat_template | self.llm
+            response_chain = chain.invoke({"user_input": state["user_input"]})
+            gear_type_result = response_chain.content.strip()
+
+            print(f"기어 타입 분류 결과: {gear_type_result}")
+
+            # 설계 가능한 기어 타입들
+            designable_types = ["GEAR_PAIR", "THREE_GEAR", "SIMPLE_PLANETARY", "DOUBLE_PINION_PLANETARY"]
+            
+            if gear_type_result in designable_types:
+                state["gear_type"] = "designable"
+                state["detected_gear_type"] = gear_type_result.lower()
+            else:
+                state["gear_type"] = "not_designable"
+                state["detected_gear_type"] = "unknown"
+                
+        except Exception as e:
+            print(f"기어 타입 분류 중 오류 발생: {e}")
+            # 오류 시 기본적으로 설계 불가능으로 처리
+            state["gear_type"] = "not_designable"
+            state["detected_gear_type"] = "unknown"
+        
+        return state
+
+    def _handle_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
+        """설계 가능한 기어 처리"""
+        gear_type_names = {
+            "gear_pair": "기어 쌍",
+            "three_gear": "3단 기어",
+            "simple_planetary": "단순 유성기어",
+            "double_pinion_planetary": "이중 피니언 유성기어"
+        }
+        
+        gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
+        
+        state["response"] = f"""✅ {gear_name} 설계가 가능합니다!
+
+🔧 감지된 기어 타입: {gear_name}
+📋 요청사항: {state['user_input']}
+
+다음 단계로 기어 설계 사양을 생성하겠습니다..."""
+        return state
+
+    def _handle_non_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
+        """설계 불가능한 기어 처리"""  
+        state["response"] = f"""❌ 죄송합니다. 현재 요청하신 기어는 설계가 어렵습니다.
+
+📝 요청사항: {state['user_input']}
+
+현재 지원 가능한 기어 설계 타입 (인볼류트 치형):
+• **기어 쌍** - 2개 기어가 맞물리는 기본 구조
+• **3단 기어** - 3개 기어가 연결된 구조  
+• **단순 유성기어** - 태양기어, 유성기어, 링기어 구조
+• **이중 피니언 유성기어** - 2단계 유성기어 시스템
+
+위 타입 중 하나로 다시 요청해 주시면 도움을 드릴 수 있습니다! 🙂"""
         return state
     
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:
@@ -146,9 +236,16 @@ class GearClassifierAgent(BaseAgent):
     def _route_classification(self, state: GearClassifierState) -> str:
         """분류 결과에 따라 라우팅"""
         if state["classification"] == "gear_related":
-            return "gear_related"
+            return "classify_gear_type"
         else:
             return "not_gear_related"
+    
+    def _route_gear_type(self, state: GearClassifierState) -> str:
+        """기어 타입에 따라 라우팅"""
+        if state["gear_type"] == "designable":
+            return "designable_gear"
+        else:
+            return "not_designable_gear"
     
     def _build_graph(self):
         """LangGraph 워크플로우 구성"""
@@ -156,24 +253,37 @@ class GearClassifierAgent(BaseAgent):
         
         # 노드 추가
         workflow.add_node("classify", self._classify_input)
-        workflow.add_node("gear_related", self._handle_gear_related)
+        workflow.add_node("classify_gear_type", self._classify_gear_type)
+        workflow.add_node("designable_gear", self._handle_designable_gear)
+        workflow.add_node("not_designable_gear", self._handle_non_designable_gear)
         workflow.add_node("not_gear_related", self._handle_non_gear_related)
         
         # 시작점 설정
         workflow.set_entry_point("classify")
         
-        # 조건부 라우팅
+        # 조건부 라우팅 - 첫 번째 분류 (기어 관련 여부)
         workflow.add_conditional_edges(
             "classify",
             self._route_classification,
             {
-                "gear_related": "gear_related",
+                "classify_gear_type": "classify_gear_type",
                 "not_gear_related": "not_gear_related"
             }
         )
         
+        # 조건부 라우팅 - 두 번째 분류 (기어 타입)
+        workflow.add_conditional_edges(
+            "classify_gear_type",
+            self._route_gear_type,
+            {
+                "designable_gear": "designable_gear",
+                "not_designable_gear": "not_designable_gear"
+            }
+        )
+        
         # 종료점 설정
-        workflow.add_edge("gear_related", END)
+        workflow.add_edge("designable_gear", END)
+        workflow.add_edge("not_designable_gear", END)
         workflow.add_edge("not_gear_related", END)
         
         return workflow.compile()
@@ -218,6 +328,8 @@ class GearClassifierAgent(BaseAgent):
                 "messages": [],
                 "user_input": input_text,
                 "classification": "",
+                "gear_type": "",
+                "detected_gear_type": "",
                 "response": ""
             }
             
