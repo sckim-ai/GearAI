@@ -25,6 +25,9 @@ from typing_extensions import Annotated, TypedDict
 # LangChain imports  
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # State 정의
 class GearClassifierState(TypedDict):
@@ -55,16 +58,16 @@ class GearClassifierAgent(BaseAgent):
             else:
                 # 기본값은 OpenAI
                 return ChatOpenAI(
-                    model="gpt-4o-mini",
-                    temperature=0.7,
+                    model="gpt-5-mini",
+                    temperature=0.0,
                     api_key=os.getenv("OPENAI_API_KEY"),
                     streaming=False
                 )
         except Exception as e:
             print(f"LLM 초기화 오류: {e}")
             return ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=0.7,
+                model="gpt-5-mini",
+                temperature=0.0,
                 api_key=os.getenv("OPENAI_API_KEY"),
                 streaming=False
             )
@@ -75,12 +78,11 @@ class GearClassifierAgent(BaseAgent):
         system_prompt = """당신은 기어 설계 관련 질문을 분류하는 전문가입니다.
         
 사용자의 입력이 다음과 같은 기어 설계 관련 내용인지 판단해주세요:
-- 기어 설계, 계산, 치수
-- 기어의 종류, 특성, 재료
-- 기어박스, 변속기 설계
-- 회전력, 토크, 속도비 계산
-- 기어 제조, 가공 방법
-- 기어 관련 공학적 문제
+- 기어 치형설계
+- 기어 강도평가
+- 기어 효율계산
+- 기어 소음개선
+- 기어 설계 최적화
 
 다음 중 하나로만 응답하세요:
 - "GEAR_RELATED": 기어 설계와 관련된 질문
@@ -93,19 +95,23 @@ class GearClassifierAgent(BaseAgent):
 사용자 입력: "오늘 날씨는 어때요?"
 응답: NOT_GEAR_RELATED
 """
-        
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"사용자 입력: {state['user_input']}")
-        ]
+
+        chat_template = ChatPromptTemplate.from_messages(
+            [
+                # role, message
+                ("system", system_prompt),
+                ("human", "사용자 입력: {user_input}"),
+            ]
+)
         
         try:
-            response = self.llm.invoke(messages)
-            state["messages"] = response
+            chain = chat_template | self.llm
+            response_chain = chain.invoke({"user_input": state["user_input"]})
+            classification_result = response_chain.content.strip()
 
-            classification_result = response.content.strip()
-            
-            if "GEAR_RELATED" in classification_result:
+            print(f"분류 결과: {classification_result}")
+
+            if not "NOT_GEAR_RELATED" in classification_result:
                 state["classification"] = "gear_related"
             else:
                 state["classification"] = "not_gear_related"
@@ -120,21 +126,21 @@ class GearClassifierAgent(BaseAgent):
     def _handle_gear_related(self, state: GearClassifierState) -> GearClassifierState:
         """기어 설계 관련 질문 처리"""
         # state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
-        state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['messages']}'\n\n다음 단계로 진행합니다..."
+        state["response"] = f"기어 설계 관련 질문을 확인했습니다: '{state['user_input']}'\n\n다음 단계로 진행합니다..."
         return state
     
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:
         """기어 설계와 관련없는 질문 처리"""
-        state["response"] = """죄송합니다. 저는 기어 설계 전문 AI입니다. 
+        state["response"] = """안녕하세요. 저는 기어 설계 전문 AI Agent입니다. 
 
-다음과 같은 기어 관련 질문에 도움을 드릴 수 있습니다:
-- 기어 설계 및 계산
-- 기어비, 토크, 속도 계산
-- 기어 종류 및 특성
-- 기어박스 설계
-- 기어 재료 및 제조 방법
+다음과 같은 기어 설계 관련 요청에 도움을 드릴 수 있습니다:
+- 기어 치형설계
+- 기어 강도평가
+- 기어 효율계산
+- 기어 소음개선
+- 기어 설계 최적화
 
-기어 설계에 관한 질문이 있으시면 언제든 문의해 주세요!"""
+기어 설계에 도움이 필요하시면 언제든 요청해 주세요!"""
         return state
     
     def _route_classification(self, state: GearClassifierState) -> str:
@@ -185,37 +191,14 @@ class GearClassifierAgent(BaseAgent):
             print(f"그래프 이미지 생성 오류: {e}")
             return None
     
-    def get_mermaid_graph(self) -> str:
-        """LangGraph 워크플로우를 Mermaid 형식으로 반환 (fallback용)"""
-        return """
-graph TD
-    A[사용자 입력] --> B[분류 분석]
-    B --> C{기어 설계 관련?}
-    C -->|예| D[기어 관련 처리]
-    C -->|아니오| E[비관련 응답]
-    D --> F[다음 단계 진행]
-    E --> G[대화 종료 안내]
-    F --> H[완료]
-    G --> H[완료]
-    
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
-    style D fill:#e8f5e8
-    style E fill:#ffebee
-    style F fill:#e8f5e8
-    style G fill:#ffebee
-    style H fill:#f5f5f5
-"""
-    
     def update_config(self, new_config: Dict[str, Any]):
         """설정을 업데이트하고 내부 변수를 갱신합니다."""
         super().update_config(new_config)
         old_provider = self.provider
         old_model = self.model_name
         
-        self.model_name = self.config.get("model", "gpt-4o-mini")
-        self.temperature = self.config.get("temperature", 0.7)
+        self.model_name = self.config.get("model", "gpt-5-mini")
+        self.temperature = self.config.get("temperature", 0.0)
         self.provider = self.config.get("provider", "openai")
         
         # 모델이나 프로바이더가 변경된 경우 LLM 재초기화
