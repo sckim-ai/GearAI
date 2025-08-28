@@ -546,11 +546,11 @@ others_info: 정보 없음
         
         # 추가 기어 정보가 있는 경우 표시용 문자열 생성
         others_display = ""
-        if state["others_info"] and len(state["others_info"]) > 0:
-            others_items = []
-            for key, value in state["others_info"].items():
-                others_items.append(f"- {key}: {value}")
-            others_display = f"\r\n\r\n🔧 **추가 기어 정보**:\r\n" + "\r\n".join(others_items)
+        if (state.get("others_info") and 
+            state["others_info"] and 
+            state["others_info"] != "정보 없음" and
+            state["others_info"].strip() != ""):
+            others_display = f"\r\n🔧 **추가 기어 정보**: {state['others_info']}"
         
         state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
@@ -750,10 +750,18 @@ others_info: 정보 없음
 • "기어비 3:1" 또는 "감속비 5" 또는 "증속비 2"\r\n
 • "잇수 20:60" 또는 "태양기어 30치, 링기어 90치" \""""
 
+        # 추가 기어 정보가 있는 경우 표시용 문자열 생성
+        others_display = ""
+        if (state.get("others_info") and 
+            state["others_info"] and 
+            state["others_info"] != "정보 없음" and
+            state["others_info"].strip() != ""):
+            others_display = f"\r\n🔧 **확인된 추가 정보**: {state['others_info']}\r\n"
+
         state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.\r\n
 
 🔧 **설계 타입**: {gear_name}\r\n
-📝 **현재 요청**: {state['user_input']}\r\n
+📝 **현재 요청**: {state['user_input']}\r\n{others_display}
 
 ❌ **누락된 정보 상세**:\r\n
 {chr(10).join(missing_details)}
