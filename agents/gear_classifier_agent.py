@@ -51,6 +51,10 @@ class GearClassifierAgent(BaseAgent):
         self.llm = self._initialize_llm()
         self.graph = self._build_graph()
         
+        # 진행 상황을 저장할 리스트 (스레드 안전)
+        self.progress_messages = []
+        self.progress_lock = asyncio.Lock()
+        
     def _initialize_llm(self):
         """LLM 모델 초기화"""
         try:
@@ -94,9 +98,8 @@ class GearClassifierAgent(BaseAgent):
     def _classify_input(self, state: GearClassifierState) -> GearClassifierState:
         """사용자 입력이 기어 설계 관련인지 분류"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("🔍 **1단계:** 입력 내용 분석 중...")
+        # 진행 상황 저장 (Streamlit 컨텍스트 밖에서 안전)
+        self.progress_messages.append("🔍 **1단계:** 입력 내용 분석 중...")
         
         # 먼저 사용자가 선택 옵션에서 designable gear를 선택했는지 확인
         designable_gear_keywords = [
@@ -110,8 +113,7 @@ class GearClassifierAgent(BaseAgent):
         if any(keyword in state["user_input"] for keyword in designable_gear_keywords):
             state["classification"] = "gear_related"
             print("사용자가 선택 옵션에서 designable gear를 선택함")
-            if hasattr(self, '_current_callback') and self._current_callback:
-                self._current_callback("🔍 **1단계 완료:** 기어 설계 요청으로 분류됨\n\n")
+            self.progress_messages.append("🔍 **1단계 완료:** 기어 설계 요청으로 분류됨\n\n")
             return state
         
         system_prompt = """당신은 기어 설계 관련 질문을 분류하는 전문가입니다.
@@ -172,19 +174,16 @@ class GearClassifierAgent(BaseAgent):
 
             if not "NOT_GEAR_RELATED" in classification_result:
                 state["classification"] = "gear_related"
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback("🔍 **1단계 완료:** 기어 설계 요청으로 분류됨\n\n")
+                self.progress_messages.append("🔍 **1단계 완료:** 기어 설계 요청으로 분류됨\n\n")
             else:
                 state["classification"] = "not_gear_related"
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback("🔍 **1단계 완료:** 기어 설계와 관련없는 요청으로 분류됨\n\n")
+                self.progress_messages.append("🔍 **1단계 완료:** 기어 설계와 관련없는 요청으로 분류됨\n\n")
                 
         except Exception as e:
             import traceback
             error_detail = f"분류 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
             print(error_detail)
-            if hasattr(self, '_current_callback') and self._current_callback:
-                self._current_callback(f"🔍 **1단계 오류:** {str(e)}\n\n")
+            self.progress_messages.append(f"🔍 **1단계 오류:** {str(e)}\n\n")
             # 오류 시 기본적으로 기어 관련으로 처리
             state["classification"] = "gear_related"
         
@@ -193,9 +192,8 @@ class GearClassifierAgent(BaseAgent):
     def _classify_gear_type(self, state: GearClassifierState) -> GearClassifierState:
         """기어 설계 가능 여부 및 기어 타입 분류"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("⚙️ **2단계:** 기어 타입 분석 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("⚙️ **2단계:** 기어 타입 분석 중...")
         
         system_prompt = """당신은 기어 설계 타입을 분류하는 전문가입니다.
 
@@ -261,27 +259,24 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
             if gear_type_result in designable_types:
                 state["gear_type"] = "designable"
                 state["detected_gear_type"] = gear_type_result.lower()
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    gear_type_names = {
-                        "GEAR_PAIR": "기어 쌍",
-                        "THREE_GEAR": "3단 기어", 
-                        "SIMPLE_PLANETARY": "단순 유성기어",
-                        "DOUBLE_PINION_PLANETARY": "이중 피니언 유성기어"
-                    }
-                    gear_name = gear_type_names.get(gear_type_result, gear_type_result)
-                    self._current_callback(f"⚙️ **2단계 완료:** {gear_name} 타입으로 인식됨\n\n")
+                gear_type_names = {
+                    "GEAR_PAIR": "기어 쌍",
+                    "THREE_GEAR": "3단 기어", 
+                    "SIMPLE_PLANETARY": "단순 유성기어",
+                    "DOUBLE_PINION_PLANETARY": "이중 피니언 유성기어"
+                }
+                gear_name = gear_type_names.get(gear_type_result, gear_type_result)
+                self.progress_messages.append(f"⚙️ **2단계 완료:** {gear_name} 타입으로 인식됨\n\n")
             else:
                 state["gear_type"] = "not_designable"
                 state["detected_gear_type"] = "unknown"
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback("⚙️ **2단계 완료:** 설계 불가능한 기어 타입으로 분류됨\n\n")
+                self.progress_messages.append("⚙️ **2단계 완료:** 설계 불가능한 기어 타입으로 분류됨\n\n")
                 
         except Exception as e:
             import traceback
             error_detail = f"기어 타입 분류 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
             print(error_detail)
-            if hasattr(self, '_current_callback') and self._current_callback:
-                self._current_callback(f"⚙️ **2단계 오류:** {str(e)}\n\n")
+            self.progress_messages.append(f"⚙️ **2단계 오류:** {str(e)}\n\n")
             # 오류 시 기본적으로 설계 불가능으로 처리
             state["gear_type"] = "not_designable"
             state["detected_gear_type"] = "unknown"
@@ -291,9 +286,8 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
     def _check_required_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 설계 정보(Power, 기어비/잇수) 확인"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("📋 **3단계:** 필수 설계 정보 확인 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("📋 **3단계:** 필수 설계 정보 확인 중...")
         
         system_prompt = """당신은 기어 설계에 필요한 정보를 확인하는 전문가입니다.
 
@@ -394,27 +388,22 @@ RATIO_INFO: NO
             
             if len(missing_items) == 0:
                 state["missing_info"] = "none"
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback("📋 **3단계 완료:** 모든 필수 정보가 확인됨 ✅\n\n")
+                self.progress_messages.append("📋 **3단계 완료:** 모든 필수 정보가 확인됨 ✅\n\n")
             elif len(missing_items) == 1:
                 state["missing_info"] = missing_items[0]
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback(f"📋 **3단계 완료:** {missing_items[0]} 정보가 누락됨 ⚠️\n\n")
+                self.progress_messages.append(f"📋 **3단계 완료:** {missing_items[0]} 정보가 누락됨 ⚠️\n\n")
             elif len(missing_items) == 2:
                 state["missing_info"] = "_".join(missing_items)
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback(f"📋 **3단계 완료:** {missing_items[0]}, {missing_items[1]} 정보가 누락됨 ⚠️\n\n")
+                self.progress_messages.append(f"📋 **3단계 완료:** {missing_items[0]}, {missing_items[1]} 정보가 누락됨 ⚠️\n\n")
             else:  # 모든 정보 누락
                 state["missing_info"] = "all"
-                if hasattr(self, '_current_callback') and self._current_callback:
-                    self._current_callback("📋 **3단계 완료:** 모든 설계 정보가 누락됨 ⚠️\n\n")
+                self.progress_messages.append("📋 **3단계 완료:** 모든 설계 정보가 누락됨 ⚠️\n\n")
                 
         except Exception as e:
             import traceback
             error_detail = f"필수 정보 확인 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
             print(error_detail)
-            if hasattr(self, '_current_callback') and self._current_callback:
-                self._current_callback(f"📋 **3단계 오류:** {str(e)}\n\n")
+            self.progress_messages.append(f"📋 **3단계 오류:** {str(e)}\n\n")
             # 오류 시 모든 정보가 없다고 가정
             state["has_speed_info"] = False
             state["has_power_info"] = False
@@ -426,9 +415,8 @@ RATIO_INFO: NO
     def _handle_complete_info(self, state: GearClassifierState) -> GearClassifierState:
         """모든 필수 정보가 있는 경우 처리"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("🎯 **4단계:** 최종 응답 생성 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("🎯 **4단계:** 최종 응답 생성 중...")
         
         gear_type_names = {
             "gear_pair": "기어 쌍",
@@ -456,9 +444,8 @@ RATIO_INFO: NO
     def _handle_missing_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 정보가 누락된 경우 처리"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("🎯 **4단계:** 누락 정보 안내 응답 생성 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("🎯 **4단계:** 누락 정보 안내 응답 생성 중...")
         
         gear_type_names = {
             "gear_pair": "기어 쌍",
@@ -535,9 +522,8 @@ RATIO_INFO: NO
     def _handle_non_designable_gear(self, state: GearClassifierState) -> GearClassifierState:
         """설계 불가능한 기어 처리"""  
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("🎯 **최종:** 설계 가능한 기어 옵션 안내 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("🎯 **최종:** 설계 가능한 기어 옵션 안내 중...")
         
         # 특별한 응답 플래그를 포함하여 app.py에서 UI를 표시하도록 함
         state["response"] = f"""기어설계 AI Agent가 설계 가능한 기어는 다음과 같습니다.
@@ -550,9 +536,8 @@ RATIO_INFO: NO
     def _handle_non_gear_related(self, state: GearClassifierState) -> GearClassifierState:
         """기어 설계와 관련없는 질문 처리"""
         
-        # 콜백이 있는 경우 진행 상황 알림
-        if hasattr(self, '_current_callback') and self._current_callback:
-            self._current_callback("🎯 **최종:** 기어 설계 관련 안내 응답 생성 중...")
+        # 진행 상황 저장
+        self.progress_messages.append("🎯 **최종:** 기어 설계 관련 안내 응답 생성 중...")
         
         state["response"] = """안녕하세요. 저는 기어 설계 전문 AI Agent입니다. 
 
@@ -677,8 +662,8 @@ RATIO_INFO: NO
     async def process_with_callback(self, input_text: str, callback: Callable[[str], None]) -> str:
         """콜백 방식으로 처리합니다."""
         try:
-            # 콜백을 인스턴스 변수로 저장 (각 단계에서 사용하기 위해)
-            self._current_callback = callback
+            # 진행 상황 초기화
+            self.progress_messages = []
             
             # 사용자 메시지 추가
             self.add_message("user", input_text)
@@ -703,6 +688,9 @@ RATIO_INFO: NO
             print(f"그래프 실행 시작 - 입력: {input_text}")
             print(f"초기 상태: {initial_state}")
             
+            # 진행 상황을 주기적으로 업데이트하기 위한 태스크 생성
+            progress_task = asyncio.create_task(self._update_progress_periodically(callback))
+            
             # 그래프 실행
             try:
                 result = await asyncio.to_thread(self.graph.invoke, initial_state)
@@ -712,18 +700,21 @@ RATIO_INFO: NO
                 import traceback
                 print(f"그래프 실행 오류 상세: {traceback.format_exc()}")
                 raise graph_error
+            finally:
+                # 진행 상황 업데이트 태스크 종료
+                progress_task.cancel()
+                try:
+                    await progress_task
+                except asyncio.CancelledError:
+                    pass
             
             # 결과 처리
             response_text = result["response"]
             
-            # 최종 결과 알림
-            callback("🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n")
-            
-            # 콜백 함수 호출 (최종 응답)
-            callback(response_text)
-            
-            # 콜백 초기화
-            self._current_callback = None
+            # 최종 진행 상황과 결과 표시
+            all_progress = "".join(self.progress_messages)
+            final_display = f"{all_progress}\n🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"
+            callback(final_display)
             
             # 최종 응답을 메시지에 추가
             self.add_message("assistant", response_text)
@@ -734,7 +725,21 @@ RATIO_INFO: NO
             error_msg = f"오류 발생: {str(e)}\n\n상세 오류:\n{traceback.format_exc()}"
             print(f"gear_classifier_agent 오류: {error_msg}")  # 콘솔에 출력
             callback(error_msg)
-            # 콜백 초기화
-            self._current_callback = None
             self.add_message("assistant", error_msg)
             return error_msg
+    
+    async def _update_progress_periodically(self, callback):
+        """진행 상황을 주기적으로 업데이트"""
+        last_message_count = 0
+        try:
+            while True:
+                await asyncio.sleep(0.5)  # 0.5초마다 체크
+                
+                if len(self.progress_messages) > last_message_count:
+                    # 새로운 진행 메시지가 있으면 업데이트
+                    current_progress = "".join(self.progress_messages)
+                    callback(current_progress)
+                    last_message_count = len(self.progress_messages)
+        except asyncio.CancelledError:
+            # 정상적인 종료
+            pass
