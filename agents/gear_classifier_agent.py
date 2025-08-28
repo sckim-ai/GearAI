@@ -37,8 +37,11 @@ class GearClassifierState(TypedDict):
     gear_type: str  # "designable", "not_designable"
     detected_gear_type: str  # "gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary", "unknown"
     has_speed_info: bool  # 입출력 속도 정보 유무
+    speed_info: str # 상세 속도 정보
     has_power_info: bool  # 입출력 파워 정보 유무
+    power_info: str # 상세 파워 정보
     has_ratio_info: bool  # 기어비 또는 기어 잇수 정보 유무
+    ratio_info: str # 상세 기어비/잇수 정보
     missing_info: str  # "power", "ratio", "both", "none"
     response: str
 
@@ -295,24 +298,26 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
 1. **입출력 파워 정보**:     
    1) CASE1: Gear Pair 인 경우 아래의 정보가 모두 포함되어야 함
-    - 입/출력 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
-    - 입/출력 파워 중 1개, 또는 입/출력 토크 중 1개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2 속도 중 1개 (Gear1/Gear2 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - Gear1/Gear2 파워 중 1개, 또는 Gear1/Gear2 토크 중 1개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2는 사용자의 어휘에 따라 입력/출력 기어 or Pinion/Wheel 기어 등으로 불릴 수 있음
     - 예시1: 입력속도 1000 rpm, 출력토크 50Nm -> OK
     - 예시2: 입력속도 1000 rpm, 출력속도 500 rpm, 출력토크 50Nm -> NG (입출력 속도 모두 주어짐)
     - 예시3: 입력속도 1000 rpm, 입력파워 100W, 출력토크 50Nm -> NG (입력 파워와 토크 모두 주어짐)
 
    2) CASE2: Three Gear 
-    - Gear1/Gear2/Gear3 의 입력 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
-    - Gear1/Gear2/Gear3 의 입력 파워 중 2개, 또는 토크 중 2개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3 의 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3 의 파워 중 2개, 또는 토크 중 2개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3은 사용자의 어휘에 따라 입력/아이들러/출력 기어 or Pinion/Idler/Wheel 기어 등으로 불릴 수 있음
     - 예시1: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 토크 50Nm -> OK
     - 예시2: Gear1 속도 1000 rpm, Gear2 속도 500 rpm, Gear3 토크 50Nm -> NG (입출력 속도 모두 주어짐)
     - 예시3: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 파워 50W -> NG (입력 파워와 토크 모두 주어짐)
 
    3) CASE3: Simple Planetary, Double Pinion Planetary
-    - Sun/Carrier/Ring 의 입력 속도 중 2개 (유성기어의 속도는 3개의 입력 중 2개로 결정되기 때문에 반드시 2개 입력 필요)
-    - Sun/Carrier/Ring 의 입력 파워 중 1개, 또는 토크 중 1개 (유성기어의 파워 또는 토크는 1개의 입력과 입력된 속도로 나머지가 모두 계산됨)
+    - Sun/Carrier/Ring 의 속도 중 2개 (유성기어의 속도는 3개의 입력 중 2개로 결정되기 때문에 반드시 2개 입력 필요)
+    - Sun/Carrier/Ring 의 파워 중 1개, 또는 토크 중 1개 (유성기어의 파워 또는 토크는 1개의 입력과 입력된 속도로 나머지가 모두 계산됨)
 
-    ### 입출력 작동조건 단위 (아래 단위가 아닌 경우 환산된 정보가 포함되어야 함. 사용자가 단위계를 입력하지 않은 경우 아래 단위로 간주함)
+    ### 입출력 작동조건 단위 (사용자가 단위계를 입력하지 않은 경우 아래 단위로 간주함)
     - 속도 단위: "rpm" (예: "1000rpm", "3600rpm" 등)
     - 파워 단위: "kW" (예: "100 kW", "5kW" 등) 
     - 토크 단위: "Nm" (예: "50Nm", "200Nm" 등)
@@ -321,23 +326,43 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
    - 기어비 (예: "3:1", "감속비 10", "기어비 2.5")
    - 기어 잇수 (예: "20치", "30개 이", "teeth 40")
 
-다음 형식으로만 응답하세요:
-SPEED_INFO: YES 또는 NO
-POWER_INFO: YES 또는 NO
-RATIO_INFO: YES 또는 NO
+아래 규칙에 따라 답변포멧 형식으로만 응답하세요:
+ - 규칙1. 모든 INFO는 YES or NO로 답변한다.
+ - 규칙2. 모든 INFO는 YES or NO 뒤의 괄호()안에 상세 정보를 입력하여 답변한다.
+ - 규칙3. SPEED_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (GEAR1: 속도 [단위], GEAR2: 속도 [단위], ... )
+ - 규칙4. POWER_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (GEAR1: 출력or토크 [단위], GEAR2: 출력or토크 [단위], ... )
+ - 규칙5. RATIO_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (기어비: 3) 또는 (Z1: 잇수, Z2: 잇수, ...)
+ - 규칙5. 모든 INFO는 답변이 NO 인 경우 괄호()안에 상세 이유를 기입한다.
 
-응답 예시:
+## 답변포멧
+SPEED_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
+POWER_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
+RATIO_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
+
+## 응답 예시:
 사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
-SPEED_INFO: NO    
-POWER_INFO: YES
-RATIO_INFO: YES
+SPEED_INFO: NO (속도 정보 누락)   
+POWER_INFO: NO (파워 전달 기어명칭 정보 누락)
+RATIO_INFO: YES (기어비: 3)
+
+사용자 입력: "출력속도 200 rpm, 기어 잇수 23:41로 기어쌍 설계해주세요"
+응답: 
+SPEED_INFO: YES (GEAR2: 200 [rpm])
+POWER_INFO: NO (파워 정보 누락)
+RATIO_INFO: YES (Z1: 23, Z2: 41)
+
+사용자 입력: "입력파워 100kW, 입력속도 1000 rpm, 기어비 3:1로 기어쌍 설계해주세요"
+응답: 
+SPEED_INFO: YES (GEAR1: 1000 [rpm])
+POWER_INFO: YES (GEAR1: 100 [kW])
+RATIO_INFO: YES (기어비: 3)
 
 사용자 입력: "기어쌍 설계 부탁드립니다"
 응답:
-SPEED_INFO: NO
-POWER_INFO: NO  
-RATIO_INFO: NO
+SPEED_INFO: NO (속도 정보 누락)
+POWER_INFO: NO (파워 정보 누락) 
+RATIO_INFO: NO (기어비 정보 누락)
 """
 
         # 메시지 히스토리 고려한 템플릿 생성
@@ -368,14 +393,35 @@ RATIO_INFO: NO
 
             print(f"필수 정보 확인 결과: {info_check_result}")
 
-            # 속도 정보 확인
-            state["has_speed_info"] = "SPEED_INFO: YES" in info_check_result
+            # 상세 정보 추출 및 저장
+            import re
             
-            # 파워 정보 확인
-            state["has_power_info"] = "POWER_INFO: YES" in info_check_result
+            # 속도 정보 확인 및 추출
+            speed_match = re.search(r'SPEED_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
+            if speed_match:
+                state["has_speed_info"] = speed_match.group(1) == "YES"
+                state["speed_info"] = speed_match.group(2).strip() if speed_match.group(1) == "YES" else ""
+            else:
+                state["has_speed_info"] = False
+                state["speed_info"] = ""
             
-            # 기어비/잇수 정보 확인  
-            state["has_ratio_info"] = "RATIO_INFO: YES" in info_check_result
+            # 파워 정보 확인 및 추출
+            power_match = re.search(r'POWER_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
+            if power_match:
+                state["has_power_info"] = power_match.group(1) == "YES"
+                state["power_info"] = power_match.group(2).strip() if power_match.group(1) == "YES" else ""
+            else:
+                state["has_power_info"] = False
+                state["power_info"] = ""
+            
+            # 기어비/잇수 정보 확인 및 추출  
+            ratio_match = re.search(r'RATIO_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
+            if ratio_match:
+                state["has_ratio_info"] = ratio_match.group(1) == "YES"
+                state["ratio_info"] = ratio_match.group(2).strip() if ratio_match.group(1) == "YES" else ""
+            else:
+                state["has_ratio_info"] = False
+                state["ratio_info"] = ""
             
             # 누락된 정보 분류 - speed, power, ratio 모두 고려
             missing_items = []
@@ -406,8 +452,11 @@ RATIO_INFO: NO
             self.progress_messages.append(f"📋 **3단계 오류:** {str(e)}\n\n")
             # 오류 시 모든 정보가 없다고 가정
             state["has_speed_info"] = False
+            state["speed_info"] = ""
             state["has_power_info"] = False
+            state["power_info"] = ""
             state["has_ratio_info"] = False
+            state["ratio_info"] = ""
             state["missing_info"] = "all"
         
         return state
@@ -427,29 +476,17 @@ RATIO_INFO: NO
         
         gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
         
-        # 사용자 입력과 대화 히스토리에서 구체적인 정보 추출
-        all_text = state["user_input"]
-        # 이전 대화 내용도 포함하여 정보 추출 (최근 3개 메시지)
-        if state["messages"] and len(state["messages"]) > 1:
-            recent_messages = state["messages"][-6:]  # 최근 3쌍의 대화
-            for msg in recent_messages:
-                if hasattr(msg, 'content'):
-                    all_text += " " + msg.content
-                elif isinstance(msg, dict) and 'content' in msg:
-                    all_text += " " + msg['content']
-        
-        extracted_info = self._extract_specific_info(all_text)
-        
-        speed_info = extracted_info["speed"] if extracted_info["speed"] else "명시됨"
-        power_info = extracted_info["power"] if extracted_info["power"] else "명시됨"
-        ratio_info = extracted_info["ratio"] if extracted_info["ratio"] else "명시됨"
+        # _check_required_info에서 이미 추출된 상세 정보 사용
+        speed_info = state["speed_info"] if state["speed_info"] else "명시됨"
+        power_info = state["power_info"] if state["power_info"] else "명시됨"
+        ratio_info = state["ratio_info"] if state["ratio_info"] else "명시됨"
         
         state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
+📊 **확인된 설계 정보**:
 🔧 **설계 타입**: {gear_name}
 📋 **요청사항**: {state['user_input']}
 
-📊 **확인된 설계 정보**:
 🏃 **속도 정보**: {speed_info}
 ⚡ **파워/토크 정보**: {power_info}  
 ⚙️ **기어비/잇수 정보**: {ratio_info}
@@ -850,8 +887,11 @@ RATIO_INFO: NO
                 "gear_type": "",
                 "detected_gear_type": "",
                 "has_speed_info": False,
+                "speed_info": "",
                 "has_power_info": False,
+                "power_info": "",
                 "has_ratio_info": False,
+                "ratio_info": "",
                 "missing_info": "",
                 "response": ""
             }
