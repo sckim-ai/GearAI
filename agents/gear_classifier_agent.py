@@ -44,7 +44,7 @@ class GearClassifierState(TypedDict):
     ratio_info: str # 상세 기어비/잇수 정보
     missing_info: str  # "power", "ratio", "both", "none"
     # 추가 기어 정보 (dict/JSON 형태로 유연하게 관리)
-    others_info: dict  # 기어 모듈, 치폭, 중심거리, 압력각, 비틀림각, 재료, 경도 등 모든 추가 정보
+    others_info: str  # 기어 모듈, 치폭, 중심거리, 압력각, 비틀림각, 재료, 경도 등 모든 추가 정보
     response: str
 
 class GearClassifierAgent(BaseAgent):
@@ -298,7 +298,7 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
             power_info: str = Field(description="상세 파워 정보") 
             has_ratio: bool = Field(description="기어비 또는 기어 잇수 정보 유무") 
             ratio_info: str = Field(description="상세 기어비/잇수 정보")
-            others_info: dict = Field(description="추가 기어 정보 (모듈, 치폭, 중심거리, 압력각, 비틀림각, 재료, 경도 등)", default={}) 
+            others_info: str = Field(description="추가 기어 정보 (모듈, 치폭, 중심거리, 압력각, 비틀림각, 재료, 경도 등)", default="") 
 
         parser = PydanticOutputParser(pydantic_object=GearInfo)
         # 진행 상황 저장
@@ -353,7 +353,7 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
  - 규칙3. speed_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 속도 [단위], GEAR2: 속도 [단위], ... 
  - 규칙4. power_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 출력or토크 [단위], GEAR2: 출력or토크 [단위], ... 
  - 규칙5. ratio_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> 기어비: 3, 또는 Z1: 잇수, Z2: 잇수, ...
- - 규칙6. others_info는 추가 기어 정보가 있는 경우 JSON dict 형태로 기입한다. -> {{"module": "2.5mm", "face_width": "25mm", "material": "SCM420"}}
+ - 규칙6. others_info는 추가 기어 정보가 있는 경우 문자열 형태로 기입한다. -> "모듈 2.5mm, 재료 SCM420"
  - 규칙7. speed_info, power_info, ratio_info는 답변이 NO 인 경우 그 상세 이유를 기입한다.
 
 ## 답변포멧 (총 7개)
@@ -363,7 +363,7 @@ has_power: YES or NO
 power_info: 규칙에 의거한 상세 정보
 has_ratio: YES or NO 
 ratio_info: 규칙에 의거한 상세 정보
-others_info: 추가 기어 정보 JSON dict (없으면 빈 dict {{}})
+others_info: 추가 기어 정보 문자열 (없으면 "정보 없음")
 
 ## 응답 예시:
 사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
@@ -374,7 +374,7 @@ has_power: NO
 power_info: 파워 전달 기어명칭 정보 누락
 has_ratio: YES 
 ratio_info: 기어비: 3
-others_info: {{}}
+others_info: 정보 없음
 
 사용자 입력: "속도 200 rpm, 토크 100 Nm, 기어비 3으로 설계해주세요"
 응답: 
@@ -384,7 +384,7 @@ has_power: NO
 power_info: 토크 전달 기어명칭 정보 누락
 has_ratio: YES 
 ratio_info: 기어비: 3
-others_info: {{}}
+others_info: 정보 없음
 
 사용자 입력: "출력속도 200 rpm, 기어 잇수 23:41로 기어쌍 설계해주세요"
 응답: 
@@ -394,7 +394,7 @@ has_power: NO
 power_info: 파워 정보 누락
 has_ratio: YES 
 ratio_info: Z1: 23, Z2: 41
-others_info: {{}}
+others_info: 정보 없음
 
 사용자 입력: "입력파워 100kW, 입력속도 1000 rpm, 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
@@ -404,7 +404,7 @@ has_power: YES
 power_info: GEAR1: 100 [kW]
 has_ratio: YES 
 ratio_info: 기어비: 3
-others_info: {{}}
+others_info: 정보 없음
 
 사용자 입력: "입력파워 50kW, 출력속도 500rpm, 기어비 4:1, 모듈 2.5mm, SCM420 재료로 기어쌍 설계"
 응답:
@@ -414,7 +414,7 @@ has_power: YES
 power_info: GEAR1: 50 [kW]
 has_ratio: YES 
 ratio_info: 기어비: 4
-others_info: {{"module": "2.5mm", "material": "SCM420"}}
+others_info: 모듈 2.5mm, 재료 SCM420
 
 사용자 입력: "기어쌍 설계 부탁드립니다"
 응답:
@@ -424,7 +424,7 @@ has_power: NO
 power_info: 파워 정보 누락
 has_ratio: NO 
 ratio_info: 기어비 정보 누락
-others_info: {{}}
+others_info: 정보 없음
 
 """
 
@@ -441,10 +441,10 @@ others_info: {{}}
                 ("human", "#Format: {format_instructions}\n\n사용자 입력: {user_input}"),
             ])
         
-        chat_template = chat_template.partial(format_instructions=parser.get_format_instructions())
+        chat_template = chat_template.partial(format_instructions="응답은 반드시 위의 답변포멧에 정확히 맞춰서만 작성하세요.")
 
         try:
-            chain = chat_template | self.llm | parser
+            chain = chat_template | self.llm
             # 메시지 히스토리 포함하여 invoke
             if state["messages"] and len(state["messages"]) > 1:
                 conversation_history = state["messages"][:-1]
@@ -455,26 +455,36 @@ others_info: {{}}
             else:
                 response_chain = chain.invoke({"user_input": state["user_input"]})
             
-            # JSON 응답 파싱 (JsonOutputParser가 자동으로 파싱)
-            gear_info = response_chain
+            # 텍스트 응답 파싱
+            response_text = response_chain.content if hasattr(response_chain, 'content') else str(response_chain)
             
-            print(f"필수 정보 확인 결과: {gear_info}")
+            print(f"필수 정보 확인 결과: {response_text}")
 
-            # JSON 응답에서 정보 추출 및 state 업데이트
-            # has_speed 변환 (YES/NO -> bool)
-            state["has_speed_info"] = gear_info.has_speed == "YES" if isinstance(gear_info.has_speed, str) else gear_info.has_speed
-            state["speed_info"] = gear_info.speed_info
+            # 응답 텍스트에서 정보 추출
+            import re
+            import json
             
-            # has_power 변환 (YES/NO -> bool)
-            state["has_power_info"] = gear_info.has_power == "YES" if isinstance(gear_info.has_power, str) else gear_info.has_power
-            state["power_info"] = gear_info.power_info
+            # 각 필드 추출
+            has_speed_match = re.search(r'has_speed:\s*(YES|NO)', response_text)
+            speed_info_match = re.search(r'speed_info:\s*(.+)', response_text)
+            has_power_match = re.search(r'has_power:\s*(YES|NO)', response_text)
+            power_info_match = re.search(r'power_info:\s*(.+)', response_text)
+            has_ratio_match = re.search(r'has_ratio:\s*(YES|NO)', response_text)
+            ratio_info_match = re.search(r'ratio_info:\s*(.+)', response_text)
+            others_info_match = re.search(r'others_info:\s*(.+)', response_text)
             
-            # has_ratio 변환 (YES/NO -> bool)
-            state["has_ratio_info"] = gear_info.has_ratio == "YES" if isinstance(gear_info.has_ratio, str) else gear_info.has_ratio
-            state["ratio_info"] = gear_info.ratio_info
+            # state 업데이트
+            state["has_speed_info"] = has_speed_match.group(1) == "YES" if has_speed_match else False
+            state["speed_info"] = speed_info_match.group(1).strip() if speed_info_match else ""
             
-            # 추가 기어 정보 저장
-            state["others_info"] = gear_info.others_info if gear_info.others_info else {}
+            state["has_power_info"] = has_power_match.group(1) == "YES" if has_power_match else False
+            state["power_info"] = power_info_match.group(1).strip() if power_info_match else ""
+            
+            state["has_ratio_info"] = has_ratio_match.group(1) == "YES" if has_ratio_match else False
+            state["ratio_info"] = ratio_info_match.group(1).strip() if ratio_info_match else ""
+            
+            # others_info 문자열로 저장
+            state["others_info"] = others_info_match.group(1).strip() if others_info_match else ""
             
             # 누락된 정보 분류 - speed, power, ratio 모두 고려
             missing_items = []
@@ -917,7 +927,7 @@ others_info: {{}}
                 "has_ratio_info": False,
                 "ratio_info": "",
                 "missing_info": "",
-                "others_info": {},  # 추가 기어 정보를 담을 빈 dict로 초기화
+                "others_info": "",  # 추가 기어 정보를 담을 빈 문자열로 초기화
                 "response": ""
             }
             
