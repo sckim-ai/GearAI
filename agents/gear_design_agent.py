@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, TypedDict
 import datetime
 import re
+from io import BytesIO
+from PIL import Image
 
 # 상위 디렉토리를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -196,7 +198,8 @@ class GearDesignAgent(BaseAgent):
             self.progress_messages.append("📥 **1단계:** 기어 설계 정보 수신 중...")
             
             if self.callback:
-                self.callback("📥 **기어 정보 수신 중**\\n\\ngear_classifier_agent로부터 설계 정보를 받고 있습니다...")
+                self.callback("📥 **기어 정보 수신 중**\n\n" \
+                "gear_classifier_agent로부터 설계 정보를 받고 있습니다...")
             
             # gear_classifier_agent의 state를 파싱하여 정보 추출
             user_input = state.get("user_input", "")
@@ -1116,3 +1119,16 @@ class GearDesignAgent(BaseAgent):
             key_info = [f"  • 메시지 파싱 오류: {str(e)}"]
             
         return key_info
+    
+    def get_graph_image(self):
+        """LangGraph에서 그래프 이미지를 생성하여 반환"""
+        try:
+            # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
+            png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
+            
+            # PNG 데이터를 PIL Image로 변환
+            image = Image.open(BytesIO(png_data))
+            return image
+        except Exception as e:
+            print(f"그래프 이미지 생성 오류: {e}")
+            return None

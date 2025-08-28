@@ -338,7 +338,7 @@ with col2:
     st.header("🔍 워크플로우 시각화")
     
     # LangGraph가 있는 에이전트만 시각화
-    if agent_type == "Gear Classifier":
+    if agent_type in ["Gear Classifier", "Gear Design", "Gear Agent"]:
         try:
             # 에이전트에서 그래프 이미지 가져오기
             selected_agent = agent_service.agents[agent_type]

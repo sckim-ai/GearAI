@@ -8,6 +8,8 @@ import asyncio
 import json
 import re
 from datetime import datetime
+from io import BytesIO
+from PIL import Image
 
 from agents.base_agent import BaseAgent
 from agents.gear_classifier_agent import GearClassifierAgent
@@ -549,3 +551,16 @@ class GearAgent(BaseAgent):
             
         except Exception as e:
             return f"워크플로우 재개 중 오류: {str(e)}"
+    
+    def get_graph_image(self):
+        """LangGraph에서 그래프 이미지를 생성하여 반환"""
+        try:
+            # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
+            png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
+            
+            # PNG 데이터를 PIL Image로 변환
+            image = Image.open(BytesIO(png_data))
+            return image
+        except Exception as e:
+            print(f"그래프 이미지 생성 오류: {e}")
+            return None
