@@ -1124,7 +1124,7 @@ class GearDesignAgent(BaseAgent):
         """LangGraph에서 그래프 이미지를 생성하여 반환"""
         try:
             # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
-            png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
+            png_data = self.graph.get_graph(xray=True).draw_mermaid_png()
             
             # PNG 데이터를 PIL Image로 변환
             image = Image.open(BytesIO(png_data))
