@@ -222,27 +222,25 @@ with col1:
                         # 진행 상황과 최종 응답을 분리하여 표시
                         progress_parts = []
                         response_parts = []
-                        is_final_response = False
+                        is_final_response = [False]  # 리스트로 변경하여 nonlocal 문제 해결
                         
                         # 진행 상황 표시용 컨테이너 생성
                         progress_container = st.empty()
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            nonlocal is_final_response
-                            
                             # 구분자로 최종 응답 시작점 확인
                             if "🎉 **분석 완료!**" in chunk:
-                                is_final_response = True
+                                is_final_response[0] = True
                                 progress_parts.append(chunk)
                                 # 진행 상황 최종 업데이트
                                 progress_container.markdown("".join(progress_parts))
                                 return
-                            elif "---" in chunk and is_final_response:
+                            elif "---" in chunk and is_final_response[0]:
                                 # 구분선 이후는 최종 응답
                                 return
                             
-                            if not is_final_response:
+                            if not is_final_response[0]:
                                 # 진행 상황 업데이트
                                 progress_parts.append(chunk)
                                 progress_container.markdown("".join(progress_parts))
@@ -317,27 +315,25 @@ with col1:
                         # 진행 상황과 최종 응답을 분리하여 표시
                         progress_parts = []
                         response_parts = []
-                        is_final_response = False
+                        is_final_response = [False]  # 리스트로 변경하여 nonlocal 문제 해결
                         
                         # 진행 상황 표시용 컨테이너 생성
                         progress_container = st.empty()
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            nonlocal is_final_response
-                            
                             # 구분자로 최종 응답 시작점 확인
                             if "🎉 **분석 완료!**" in chunk:
-                                is_final_response = True
+                                is_final_response[0] = True
                                 progress_parts.append(chunk)
                                 # 진행 상황 최종 업데이트
                                 progress_container.markdown("".join(progress_parts))
                                 return
-                            elif "---" in chunk and is_final_response:
+                            elif "---" in chunk and is_final_response[0]:
                                 # 구분선 이후는 최종 응답
                                 return
                             
-                            if not is_final_response:
+                            if not is_final_response[0]:
                                 # 진행 상황 업데이트
                                 progress_parts.append(chunk)
                                 progress_container.markdown("".join(progress_parts))
