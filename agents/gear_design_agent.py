@@ -200,11 +200,22 @@ class GearDesignAgent(BaseAgent):
             
             # LangGraph 워크플로우 실행
             result = self.graph.invoke(initial_state)            
-            response_text = result["response"]
             
             # state 저장 (gear_agent에서 접근할 수 있도록)
             self.state = result
-
+            
+            # 오류 발생 여부 확인 및 처리
+            if result.get("error_occurred", False):
+                error_msg = result.get("error_message", "알 수 없는 오류")
+                response_text = f"❌ 기어 설계 중 오류가 발생했습니다: {error_msg}"
+                if callback:
+                    callback(response_text)
+                self.add_message("assistant", response_text)
+                return response_text
+            
+            # 정상 처리된 경우
+            response_text = result.get("response", "")
+            
             # 최종 응답을 메시지에 추가
             self.add_message("assistant", response_text)
 
@@ -212,9 +223,12 @@ class GearDesignAgent(BaseAgent):
             return response_text
             
         except Exception as e:
-            error_msg = f"❌ 기어 설계 워크플로우 실행 중 오류 발생: {str(e)}"
+            import traceback
+            error_detail = traceback.format_exc()
+            error_msg = f"❌ 기어 설계 워크플로우 실행 중 오류 발생: {str(e)}\n{error_detail}"
             if callback:
                 callback(error_msg)
+            self.add_message("assistant", error_msg)
             return error_msg
     
     # ===========================================
@@ -242,80 +256,18 @@ class GearDesignAgent(BaseAgent):
                 state["power_info"] = classifier_data.get("power_info", "")
                 state["ratio_info"] = classifier_data.get("ratio_info", "")
                 state["others_info"] = classifier_data.get("others_info", "")
-                state["gear_info_parsed"] = True
-                
-                self.progress_messages.append("✅ **1단계 완료:** shared_data에서 classifier 결과 수신 성공")
-                
-                if self.callback:
-                    gear_type_names = {
-                        "gear_pair": "기어쌍 (2단 기어)",
-                        "three_gear": "3단 기어", 
-                        "simple_planetary": "단순 유성기어",
-                        "double_pinion_planetary": "이중 피니언 유성기어"
-                    }
-                    gear_name = gear_type_names.get(state.get("gear_type", ""), state.get("gear_type", "미지정"))
-                    
-                    summary = f"""
-📋 **수신된 기어 정보:** (shared_data 경유)
-- **기어 타입:** {gear_name}
-- **속도 정보:** {state.get('speed_info', '미지정') or '미지정'}
-- **동력 정보:** {state.get('power_info', '미지정') or '미지정'}
-- **기어비 정보:** {state.get('ratio_info', '미지정') or '미지정'}
-- **기타 정보:** {state.get('others_info', '미지정') or '미지정'}
 
-📊 **추가 분석 정보:**
-- **분류 결과:** {classifier_data.get('classification', '미지정')}
-- **누락 정보:** {classifier_data.get('missing_info', 'none')}
-- **속도 정보 여부:** {'있음' if classifier_data.get('has_speed_info') else '없음'}
-- **동력 정보 여부:** {'있음' if classifier_data.get('has_power_info') else '없음'}
-- **기어비 정보 여부:** {'있음' if classifier_data.get('has_ratio_info') else '없음'}
-"""
-                    self.callback(summary)
+                if classifier_data.get("others_info", "") == "none":
+                    state["gear_info_parsed"] = True
+                    self.progress_messages.append("✅ **1단계 완료:** shared_data에서 classifier 결과 수신 성공")
+
+                else:
+                    state["gear_info_parsed"] = False   
+                    self.progress_messages.append("✅ **1단계 종료:** shared_data에서 classifier 결과 수신 실패")              
                     
             else:
-                # shared_data에 classifier 결과가 없을 때 사용자 입력에서 파싱 (LangChain 사용)
-                user_input = state.get("user_input", "")
-                
-                # ChatPromptTemplate 정의
-                prompt_template = ChatPromptTemplate.from_messages([
-                    ("system", """
-사용자 입력에서 기어 설계에 필요한 정보를 추출하세요.
-다음 정보들을 JSON 형태로 반환하세요:
-
-{{
-  "gear_type": "gear_pair|three_gear|simple_planetary|double_pinion_planetary",
-  "speed_info": "속도 정보 문자열",
-  "power_info": "파워/토크 정보 문자열", 
-  "ratio_info": "기어비/잇수 정보 문자열",
-  "others_info": "추가 정보 문자열 (모듈, 치폭, 재료 등)"
-}}
-
-정보가 없는 경우 해당 필드는 빈 문자열로 설정하세요.
-"""),
-                    ("human", "{input}")
-                ])
-                
-                # LangChain chain 구성
-                chain = prompt_template | self.llm
-                
-                # LLM 호출
-                response = chain.invoke({"input": user_input})
-                response_content = response.content
-                
-                # JSON 블록 제거
-                response_content = re.sub(r'```json\\s*|\\s*```', '', response_content).strip()
-                
-                gear_info = json.loads(response_content)
-                
-                # 상태 업데이트
-                state["gear_type"] = gear_info.get("gear_type", "")
-                state["speed_info"] = gear_info.get("speed_info", "")
-                state["power_info"] = gear_info.get("power_info", "")
-                state["ratio_info"] = gear_info.get("ratio_info", "")
-                state["others_info"] = gear_info.get("others_info", "")
-                state["gear_info_parsed"] = True
-                
-                self.progress_messages.append("✅ **1단계 완료:** 사용자 입력에서 기어 정보 파싱 성공")
+                state["gear_info_parsed"] = False   
+                self.progress_messages.append("✅ **1단계 종료:** shared_data에서 classifier 결과 수신 실패")         
             
         except Exception as e:
             error_msg = f"기어 정보 수신 오류: {e}"
@@ -735,16 +687,6 @@ class GearDesignAgent(BaseAgent):
         
         return state
     
-    def _handle_error_node(self, state: GearDesignState) -> GearDesignState:
-        """오류 처리 노드"""
-        error_msg = state.get("error_message", "알 수 없는 오류")
-        state["response"] = f"❌ 기어 설계 중 오류가 발생했습니다: {error_msg}"
-        
-        if self.callback:
-            self.callback(state["response"])
-        
-        return state
-    
     # ===========================================
     # 라우팅 메서드들
     # ===========================================
@@ -752,65 +694,65 @@ class GearDesignAgent(BaseAgent):
     def _route_after_receive(self, state: GearDesignState) -> str:
         """기어 정보 수신 후 라우팅"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("gear_info_parsed", False):
             return "display_specs"
         else:
-            return "handle_error"
+            return END
     
     def _route_after_display(self, state: GearDesignState) -> str:
         """제원 표시 후 라우팅 - 사용자 응답 대기"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("specs_displayed", False):
             return "process_user_response"
         else:
-            return "handle_error"
+            return END
     
     def _route_after_user_response(self, state: GearDesignState) -> str:
         """사용자 응답 처리 후 라우팅"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("user_approved", False):
             return "initialize_manager"
         elif state.get("user_requested_changes", False):
             return "handle_modifications"
         else:
-            return "handle_error"
+            return END
     
     def _route_after_modifications(self, state: GearDesignState) -> str:
         """수정 처리 후 라우팅 - 다시 사용자 응답 대기"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         else:
             return "process_user_response"
     
     def _route_after_initialization(self, state: GearDesignState) -> str:
         """초기화 완료 후 라우팅"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("manager_initialized", False):
             return "modify_config"
         else:
-            return "handle_error"
+            return END
     
     def _route_after_config_modification(self, state: GearDesignState) -> str:
         """설정 수정 완료 후 라우팅"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("config_modified", False):
             return "perform_calculation"
         else:
-            return "handle_error"
+            return END
     
     def _route_after_calculation(self, state: GearDesignState) -> str:
         """계산 완료 후 라우팅"""
         if state.get("error_occurred", False):
-            return "handle_error"
+            return END
         elif state.get("rating_calculated", False):
             return "generate_results"
         else:
-            return "handle_error"
+            return END
     
     # ===========================================
     # 워크플로우 구성
@@ -829,8 +771,6 @@ class GearDesignAgent(BaseAgent):
         workflow.add_node("modify_config", self._modify_config_node)
         workflow.add_node("perform_calculation", self._perform_calculation_node)
         workflow.add_node("generate_results", self._generate_results_node)
-        workflow.add_node("handle_error", self._handle_error_node)
-        
         # 시작점 설정
         workflow.set_entry_point("receive_gear_info")
         
@@ -839,8 +779,7 @@ class GearDesignAgent(BaseAgent):
             "receive_gear_info",
             self._route_after_receive,
             {
-                "display_specs": "display_specs",
-                "handle_error": "handle_error"
+                "display_specs": "display_specs"
             }
         )
         
@@ -848,8 +787,7 @@ class GearDesignAgent(BaseAgent):
             "display_specs",
             self._route_after_display,
             {
-                "process_user_response": "process_user_response",
-                "handle_error": "handle_error"
+                "process_user_response": "process_user_response"
             }
         )
         
@@ -858,8 +796,7 @@ class GearDesignAgent(BaseAgent):
             self._route_after_user_response,
             {
                 "initialize_manager": "initialize_manager",
-                "handle_modifications": "handle_modifications",
-                "handle_error": "handle_error"
+                "handle_modifications": "handle_modifications"
             }
         )
         
@@ -867,8 +804,7 @@ class GearDesignAgent(BaseAgent):
             "handle_modifications",
             self._route_after_modifications,
             {
-                "process_user_response": "process_user_response",
-                "handle_error": "handle_error"
+                "process_user_response": "process_user_response"
             }
         )
         
@@ -876,8 +812,7 @@ class GearDesignAgent(BaseAgent):
             "initialize_manager",
             self._route_after_initialization,
             {
-                "modify_config": "modify_config",
-                "handle_error": "handle_error"
+                "modify_config": "modify_config"
             }
         )
         
@@ -885,8 +820,7 @@ class GearDesignAgent(BaseAgent):
             "modify_config",
             self._route_after_config_modification,
             {
-                "perform_calculation": "perform_calculation",
-                "handle_error": "handle_error"
+                "perform_calculation": "perform_calculation"
             }
         )
         
@@ -894,14 +828,12 @@ class GearDesignAgent(BaseAgent):
             "perform_calculation",
             self._route_after_calculation,
             {
-                "generate_results": "generate_results",
-                "handle_error": "handle_error"
+                "generate_results": "generate_results"
             }
         )
         
-        # 종료점 설정
+        # generate_results는 END로 직접 연결
         workflow.add_edge("generate_results", END)
-        workflow.add_edge("handle_error", END)
         
         return workflow.compile()
 
