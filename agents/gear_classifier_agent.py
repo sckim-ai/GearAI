@@ -667,63 +667,70 @@ RATIO_INFO: NO (기어비 정보 누락)
         
         gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
         
-        # 누락된 정보에 따른 메시지 생성
-        missing_items = []
-        if not state["has_speed_info"]:
-            missing_items.append("속도")
-        if not state["has_power_info"]:
-            missing_items.append("파워/토크")
-        if not state["has_ratio_info"]:
-            missing_items.append("기어비/잇수")
+        # 누락된 정보의 상세 사유를 포함하여 메시지 생성
+        missing_details = []
         
-        if len(missing_items) == 3:
-            missing_text = "**속도 정보**, **파워/토크 정보**, **기어비/잇수 정보**가"
+        if not state["has_speed_info"]:
+            speed_reason = state.get("speed_info", "속도 정보 누락")
+            missing_details.append(f"**🏃 속도 정보**: {speed_reason}")
+        
+        if not state["has_power_info"]:
+            power_reason = state.get("power_info", "파워/토크 정보 누락")
+            missing_details.append(f"**⚡ 파워/토크 정보**: {power_reason}")
+        
+        if not state["has_ratio_info"]:
+            ratio_reason = state.get("ratio_info", "기어비/잇수 정보 누락")
+            missing_details.append(f"**⚙️ 기어비/잇수 정보**: {ratio_reason}")
+        
+        # 누락된 정보 개수에 따른 예시 생성
+        missing_count = len(missing_details)
+        if missing_count == 3:
             examples = """
-📋 **종합 입력 예시**:\n\r
-• "1000rpm 입력속도, 100W 파워로 기어비 3:1인 기어쌍 설계"\n\r
-• "입력속도 1800rpm, 출력토크 50Nm, 감속비 5인 유성기어 설계"\n\r
+📋 **종합 입력 예시**:
+• "1000rpm 입력속도, 100W 파워로 기어비 3:1인 기어쌍 설계"
+• "입력속도 1800rpm, 출력토크 50Nm, 감속비 5인 유성기어 설계"
 • "선기어 속도 1000rpm, 캐리어 속도 500rpm, Ring 출력 2kW인 유성기어 설계\""""
-        elif len(missing_items) == 2:
-            missing_text = f"**{missing_items[0]} 정보**와 **{missing_items[1]} 정보**가"
-            if "속도" in missing_items and "파워/토크" in missing_items:
+        elif missing_count == 2:
+            if not state["has_speed_info"] and not state["has_power_info"]:
                 examples = """
-📋 **속도/파워 정보 예시**:\n\r
-• 속도: "1000rpm", "1800rpm" (입력 또는 출력)\n\r
+📋 **속도/파워 정보 예시**:
+• 속도: "1000rpm", "1800rpm" (입력 또는 출력)
 • 파워: "100W", "2kW" / 토크: "50Nm", "200Nm\""""
-            elif "속도" in missing_items and "기어비/잇수" in missing_items:
+            elif not state["has_speed_info"] and not state["has_ratio_info"]:
                 examples = """
-📋 **속도/기어비 정보 예시**:\n\r
-• 속도: "1000rpm", "1800rpm"\n\r
+📋 **속도/기어비 정보 예시**:
+• 속도: "1000rpm", "1800rpm"
 • 기어비: "3:1", "감속비 5" / 잇수: "20치", "40치\""""
-            else:  # 파워/토크와 기어비/잇수
+            else:  # power와 ratio 누락
                 examples = """
-📋 **파워/기어비 정보 예시**:\n\r
-• 파워: "100W", "2kW" / 토크: "50Nm", "200Nm"\n\r
+📋 **파워/기어비 정보 예시**:
+• 파워: "100W", "2kW" / 토크: "50Nm", "200Nm"
 • 기어비: "3:1", "감속비 5" / 잇수: "20치", "40치\""""
         else:  # 1개 누락
-            missing_text = f"**{missing_items[0]} 정보**가"
-            if missing_items[0] == "속도":
+            if not state["has_speed_info"]:
                 examples = """
-📋 **속도 정보 예시**:\n\r
-• 입력/출력 속도: "1000rpm", "1800rpm"\n\r
+📋 **속도 정보 예시**:
+• 입력/출력 속도: "1000rpm", "1800rpm"
 • 유성기어의 경우: "Sun속도 1000rpm", "Carrier속도 500rpm\""""
-            elif missing_items[0] == "파워/토크":
+            elif not state["has_power_info"]:
                 examples = """
-📋 **파워/토크 정보 예시**:\n\r
-• 파워: "100W", "2kW"\n\r
+📋 **파워/토크 정보 예시**:
+• 파워: "100W", "2kW"
 • 토크: "50Nm", "200Nm\""""
-            else:  # 기어비/잇수
+            else:  # ratio 누락
                 examples = """
-📋 **기어비/잇수 정보 예시**:\n\r
-• 기어비: "3:1", "감속비 5", "기어비 2.5"\n\r
+📋 **기어비/잇수 정보 예시**:
+• 기어비: "3:1", "감속비 5", "기어비 2.5"
 • 기어 잇수: "20치", "40치", "60치\""""
 
         state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.
 
-🔧 **설계 타입**: {gear_name}\n\r
+🔧 **설계 타입**: {gear_name}
 📝 **현재 요청**: {state['user_input']}
 
-❌ **누락된 정보**: {missing_text} 필요합니다.\n\r
+❌ **누락된 정보 상세**:
+{chr(10).join(missing_details)}
+
 {examples}
 
 위 정보를 포함하여 다시 요청해 주세요! 🙂"""
