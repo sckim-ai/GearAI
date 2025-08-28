@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List, TypedDict
+from typing import Dict, Any, Optional, List, TypedDict, Annotated
 import datetime
 import re
 from io import BytesIO
@@ -28,9 +28,9 @@ from langchain_core.messages import BaseMessage, HumanMessage
 
 class GearDesignState(TypedDict):
     """기어 설계 상태를 정의하는 TypedDict"""
+    messages: Annotated[list, add_messages]
     user_input: str  # 사용자 입력
-    messages: List[BaseMessage]  # 메시지 히스토리
-    
+
     # 파싱된 기어 정보
     gear_type: str  # gear_pair, three_gear, simple_planetary, double_pinion_planetary
     speed_info: str  # 속도 정보
@@ -135,7 +135,7 @@ class GearDesignAgent(BaseAgent):
             # 초기 상태 생성
             initial_state: GearDesignState = {
                 "user_input": user_input,
-                "messages": [HumanMessage(content=user_input)],
+                "messages": self.messages.copy(),
                 
                 # 파싱된 기어 정보 초기화
                 "gear_type": "",
