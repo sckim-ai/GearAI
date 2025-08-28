@@ -45,6 +45,8 @@ class GearClassifierState(TypedDict):
     missing_info: str  # "power", "ratio", "both", "none"
     # 추가 기어 정보 (dict/JSON 형태로 유연하게 관리)
     others_info: str  # 기어 모듈, 치폭, 중심거리, 압력각, 비틀림각, 재료, 경도 등 모든 추가 정보
+    proceed_to_design: bool  # 기어 설계 수행 여부
+    design_result: str  # 기어 설계 결과
     response: str
 
 class GearClassifierAgent(BaseAgent):
@@ -562,9 +564,91 @@ others_info: 정보 없음
 ⚡ **파워/토크 정보**: {power_info}\r\n
 ⚙️ **기어비/잇수 정보**: {ratio_info}\r\n{others_display}
 
-다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
+🔧 **다음 단계**: 기어 설계 수행을 시작하겠습니다..."""
+        
+        # 기어 설계 수행을 위한 플래그 설정
+        state["proceed_to_design"] = True
         
         return state
+
+    def _perform_gear_design(self, state: GearClassifierState) -> GearClassifierState:
+        """기어 설계를 수행하는 단계"""
+        try:
+            from agents.gear_design_agent import GearDesignAgent
+            
+            # 진행 상황 저장
+            self.progress_messages.append("🔧 **5단계:** 기어 설계 수행 중...")
+            
+            # 기어 설계 에이전트 초기화
+            gear_design_config = {
+                "model": self.model,
+                "temperature": self.temperature,
+                "gear_design_path": r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
+                "template_json_path": r"D:\SW\Streamlit\TestGD.GD1"
+            }
+            
+            design_agent = GearDesignAgent(gear_design_config)
+            
+            # 설계 정보를 문자열로 구성
+            design_input = self._format_design_input(state)
+            
+            # 기어 설계 수행 (동기적으로 수행)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            # 콜백 함수 정의
+            def design_callback(message):
+                self.progress_messages.append(message)
+            
+            # 비동기 메서드를 동기적으로 실행
+            design_result = loop.run_until_complete(
+                design_agent.process_with_callback(design_input, design_callback)
+            )
+            
+            # 결과를 상태에 저장
+            state["design_result"] = design_result
+            state["response"] = design_result
+            
+            self.progress_messages.append("✅ **기어 설계 완료!**")
+            
+        except Exception as e:
+            error_msg = f"❌ 기어 설계 중 오류 발생: {str(e)}"
+            print(error_msg)
+            state["design_result"] = error_msg
+            state["response"] = error_msg
+            self.progress_messages.append(error_msg)
+        
+        return state
+    
+    def _format_design_input(self, state: GearClassifierState) -> str:
+        """상태 정보를 기어 설계 입력 형식으로 변환"""
+        gear_type_names = {
+            "gear_pair": "기어 쌍",
+            "three_gear": "3단 기어",
+            "simple_planetary": "단순 유성기어",
+            "double_pinion_planetary": "이중 피니언 유성기어"
+        }
+        
+        gear_name = gear_type_names.get(state["detected_gear_type"], "기어")
+        
+        design_input_parts = [
+            f"{gear_name} 설계 요청",
+            f"사용자 요청: {state['user_input']}",
+        ]
+        
+        if state.get("speed_info"):
+            design_input_parts.append(f"속도 정보: {state['speed_info']}")
+        
+        if state.get("power_info"): 
+            design_input_parts.append(f"파워/토크 정보: {state['power_info']}")
+            
+        if state.get("ratio_info"):
+            design_input_parts.append(f"기어비/잇수 정보: {state['ratio_info']}")
+            
+        if state.get("others_info") and state["others_info"] != "정보 없음":
+            design_input_parts.append(f"추가 정보: {state['others_info']}")
+        
+        return ". ".join(design_input_parts)
 
     def _handle_missing_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 정보가 누락된 경우 처리"""
@@ -829,6 +913,13 @@ others_info: 정보 없음
         else:
             return "missing_info"
     
+    def _route_after_complete_info(self, state: GearClassifierState) -> str:
+        """complete_info 이후 라우팅 - 기어 설계로 진행"""
+        if state.get("proceed_to_design", False):
+            return "perform_design"
+        else:
+            return "END"
+    
     def _build_graph(self):
         """LangGraph 워크플로우 구성"""
         workflow = StateGraph(GearClassifierState)
@@ -839,6 +930,7 @@ others_info: 정보 없음
         workflow.add_node("check_required_info", self._check_required_info)
         workflow.add_node("complete_info", self._handle_complete_info)
         workflow.add_node("missing_info", self._handle_missing_info)
+        workflow.add_node("perform_design", self._perform_gear_design)
         workflow.add_node("not_designable_gear", self._handle_non_designable_gear)
         workflow.add_node("not_gear_related", self._handle_non_gear_related)
         
@@ -875,8 +967,18 @@ others_info: 정보 없음
             }
         )
         
+        # 조건부 라우팅 - complete_info 이후 기어 설계 수행 여부
+        workflow.add_conditional_edges(
+            "complete_info",
+            self._route_after_complete_info,
+            {
+                "perform_design": "perform_design",
+                "END": END
+            }
+        )
+        
         # 종료점 설정
-        workflow.add_edge("complete_info", END)
+        workflow.add_edge("perform_design", END)
         workflow.add_edge("missing_info", END)
         workflow.add_edge("not_designable_gear", END)
         workflow.add_edge("not_gear_related", END)
@@ -936,6 +1038,8 @@ others_info: 정보 없음
                 "ratio_info": "",
                 "missing_info": "",
                 "others_info": "",  # 추가 기어 정보를 담을 빈 문자열로 초기화
+                "proceed_to_design": False,  # 기어 설계 수행 여부
+                "design_result": "",  # 기어 설계 결과
                 "response": ""
             }
             

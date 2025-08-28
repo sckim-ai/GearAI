@@ -12,6 +12,7 @@ sys.path.insert(0, project_root)
 from agents.base_agent import BaseAgent
 from agents.chat_agent import ChatAgent
 from agents.gear_classifier_agent import GearClassifierAgent
+from agents.gear_design_agent import GearDesignAgent
 
 class AgentService:
     """
@@ -39,7 +40,16 @@ class AgentService:
             "model": "gpt-5-mini",
             "temperature": 0.0
         }
-        self.register_agent("Gear Classifier", GearClassifierAgent(gear_config)) 
+        self.register_agent("Gear Classifier", GearClassifierAgent(gear_config))
+        
+        # Gear Design 에이전트 설정
+        gear_design_config = {
+            "model": "gpt-5-mini",
+            "temperature": 0.0,
+            "gear_design_path": r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
+            "template_json_path": str(os.path.join(project_root, "TestGD.GD1"))
+        }
+        self.register_agent("Gear Design", GearDesignAgent(gear_design_config)) 
         
     def register_agent(self, name: str, agent: BaseAgent):
         """새로운 에이전트를 등록합니다."""
