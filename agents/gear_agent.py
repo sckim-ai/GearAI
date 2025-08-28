@@ -50,13 +50,13 @@ class GearAgent(BaseAgent):
         
         # 하위 에이전트 초기화
         classifier_config = {
-            "model": config.get("model", "gpt-4o-mini"),
+            "model": config.get("model", "gpt-5-mini"),
             "temperature": config.get("temperature", 0.0)
         }
         self.gear_classifier = GearClassifierAgent(classifier_config)
         
         design_config = {
-            "model": config.get("model", "gpt-4o-mini"),
+            "model": config.get("model", "gpt-5-mini"),
             "temperature": config.get("temperature", 0.0),
             "gear_design_path": config.get("gear_design_path", r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"),
             "template_json_path": config.get("template_json_path", "TestGD.GD1")
