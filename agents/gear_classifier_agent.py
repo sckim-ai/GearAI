@@ -427,19 +427,134 @@ RATIO_INFO: NO
         
         gear_name = gear_type_names.get(state["detected_gear_type"], "인식된 기어")
         
+        # 사용자 입력과 대화 히스토리에서 구체적인 정보 추출
+        all_text = state["user_input"]
+        # 이전 대화 내용도 포함하여 정보 추출 (최근 3개 메시지)
+        if state["messages"] and len(state["messages"]) > 1:
+            recent_messages = state["messages"][-6:]  # 최근 3쌍의 대화
+            for msg in recent_messages:
+                if hasattr(msg, 'content'):
+                    all_text += " " + msg.content
+                elif isinstance(msg, dict) and 'content' in msg:
+                    all_text += " " + msg['content']
+        
+        extracted_info = self._extract_specific_info(all_text)
+        
+        speed_info = extracted_info["speed"] if extracted_info["speed"] else "명시됨"
+        power_info = extracted_info["power"] if extracted_info["power"] else "명시됨"
+        ratio_info = extracted_info["ratio"] if extracted_info["ratio"] else "명시됨"
+        
         state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
-🔧 **설계 타입**: {gear_name}\n\r
-📋 **요청사항**: {state['user_input']}\n\r
-🏃 **속도 정보**: 포함됨\n\r
-⚡ **파워/토크 정보**: 포함됨\n\r
-⚙️ **기어비/잇수 정보**: 포함됨
+🔧 **설계 타입**: {gear_name}
+📋 **요청사항**: {state['user_input']}
+
+📊 **확인된 설계 정보**:
+🏃 **속도 정보**: {speed_info}
+⚡ **파워/토크 정보**: {power_info}  
+⚙️ **기어비/잇수 정보**: {ratio_info}
 
 다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
         
-        self.add_message("assistant", state["response"])
-
         return state
+    
+    def _extract_specific_info(self, user_input: str) -> dict:
+        """사용자 입력에서 구체적인 수치 정보를 추출"""
+        import re
+        
+        extracted = {
+            "speed": [],
+            "power": [],
+            "ratio": []
+        }
+        
+        # 속도 정보 추출 (rpm, 분당회전수)
+        speed_patterns = [
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*rpm',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*RPM',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*분당\s*회전수?',
+            r'입력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'출력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*회전',
+            r'Sun\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'Carrier\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'Ring\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)'
+        ]
+        
+        for pattern in speed_patterns:
+            matches = re.findall(pattern, user_input, re.IGNORECASE)
+            for match in matches:
+                clean_match = match.replace(',', '')  # 콤마 제거
+                extracted["speed"].append(f"{clean_match}rpm")
+        
+        # 파워/토크 정보 추출
+        power_patterns = [
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kw',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*W',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*w',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*nm',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*토크',
+            r'파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*파워',
+            r'토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'입력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'출력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'입력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
+            r'출력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)'
+        ]
+        
+        for pattern in power_patterns:
+            matches = re.findall(pattern, user_input, re.IGNORECASE)
+            for match in matches:
+                clean_match = match.replace(',', '')  # 콤마 제거
+                if 'kW' in user_input.upper() or 'kw' in user_input.lower():
+                    extracted["power"].append(f"{clean_match}kW")
+                elif 'Nm' in user_input or 'nm' in user_input or '토크' in user_input:
+                    extracted["power"].append(f"{clean_match}Nm")
+                elif 'W' in user_input or 'w' in user_input or '파워' in user_input:
+                    extracted["power"].append(f"{clean_match}W")
+                else:
+                    extracted["power"].append(f"{clean_match}W")  # 기본값
+        
+        # 기어비/잇수 정보 추출
+        ratio_patterns = [
+            r'(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)',  # 3:1 형태
+            r'기어비\s*(\d+(?:\.\d+)?)',
+            r'감속비\s*(\d+(?:\.\d+)?)',
+            r'증속비\s*(\d+(?:\.\d+)?)',
+            r'비율\s*(\d+(?:\.\d+)?)',
+            r'(\d+(?:\.\d+)?)\s*치',
+            r'(\d+(?:\.\d+)?)\s*개?\s*이',
+            r'teeth\s*(\d+(?:\.\d+)?)',
+            r'잇수\s*(\d+(?:\.\d+)?)',
+            r'(\d+(?:\.\d+)?)\s*개\s*치',
+            r'피니언\s*(\d+(?:\.\d+)?)\s*치',
+            r'기어\s*(\d+(?:\.\d+)?)\s*치'
+        ]
+        
+        for pattern in ratio_patterns:
+            matches = re.findall(pattern, user_input, re.IGNORECASE)
+            if ':' in pattern:  # 비율 형태
+                for match in matches:
+                    if isinstance(match, tuple):
+                        extracted["ratio"].append(f"{match[0]}:{match[1]}")
+            else:
+                for match in matches:
+                    if '치' in user_input or '이' in user_input or 'teeth' in user_input.lower():
+                        extracted["ratio"].append(f"{match}치")
+                    else:
+                        extracted["ratio"].append(f"비율 {match}")
+        
+        # 결과 정리
+        result = {}
+        result["speed"] = ", ".join(list(set(extracted["speed"]))) if extracted["speed"] else ""
+        result["power"] = ", ".join(list(set(extracted["power"]))) if extracted["power"] else ""  
+        result["ratio"] = ", ".join(list(set(extracted["ratio"]))) if extracted["ratio"] else ""
+        
+        return result
 
     def _handle_missing_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 정보가 누락된 경우 처리"""
