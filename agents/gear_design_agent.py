@@ -127,8 +127,12 @@ class GearDesignAgent(BaseAgent):
     async def process_with_callback(self, user_input: str, callback=None) -> str:
         """사용자 입력을 받아서 LangGraph 워크플로우를 실행"""
         try:
-            self.progress_messages = []
-            
+            # 진행 상황 초기화
+            self.progress_messages = []            
+
+            # 사용자 메시지 추가
+            self.add_message("user", user_input)            
+
             # 콜백 함수 저장
             self.callback = callback
             
@@ -176,10 +180,17 @@ class GearDesignAgent(BaseAgent):
                 callback("🚀 **기어 설계 워크플로우를 시작합니다...**\\n\\n")
             
             # LangGraph 워크플로우 실행
-            final_state = self.graph.invoke(initial_state)
+            result = self.graph.invoke(initial_state)            
+            response_text = result["response"]
             
+            # state 저장 (gear_agent에서 접근할 수 있도록)
+            self.state = result
+
+            # 최종 응답을 메시지에 추가
+            self.add_message("assistant", response_text)
+
             # 최종 응답 반환
-            return final_state["response"]
+            return response_text
             
         except Exception as e:
             error_msg = f"❌ 기어 설계 워크플로우 실행 중 오류 발생: {str(e)}"
@@ -210,7 +221,14 @@ class GearDesignAgent(BaseAgent):
                 
                 # gear_classifier_agent의 state에서 직접 정보 추출
                 if isinstance(classifier_data, dict):
-                    state["gear_type"] = classifier_data.get("gear_type", "")
+                    # detected_gear_type을 gear_type에 매핑
+                    detected_type = classifier_data.get("detected_gear_type", "")
+                    if detected_type in ["gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary"]:
+                        state["gear_type"] = detected_type
+                    else:
+                        state["gear_type"] = classifier_data.get("gear_type", "")
+                    
+                    # classifier state에서 정보 직접 매핑
                     state["speed_info"] = classifier_data.get("speed_info", "")
                     state["power_info"] = classifier_data.get("power_info", "") 
                     state["ratio_info"] = classifier_data.get("ratio_info", "")
@@ -220,13 +238,26 @@ class GearDesignAgent(BaseAgent):
                     self.progress_messages.append("✅ **1단계 완료:** gear_classifier_agent state에서 정보 수신 성공")
                     
                     if self.callback:
+                        gear_type_names = {
+                            "gear_pair": "기어쌍 (2단 기어)",
+                            "three_gear": "3단 기어",
+                            "simple_planetary": "단순 유성기어",
+                            "double_pinion_planetary": "이중 피니언 유성기어"
+                        }
+                        gear_name = gear_type_names.get(state.get("gear_type", ""), state.get("gear_type", "미지정"))
+                        
                         summary = f"""
 📋 **수신된 기어 정보:**
-- **기어 타입:** {state.get('gear_type', '미지정')}
-- **속도 정보:** {state.get('speed_info', '미지정')}
-- **동력 정보:** {state.get('power_info', '미지정')}
-- **기어비 정보:** {state.get('ratio_info', '미지정')}
-- **기타 정보:** {state.get('others_info', '미지정')}
+- **기어 타입:** {gear_name}
+- **속도 정보:** {state.get('speed_info', '미지정') or '미지정'}
+- **동력 정보:** {state.get('power_info', '미지정') or '미지정'}
+- **기어비 정보:** {state.get('ratio_info', '미지정') or '미지정'}
+- **기타 정보:** {state.get('others_info', '미지정') or '미지정'}
+
+📊 **추가 분석 정보:**
+- **분류 결과:** {classifier_data.get('classification', '미지정')}
+- **설계 가능 여부:** {classifier_data.get('gear_type', '미지정')}
+- **누락 정보:** {classifier_data.get('missing_info', 'none')}
 """
                         self.callback(summary)
                         

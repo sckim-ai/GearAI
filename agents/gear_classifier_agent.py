@@ -1072,6 +1072,9 @@ others_info: 정보 없음
             # 결과 처리
             response_text = result["response"]
             
+            # state 저장 (gear_agent에서 접근할 수 있도록)
+            self.state = result
+            
             # 최종 진행 상황과 결과 표시
             all_progress = "".join(self.progress_messages)
             final_display = f"{all_progress}\n🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"
