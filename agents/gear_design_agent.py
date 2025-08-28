@@ -1,12 +1,13 @@
 """
 기어 설계 에이전트
 gear_classifier_agent로부터 수집된 정보를 활용해서 실제 기어 설계를 수행
+LangGraph 기반 워크플로우 구현
 """
 import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TypedDict
 import datetime
 import re
 
@@ -17,9 +18,48 @@ from agents.base_agent import BaseAgent
 from gear_design_manager import GearDesignManager
 from utils.llm import llm_call
 
+# LangGraph 관련 imports
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from langchain_core.messages import BaseMessage, HumanMessage
+
+
+class GearDesignState(TypedDict):
+    """기어 설계 상태를 정의하는 TypedDict"""
+    user_input: str  # 사용자 입력
+    messages: List[BaseMessage]  # 메시지 히스토리
+    
+    # 파싱된 기어 정보
+    gear_type: str  # gear_pair, three_gear, simple_planetary, double_pinion_planetary
+    speed_info: str  # 속도 정보
+    power_info: str  # 파워/토크 정보
+    ratio_info: str  # 기어비/잇수 정보  
+    others_info: str  # 추가 기어 정보
+    
+    # 설계 프로세스 상태
+    gear_info_parsed: bool  # 기어 정보 파싱 완료 여부
+    config_modified: bool  # JSON 설정 수정 완료 여부
+    manager_initialized: bool  # GearDesignManager 초기화 완료 여부
+    geometry_calculated: bool  # 기하학적 계산 완료 여부
+    rating_calculated: bool  # 강도 평가 계산 완료 여부
+    design_completed: bool  # 전체 설계 완료 여부
+    
+    # 설계 데이터 및 결과
+    template_config: Dict[str, Any]  # 원본 템플릿 설정
+    modified_config: Dict[str, Any]  # 수정된 설정
+    geometry_result: Any  # 기하학적 계산 결과
+    rating_result: Any  # 강도 평가 결과
+    messages_from_calc: str  # 계산에서 나온 메시지들
+    image_path: str  # 기어 이미지 경로
+    
+    # 오류 및 응답
+    error_occurred: bool  # 오류 발생 여부
+    error_message: str  # 오류 메시지
+    response: str  # 최종 응답
+
 
 class GearDesignAgent(BaseAgent):
-    """기어 설계 에이전트"""
+    """기어 설계 에이전트 - LangGraph 기반"""
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
@@ -36,10 +76,15 @@ class GearDesignAgent(BaseAgent):
         
         # GearDesignManager 초기화는 필요시에만 수행
         self.manager = None
-        self.template_config = None
         
         # 결과 저장 경로
         self.output_dir = Path(__file__).parent.parent
+        
+        # 진행 상황 메시지 저장
+        self.progress_messages = []
+        
+        # LangGraph 워크플로우 구성
+        self.graph = self._build_graph()
         
     def initialize_gear_manager(self):
         """GearDesignManager 초기화"""
@@ -73,51 +118,76 @@ class GearDesignAgent(BaseAgent):
             return {}
     
     async def process_with_callback(self, user_input: str, callback=None) -> str:
-        """사용자 입력을 받아서 기어 설계를 수행"""
+        """사용자 입력을 받아서 LangGraph 워크플로우를 실행"""
         try:
-            # 콜백으로 진행 상황 알림
+            self.progress_messages = []
+            
+            # 콜백 함수 저장
+            self.callback = callback
+            
+            # 초기 상태 생성
+            initial_state: GearDesignState = {
+                "user_input": user_input,
+                "messages": [HumanMessage(content=user_input)],
+                
+                # 파싱된 기어 정보 초기화
+                "gear_type": "",
+                "speed_info": "",
+                "power_info": "",
+                "ratio_info": "",
+                "others_info": "",
+                
+                # 설계 프로세스 상태 초기화
+                "gear_info_parsed": False,
+                "config_modified": False,
+                "manager_initialized": False,
+                "geometry_calculated": False,
+                "rating_calculated": False,
+                "design_completed": False,
+                
+                # 설계 데이터 및 결과 초기화
+                "template_config": {},
+                "modified_config": {},
+                "geometry_result": None,
+                "rating_result": None,
+                "messages_from_calc": "",
+                "image_path": "",
+                
+                # 오류 및 응답 초기화
+                "error_occurred": False,
+                "error_message": "",
+                "response": ""
+            }
+            
+            # 진행 상황 알림
             if callback:
-                callback("🔧 **기어 설계 시작**\\n\\n기어 설계 시스템을 초기화 중...")
+                callback("🚀 **기어 설계 워크플로우를 시작합니다...**\\n\\n")
             
-            # gear_classifier_agent에서 분석된 결과 파싱
-            gear_info = self.parse_gear_info(user_input)
+            # LangGraph 워크플로우 실행
+            final_state = self.graph.invoke(initial_state)
             
-            if not gear_info:
-                return "❌ 기어 설계 정보를 파싱할 수 없습니다. gear_classifier_agent를 먼저 실행해주세요."
-            
-            if callback:
-                callback("🔧 **기어 설계 진행 중**\\n\\n수집된 정보를 바탕으로 설계 파라미터를 설정 중...")
-            
-            # 기어 설계 매니저 초기화
-            if not self.initialize_gear_manager():
-                return "❌ 기어 설계 시스템 초기화에 실패했습니다."
-            
-            # JSON 설정 수정
-            modified_config = self.modify_config_from_gear_info(gear_info)
-            
-            if callback:
-                callback("⚙️ **기어 계산 수행 중**\\n\\n기하학적 계산 및 강도 평가를 수행하고 있습니다...")
-            
-            # 기어 설계 계산 수행
-            result = self.perform_gear_design(modified_config)
-            
-            if callback:
-                callback("✅ **기어 설계 완료**\\n\\n결과를 정리 중...")
-            
-            return result
+            # 최종 응답 반환
+            return final_state["response"]
             
         except Exception as e:
-            error_msg = f"❌ 기어 설계 중 오류 발생: {str(e)}"
+            error_msg = f"❌ 기어 설계 워크플로우 실행 중 오류 발생: {str(e)}"
             if callback:
                 callback(error_msg)
             return error_msg
     
-    def parse_gear_info(self, user_input: str) -> Optional[Dict[str, Any]]:
-        """사용자 입력에서 기어 정보를 추출 (gear_classifier_agent의 결과라고 가정)"""
-        # 실제로는 gear_classifier_agent의 상태 정보를 받아야 하지만,
-        # 여기서는 사용자 입력에서 직접 파싱하는 방식으로 구현
-        
+    # ===========================================
+    # LangGraph 노드 메서드들
+    # ===========================================
+    
+    def _parse_gear_info_node(self, state: GearDesignState) -> GearDesignState:
+        """1단계: 사용자 입력에서 기어 정보를 추출"""
         try:
+            # 진행 상황 저장
+            self.progress_messages.append("🔍 **1단계:** 기어 설계 정보 파싱 중...")
+            
+            if self.callback:
+                self.callback("🔍 **기어 정보 분석 중**\\n\\n사용자 입력에서 설계 정보를 추출하고 있습니다...")
+            
             # LLM을 사용해서 기어 정보 추출
             system_prompt = \"\"\"
 사용자 입력에서 기어 설계에 필요한 정보를 추출하세요.
@@ -136,7 +206,7 @@ class GearDesignAgent(BaseAgent):
             
             prompt = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input}
+                {"role": "user", "content": state["user_input"]}
             ]
             
             response = llm_call(prompt=prompt, model="gpt-4o-mini")
@@ -145,15 +215,287 @@ class GearDesignAgent(BaseAgent):
             response = re.sub(r'```json\\s*|\\s*```', '', response).strip()
             
             gear_info = json.loads(response)
-            return gear_info
+            
+            # 상태 업데이트
+            state["gear_type"] = gear_info.get("gear_type", "")
+            state["speed_info"] = gear_info.get("speed_info", "")
+            state["power_info"] = gear_info.get("power_info", "")
+            state["ratio_info"] = gear_info.get("ratio_info", "")
+            state["others_info"] = gear_info.get("others_info", "")
+            state["gear_info_parsed"] = True
+            
+            self.progress_messages.append("✅ **1단계 완료:** 기어 정보 파싱 성공")
             
         except Exception as e:
-            print(f"기어 정보 파싱 오류: {e}")
-            return None
+            error_msg = f"기어 정보 파싱 오류: {e}"
+            print(error_msg)
+            state["error_occurred"] = True
+            state["error_message"] = error_msg
+            self.progress_messages.append(f"❌ **1단계 오류:** {error_msg}")
+        
+        return state
     
-    def modify_config_from_gear_info(self, gear_info: Dict[str, Any]) -> Dict[str, Any]:
+    def _initialize_manager_node(self, state: GearDesignState) -> GearDesignState:
+        """2단계: GearDesignManager 초기화 및 템플릿 로드"""
+        try:
+            # 진행 상황 저장
+            self.progress_messages.append("⚙️ **2단계:** 기어 설계 시스템 초기화 중...")
+            
+            if self.callback:
+                self.callback("⚙️ **시스템 초기화 중**\\n\\nGearDesignManager를 초기화하고 템플릿을 로드하고 있습니다...")
+            
+            # GearDesignManager 초기화
+            if not self.initialize_gear_manager():
+                raise Exception("GearDesignManager 초기화 실패")
+            
+            # 템플릿 설정 로드
+            template_config = self.load_template_config()
+            if not template_config:
+                raise Exception("템플릿 설정 로드 실패")
+            
+            state["template_config"] = template_config
+            state["manager_initialized"] = True
+            
+            self.progress_messages.append("✅ **2단계 완료:** 시스템 초기화 성공")
+            
+        except Exception as e:
+            error_msg = f"시스템 초기화 오류: {e}"
+            print(error_msg)
+            state["error_occurred"] = True
+            state["error_message"] = error_msg
+            self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
+        
+        return state
+    
+    def _modify_config_node(self, state: GearDesignState) -> GearDesignState:
+        """3단계: 기어 정보를 바탕으로 JSON 설정 수정"""
+        try:
+            # 진행 상황 저장
+            self.progress_messages.append("🔧 **3단계:** 설계 파라미터 설정 중...")
+            
+            if self.callback:
+                self.callback("🔧 **설계 파라미터 설정 중**\\n\\n기어 정보를 바탕으로 JSON 설정을 수정하고 있습니다...")
+            
+            # JSON 설정 수정
+            modified_config = self.modify_config_from_gear_info(state)
+            
+            state["modified_config"] = modified_config
+            state["config_modified"] = True
+            
+            self.progress_messages.append("✅ **3단계 완료:** 설계 파라미터 설정 완료")
+            
+        except Exception as e:
+            error_msg = f"설정 수정 오류: {e}"
+            print(error_msg)
+            state["error_occurred"] = True
+            state["error_message"] = error_msg
+            self.progress_messages.append(f"❌ **3단계 오류:** {error_msg}")
+        
+        return state
+    
+    def _perform_calculation_node(self, state: GearDesignState) -> GearDesignState:
+        """4단계: 기어 설계 계산 수행 (기하학적 계산 + 강도 평가)"""
+        try:
+            # 진행 상황 저장
+            self.progress_messages.append("📊 **4단계:** 기어 설계 계산 수행 중...")
+            
+            if self.callback:
+                self.callback("📊 **기어 계산 수행 중**\\n\\n기하학적 계산 및 강도 평가를 수행하고 있습니다...")
+            
+            # 1. 설정 로드 및 검증
+            if not self.manager.load_and_validate_config(state["modified_config"]):
+                raise Exception("설정 로드 및 검증 실패")
+            
+            # 2. 기하학적 계산
+            geometry_result = self.manager.calculate_geometry()
+            if not geometry_result:
+                raise Exception("기하학적 계산 실패")
+            
+            state["geometry_result"] = geometry_result
+            state["geometry_calculated"] = True
+            
+            # 3. 하중 계산
+            rating_result = self.manager.calculate_load_case(geometry_result)
+            if not rating_result:
+                raise Exception("하중 계산 실패")
+            
+            state["rating_result"] = rating_result
+            state["rating_calculated"] = True
+            
+            # 4. 메시지 추출
+            messages = self.manager.get_messages()
+            state["messages_from_calc"] = messages or ""
+            
+            self.progress_messages.append("✅ **4단계 완료:** 기어 설계 계산 성공")
+            
+        except Exception as e:
+            error_msg = f"기어 설계 계산 오류: {e}"
+            print(error_msg)
+            state["error_occurred"] = True
+            state["error_message"] = error_msg
+            self.progress_messages.append(f"❌ **4단계 오류:** {error_msg}")
+        
+        return state
+    
+    def _generate_results_node(self, state: GearDesignState) -> GearDesignState:
+        """5단계: 결과 생성 (이미지 생성 + 최종 보고서)"""
+        try:
+            # 진행 상황 저장
+            self.progress_messages.append("🎨 **5단계:** 결과 생성 중...")
+            
+            if self.callback:
+                self.callback("🎨 **결과 생성 중**\\n\\n기어 이미지 생성 및 최종 보고서를 작성하고 있습니다...")
+            
+            # 1. 기어 이미지 생성
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_path = self.output_dir / f"gear_image_{timestamp}.png"
+            image_success = self.manager.get_gearimage(str(image_path))
+            
+            if image_success:
+                state["image_path"] = str(image_path)
+            
+            # 2. 최종 결과 포맷팅
+            result_summary = self.format_design_results(
+                state["geometry_result"], 
+                state["rating_result"], 
+                state["messages_from_calc"], 
+                str(image_path) if image_success else None
+            )
+            
+            state["response"] = result_summary
+            state["design_completed"] = True
+            
+            self.progress_messages.append("✅ **5단계 완료:** 기어 설계 완료!")
+            
+        except Exception as e:
+            error_msg = f"결과 생성 오류: {e}"
+            print(error_msg)
+            state["error_occurred"] = True
+            state["error_message"] = error_msg
+            state["response"] = f"❌ 기어 설계 중 오류 발생: {error_msg}"
+            self.progress_messages.append(f"❌ **5단계 오류:** {error_msg}")
+        
+        return state
+    
+    def _handle_error_node(self, state: GearDesignState) -> GearDesignState:
+        """오류 처리 노드"""
+        error_msg = state.get("error_message", "알 수 없는 오류")
+        state["response"] = f"❌ 기어 설계 중 오류가 발생했습니다: {error_msg}"
+        
+        if self.callback:
+            self.callback(state["response"])
+        
+        return state
+    
+    # ===========================================
+    # 라우팅 메서드들
+    # ===========================================
+    
+    def _route_after_parsing(self, state: GearDesignState) -> str:
+        """파싱 완료 후 라우팅"""
+        if state.get("error_occurred", False):
+            return "handle_error"
+        elif state.get("gear_info_parsed", False):
+            return "initialize_manager"
+        else:
+            return "handle_error"
+    
+    def _route_after_initialization(self, state: GearDesignState) -> str:
+        """초기화 완료 후 라우팅"""
+        if state.get("error_occurred", False):
+            return "handle_error"
+        elif state.get("manager_initialized", False):
+            return "modify_config"
+        else:
+            return "handle_error"
+    
+    def _route_after_config_modification(self, state: GearDesignState) -> str:
+        """설정 수정 완료 후 라우팅"""
+        if state.get("error_occurred", False):
+            return "handle_error"
+        elif state.get("config_modified", False):
+            return "perform_calculation"
+        else:
+            return "handle_error"
+    
+    def _route_after_calculation(self, state: GearDesignState) -> str:
+        """계산 완료 후 라우팅"""
+        if state.get("error_occurred", False):
+            return "handle_error"
+        elif state.get("rating_calculated", False):
+            return "generate_results"
+        else:
+            return "handle_error"
+    
+    # ===========================================
+    # 워크플로우 구성
+    # ===========================================
+    
+    def _build_graph(self):
+        """LangGraph 워크플로우 구성"""
+        workflow = StateGraph(GearDesignState)
+        
+        # 노드 추가
+        workflow.add_node("parse_gear_info", self._parse_gear_info_node)
+        workflow.add_node("initialize_manager", self._initialize_manager_node)
+        workflow.add_node("modify_config", self._modify_config_node)
+        workflow.add_node("perform_calculation", self._perform_calculation_node)
+        workflow.add_node("generate_results", self._generate_results_node)
+        workflow.add_node("handle_error", self._handle_error_node)
+        
+        # 시작점 설정
+        workflow.set_entry_point("parse_gear_info")
+        
+        # 조건부 라우팅 설정
+        workflow.add_conditional_edges(
+            "parse_gear_info",
+            self._route_after_parsing,
+            {
+                "initialize_manager": "initialize_manager",
+                "handle_error": "handle_error"
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "initialize_manager",
+            self._route_after_initialization,
+            {
+                "modify_config": "modify_config",
+                "handle_error": "handle_error"
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "modify_config",
+            self._route_after_config_modification,
+            {
+                "perform_calculation": "perform_calculation",
+                "handle_error": "handle_error"
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "perform_calculation",
+            self._route_after_calculation,
+            {
+                "generate_results": "generate_results",
+                "handle_error": "handle_error"
+            }
+        )
+        
+        # 종료점 설정
+        workflow.add_edge("generate_results", END)
+        workflow.add_edge("handle_error", END)
+        
+        return workflow.compile()
+
+    # ===========================================
+    # 기존 헬퍼 메서드들 (상태 기반으로 수정)
+    # ===========================================
+    
+    def modify_config_from_gear_info(self, state: GearDesignState) -> Dict[str, Any]:
         """기어 정보를 바탕으로 JSON 설정을 수정"""
-        modified_config = self.template_config.copy()
+        modified_config = state["template_config"].copy()
         
         try:
             # 1. 기어 타입 설정 (GearTypeNum)
@@ -164,23 +506,23 @@ class GearDesignAgent(BaseAgent):
                 "double_pinion_planetary": 3
             }
             
-            gear_type = gear_info.get("gear_type", "gear_pair")
+            gear_type = state.get("gear_type", "gear_pair")
             if gear_type in gear_type_map:
                 modified_config["Basic Data"]["GearTypeNum"] = gear_type_map[gear_type]
             
             # 2. 기어비/잇수 정보 처리
-            ratio_info = gear_info.get("ratio_info", "")
+            ratio_info = state.get("ratio_info", "")
             if ratio_info:
                 self.apply_ratio_info(modified_config, ratio_info, gear_type)
             
             # 3. 파워/속도 정보를 Load spectrum에 반영
-            power_info = gear_info.get("power_info", "")
-            speed_info = gear_info.get("speed_info", "")
+            power_info = state.get("power_info", "")
+            speed_info = state.get("speed_info", "")
             if power_info or speed_info:
                 self.apply_load_spectrum(modified_config, power_info, speed_info)
             
             # 4. 추가 정보 처리 (모듈, 치폭 등)
-            others_info = gear_info.get("others_info", "")
+            others_info = state.get("others_info", "")
             if others_info:
                 self.apply_others_info(modified_config, others_info)
             
@@ -191,7 +533,7 @@ class GearDesignAgent(BaseAgent):
             
         except Exception as e:
             print(f"설정 수정 오류: {e}")
-            return self.template_config
+            return state["template_config"]
     
     def apply_ratio_info(self, config: Dict[str, Any], ratio_info: str, gear_type: str):
         """기어비/잇수 정보를 JSON에 반영"""
