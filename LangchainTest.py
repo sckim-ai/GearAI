@@ -1,10 +1,10 @@
 from SmartJsonSearch import JSONPathSearcher
 
 # JSON 파일 로드
-searcher = JSONPathSearcher(json_file=r"C:\SW\GearAI\TestGD.GD1")
+searcher = JSONPathSearcher(json_file=r"d:\SW\Streamlit\TestGD.GD1")
 
 # "module"과 관련된 모든 키 찾기
-results = searcher.search("module")
+results = searcher.search("load spectrum")
 
 for result in results:
     print(f"경로: {result['path']}")
