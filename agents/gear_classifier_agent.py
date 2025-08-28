@@ -552,68 +552,50 @@ ratio_info: 기어비 정보 누락
         if missing_count == 3:  # 모든 정보 누락
             if gear_type == "gear_pair":
                 examples = """
-📋 **기어 쌍 종합 입력 예시** (속도 1개 + 파워/토크 1개 + 기어비/잇수):
-• "입력속도 1000rpm, 출력파워 50kW, 기어비 3:1로 기어쌍 설계"
-• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 기어쌍 설계" 
-• "입력속도 1800rpm, 출력토크 150Nm, 잇수비 20:60으로 기어쌍 설계"
-• "pinion 속도 1200rpm, wheel 파워 80kW, 기어비 4로 기어쌍 설계" \""""
+📋 **기어 쌍 종합 입력 예시** (속도 1개 + 파워/토크 1개 + 기어비/잇수):\r\n• "입력속도 1000rpm, 출력파워 50kW, 기어비 3:1로 기어쌍 설계"\r\n• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 기어쌍 설계"\r\n• "입력속도 1800rpm, 출력토크 150Nm, 잇수비 20:60으로 기어쌍 설계"\r\n• "pinion 속도 1200rpm, wheel 파워 80kW, 기어비 4로 기어쌍 설계" \""""
             elif gear_type == "three_gear":
                 examples = """
-📋 **3단 기어 종합 입력 예시** (속도 1개 + 파워/토크 2개):
-• "입력속도 1000rpm, 아이들러 파워 100kW, 출력토크 500Nm로 3단 기어 설계"
-• "Gear1 속도 1500rpm, Gear2 토크 200Nm, Gear3 파워 80kW로 3단 기어 설계"
-• "pinion 속도 1800rpm, idler 파워 120kW, wheel 토크 600Nm로 3단 기어 설계" \""""
+📋 **3단 기어 종합 입력 예시** (속도 1개 + 파워/토크 2개):\r\n• "입력속도 1000rpm, 아이들러 파워 100kW, 출력토크 500Nm로 3단 기어 설계"\r\n• "Gear1 속도 1500rpm, Gear2 토크 200Nm, Gear3 파워 80kW로 3단 기어 설계"\r\n• "pinion 속도 1800rpm, idler 파워 120kW, wheel 토크 600Nm로 3단 기어 설계" \""""
             elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
                 examples = """
-📋 **유성기어 종합 입력 예시** (속도 2개 + 파워/토크 1개 + 잇수):
-• "Sun속도 1000rpm, Carrier속도 400rpm, Ring파워 50kW, 태양기어 30치로 유성기어 설계"
-• "태양기어 속도 1500rpm, 캐리어 속도 500rpm, 링기어 토크 800Nm, 링기어 90치로 유성기어 설계"
-• "Sun속도 2000rpm, Ring속도 0rpm(고정), Carrier파워 100kW, 기어비 4로 유성기어 설계" \""""
+📋 **유성기어 종합 입력 예시** (속도 2개 + 파워/토크 1개 + 잇수):\r\n• "Sun속도 1000rpm, Carrier속도 400rpm, Ring파워 50kW, 태양기어 30치로 유성기어 설계"\r\n• "태양기어 속도 1500rpm, 캐리어 속도 500rpm, 링기어 토크 800Nm, 링기어 90치로 유성기어 설계"\r\n• "Sun속도 2000rpm, Ring속도 0rpm(고정), Carrier파워 100kW, 기어비 4로 유성기어 설계" \""""
             else:
                 examples = """
 📋 **종합 입력 예시**:
-• "입력속도 1000rpm, 출력파워 100kW, 기어비 3:1로 설계"
-• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 설계\""""
+• "입력속도 1000rpm, 출력파워 100kW, 기어비 3:1로 설계"\r\n• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 설계" \""""
                 
         elif missing_count == 2:
             if not state["has_speed_info"] and not state["has_power_info"]:
                 if gear_type == "gear_pair":
                     examples = """
 📋 **기어 쌍 속도/파워 정보 예시** (기어 명칭 포함 필수):
-• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"
-• 파워: "입력파워 100kW" 또는 "출력토크 200Nm" 또는 "wheel토크 300Nm" \""""
+• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"\r\n• 파워: "입력파워 100kW" 또는 "출력토크 200Nm" 또는 "wheel토크 300Nm" \""""
                 elif gear_type == "three_gear":
                     examples = """
 📋 **3단 기어 속도/파워 정보 예시** (기어 명칭 포함 필수):
-• 속도: "입력속도 1000rpm" 또는 "Gear1 속도 1500rpm" (1개 필요)
-• 파워: "아이들러 파워 80kW, 출력토크 400Nm" 또는 "Gear2 토크 200Nm, Gear3 파워 100kW" (2개 필요) \""""
+• 속도: "입력속도 1000rpm" 또는 "Gear1 속도 1500rpm" (1개 필요)\r\n• 파워: "아이들러 파워 80kW, 출력토크 400Nm" 또는 "Gear2 토크 200Nm, Gear3 파워 100kW" (2개 필요) \""""
                 elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
                     examples = """
 📋 **유성기어 속도/파워 정보 예시** (기어 명칭 포함 필수):
-• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)
-• 파워: "Ring파워 50kW" 또는 "Carrier토크 800Nm" 또는 "태양기어 파워 100kW" (1개 필요) \""""
+• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)\r\n• 파워: "Ring파워 50kW" 또는 "Carrier토크 800Nm" 또는 "태양기어 파워 100kW" (1개 필요) \""""
                 else:
                     examples = """
 📋 **속도/파워 정보 예시**:
-• 속도: "속도 1000rpm" (기어 명칭 필요)
-• 파워: "파워 100kW" 또는 "토크 200Nm" (기어 명칭 필요) \""""
+• 속도: "속도 1000rpm" (기어 명칭 필요)\r\n• 파워: "파워 100kW" 또는 "토크 200Nm" (기어 명칭 필요) \""""
                     
             elif not state["has_speed_info"] and not state["has_ratio_info"]:
                 if gear_type == "gear_pair":
                     examples = """
 📋 **기어 쌍 속도/기어비 정보 예시** (기어 명칭 포함 필수):
-• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"
-• 기어비: "기어비 3:1" 또는 "감속비 5" 또는 "잇수비 20:60" \""""
+• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"\r\n• 기어비: "기어비 3:1" 또는 "감속비 5" 또는 "잇수비 20:60" \""""
                 elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
                     examples = """
 📋 **유성기어 속도/기어비 정보 예시** (기어 명칭 포함 필수):
-• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)
-• 잇수: "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 또는 "기어비 3" \""""
+• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)\r\n• 잇수: "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 또는 "기어비 3" \""""
                 else:
                     examples = """
 📋 **속도/기어비 정보 예시**:
-• 속도: "속도 1000rpm" (기어 명칭 필요)
-• 기어비: "기어비 3:1" 또는 "잇수 정보" \""""
+• 속도: "속도 1000rpm" (기어 명칭 필요)\r\n• 기어비: "기어비 3:1" 또는 "잇수 정보" \""""
                     
             else:  # power와 ratio 누락
                 if gear_type == "gear_pair":
@@ -687,18 +669,15 @@ ratio_info: 기어비 정보 누락
                 elif gear_type == "three_gear":
                     examples = """
 📋 **3단 기어 잇수 정보 예시** (기어비 대신 잇수 정보 필요):
-• "기어1 20치, 기어2 40치, 기어3 80치"
-• "입력기어 24teeth, 아이들러 48teeth, 출력기어 96teeth" \""""
+• "기어1 20치, 기어2 40치, 기어3 80치"\r\n• "입력기어 24teeth, 아이들러 48teeth, 출력기어 96teeth" \""""
                 elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
                     examples = """
 📋 **유성기어 기어비/잇수 정보 예시**:
-• "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 
-• "기어비 3" 또는 "감속비 4" \""""
+• "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth"\r\n• "기어비 3" 또는 "감속비 4" \""""
                 else:
                     examples = """
 📋 **기어비/잇수 정보 예시**:
-• "기어비 3:1" 또는 "감속비 5" 또는 "증속비 2"
-• "잇수 20:60" 또는 "태양기어 30치, 링기어 90치" \""""
+• "기어비 3:1" 또는 "감속비 5" 또는 "증속비 2"\r\n• "잇수 20:60" 또는 "태양기어 30치, 링기어 90치" \""""
 
         state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.\r\n
 
