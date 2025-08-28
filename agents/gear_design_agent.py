@@ -39,7 +39,8 @@ class GearDesignState(TypedDict):
     power_info: str  # 파워/토크 정보
     ratio_info: str  # 기어비/잇수 정보  
     others_info: str  # 추가 기어 정보
-    
+    missing_info: str  # 누락된 정보
+
     # 설계 프로세스 상태
     gear_info_parsed: bool  # 기어 정보 파싱 완료 여부
     specs_displayed: bool  # 기어 제원 표시 완료 여부
@@ -61,9 +62,7 @@ class GearDesignState(TypedDict):
     messages_from_calc: str  # 계산에서 나온 메시지들
     image_path: str  # 기어 이미지 경로
     
-    # 오류 및 응답
-    error_occurred: bool  # 오류 발생 여부
-    error_message: str  # 오류 메시지
+    # 응답
     response: str  # 최종 응답
 
 
@@ -93,7 +92,7 @@ class GearDesignAgent(BaseAgent):
         self.progress_messages = []
         
         # LangChain LLM 초기화
-        self.model_name = config.get("model", "gpt-4o-mini")
+        self.model_name = config.get("model", "gpt-5-mini")
         self.temperature = config.get("temperature", 0.0)
         self.llm = self._initialize_llm()
         
@@ -188,9 +187,7 @@ class GearDesignAgent(BaseAgent):
                 "messages_from_calc": "",
                 "image_path": "",
                 
-                # 오류 및 응답 초기화
-                "error_occurred": False,
-                "error_message": "",
+                # 응답 초기화
                 "response": ""
             }
             
@@ -204,10 +201,10 @@ class GearDesignAgent(BaseAgent):
             # state 저장 (gear_agent에서 접근할 수 있도록)
             self.state = result
             
-            # 오류 발생 여부 확인 및 처리
-            if result.get("error_occurred", False):
-                error_msg = result.get("error_message", "알 수 없는 오류")
-                response_text = f"❌ 기어 설계 중 오류가 발생했습니다: {error_msg}"
+            # 응답 처리
+            response_text = result.get("response", "")
+            if response_text.startswith("❌"):
+                # 오류 응답인 경우
                 if callback:
                     callback(response_text)
                 self.add_message("assistant", response_text)
@@ -216,6 +213,11 @@ class GearDesignAgent(BaseAgent):
             # 정상 처리된 경우
             response_text = result.get("response", "")
             
+            # 최종 진행 상황과 결과 표시
+            all_progress = "".join(self.progress_messages)
+            final_display = f"{all_progress}\n🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"
+            callback(final_display)
+
             # 최종 응답을 메시지에 추가
             self.add_message("assistant", response_text)
 
@@ -256,24 +258,30 @@ class GearDesignAgent(BaseAgent):
                 state["power_info"] = classifier_data.get("power_info", "")
                 state["ratio_info"] = classifier_data.get("ratio_info", "")
                 state["others_info"] = classifier_data.get("others_info", "")
+                state["missing_info"] = classifier_data.get("missing_info", "")
 
-                if classifier_data.get("others_info", "") == "none":
+                if classifier_data.get("missing_info", "") == "none":
                     state["gear_info_parsed"] = True
-                    self.progress_messages.append("✅ **1단계 완료:** shared_data에서 classifier 결과 수신 성공")
+                    progressmessage = "✅ **1단계 완료:** shared_data에서 classifier 결과 수신 성공"
+                    self.progress_messages.append(progressmessage)
 
                 else:
                     state["gear_info_parsed"] = False   
-                    self.progress_messages.append("✅ **1단계 종료:** shared_data에서 classifier 결과 수신 실패")              
-                    
+                    progressmessage = "✅ **1단계 종료:** shared_data에서 classifier 결과 수신 성공, 데이터 확보 실패"
+                    self.progress_messages.append(progressmessage)                            
+
             else:
-                state["gear_info_parsed"] = False   
-                self.progress_messages.append("✅ **1단계 종료:** shared_data에서 classifier 결과 수신 실패")         
+                state["gear_info_parsed"] = False                   
+                progressmessage = "✅ **1단계 종료:** shared_data에서 classifier 결과 수신 실패"
+                self.progress_messages.append(progressmessage)
+            
+            # 진행 상황 알림
+            if self.callback:
+                self.callback(self.progress_messages[-1])
             
         except Exception as e:
             error_msg = f"기어 정보 수신 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **1단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **1단계 오류:** {error_msg}")
         
@@ -312,8 +320,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"기어 제원 표시 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **2단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
         
@@ -498,8 +504,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"수정 처리 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **4단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **4단계 오류:** {error_msg}")
         
@@ -574,8 +578,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"시스템 초기화 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **시스템 초기화 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
         
@@ -601,8 +603,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"설정 수정 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **설정 수정 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **3단계 오류:** {error_msg}")
         
@@ -646,8 +646,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"기어 설계 계산 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ **기어 설계 계산 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **4단계 오류:** {error_msg}")
         
@@ -686,8 +684,6 @@ class GearDesignAgent(BaseAgent):
         except Exception as e:
             error_msg = f"결과 생성 오류: {e}"
             print(error_msg)
-            state["error_occurred"] = True
-            state["error_message"] = error_msg
             state["response"] = f"❌ 기어 설계 중 오류 발생: {error_msg}"
             self.progress_messages.append(f"❌ **5단계 오류:** {error_msg}")
         
@@ -699,16 +695,14 @@ class GearDesignAgent(BaseAgent):
     
     def _route_after_receive(self, state: GearDesignState) -> str:
         """기어 정보 수신 후 라우팅"""
-        if state.get("error_occurred", False):
-            return END
-        elif state.get("gear_info_parsed", False):
+        if state["gear_info_parsed"] == True:
             return "display_specs"
         else:
-            return END
+            return "END"
     
     def _route_after_display(self, state: GearDesignState) -> str:
         """제원 표시 후 라우팅 - 사용자 응답 대기"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         elif state.get("specs_displayed", False):
             return "process_user_response"
@@ -717,7 +711,7 @@ class GearDesignAgent(BaseAgent):
     
     def _route_after_user_response(self, state: GearDesignState) -> str:
         """사용자 응답 처리 후 라우팅"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         elif state.get("user_approved", False):
             return "initialize_manager"
@@ -728,14 +722,14 @@ class GearDesignAgent(BaseAgent):
     
     def _route_after_modifications(self, state: GearDesignState) -> str:
         """수정 처리 후 라우팅 - 다시 사용자 응답 대기"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         else:
             return "process_user_response"
     
     def _route_after_initialization(self, state: GearDesignState) -> str:
         """초기화 완료 후 라우팅"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         elif state.get("manager_initialized", False):
             return "modify_config"
@@ -744,7 +738,7 @@ class GearDesignAgent(BaseAgent):
     
     def _route_after_config_modification(self, state: GearDesignState) -> str:
         """설정 수정 완료 후 라우팅"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         elif state.get("config_modified", False):
             return "perform_calculation"
@@ -753,7 +747,7 @@ class GearDesignAgent(BaseAgent):
     
     def _route_after_calculation(self, state: GearDesignState) -> str:
         """계산 완료 후 라우팅"""
-        if state.get("error_occurred", False):
+        if state.get("response", "").startswith("❌"):
             return END
         elif state.get("rating_calculated", False):
             return "generate_results"
@@ -785,7 +779,8 @@ class GearDesignAgent(BaseAgent):
             "receive_gear_info",
             self._route_after_receive,
             {
-                "display_specs": "display_specs"
+                "display_specs": "display_specs",
+                "END": END
             }
         )
         

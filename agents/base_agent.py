@@ -8,6 +8,16 @@ class BaseAgent(ABC):
         self.messages: List[Dict[str, str]] = []
         self.shared_data: Dict[str, Any] = {}  # 에이전트 간 데이터 공유용
 
+        # Gear Design 에이전트 테스트용
+        self.set_shared_data("classifier_result", {
+                "gear_type": "gear_pair",
+                "speed_info": "GEAR1: 1000 [RPM]",
+                "power_info": "GEAR1: 20 [kW]",
+                "ratio_info": "기어비: 3",
+                "others_info": "치폭 30 [mm], 압력각 20 [deg], 피니언 잇수 30, 재질 SCM415",
+                "missing_info": "none",
+            })
+
     @abstractmethod
     async def process_with_callback(self, input_text: str, callback: Callable[[str], None]) -> str:
         """에이전트의 주요 처리 로직. 입력을 받아 콜백으로 스트리밍 응답을 전달한다."""
