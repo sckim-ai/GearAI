@@ -274,6 +274,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **1단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **1단계 오류:** {error_msg}")
         
         return state
@@ -313,6 +314,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **2단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
         
         return state
@@ -498,6 +500,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **4단계 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **4단계 오류:** {error_msg}")
         
         return state
@@ -573,6 +576,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **시스템 초기화 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
         
         return state
@@ -599,6 +603,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **설정 수정 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **3단계 오류:** {error_msg}")
         
         return state
@@ -643,6 +648,7 @@ class GearDesignAgent(BaseAgent):
             print(error_msg)
             state["error_occurred"] = True
             state["error_message"] = error_msg
+            state["response"] = f"❌ **기어 설계 계산 오류:** {error_msg}"
             self.progress_messages.append(f"❌ **4단계 오류:** {error_msg}")
         
         return state

@@ -191,8 +191,8 @@ class GearClassifierAgent(BaseAgent):
             error_detail = f"분류 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
             print(error_detail)
             self.progress_messages.append(f"🔍 **1단계 오류:** {str(e)}\n\n")
-            # 오류 시 기본적으로 기어 관련으로 처리
-            state["classification"] = "gear_related"
+            # 오류 시 기본적으로 기어 미관련으로 처리
+            state["classification"] = "not_gear_related"
         
         return state
     
