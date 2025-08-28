@@ -25,7 +25,7 @@ from typing_extensions import Annotated, TypedDict
 # LangChain imports  
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.output_parsers import PydanticOutputParser, JsonOutputParser
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
@@ -289,6 +289,15 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
     def _check_required_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 설계 정보(Power, 기어비/잇수) 확인"""
         
+        class GearInfo(BaseModel):
+            has_speed: bool = Field(description="입출력 속도 정보 유무") 
+            speed_info: str = Field(description="상세 속도 정보") 
+            has_power: bool = Field(description="입출력 파워 정보 유무") 
+            power_info: str = Field(description="상세 파워 정보") 
+            has_ratio: bool = Field(description="기어비 또는 기어 잇수 정보 유무") 
+            ratio_info: str = Field(description="상세 기어비/잇수 정보") 
+
+        parser = JsonOutputParser(pydantic_object=GearInfo)
         # 진행 상황 저장
         self.progress_messages.append("📋 **3단계:** 필수 설계 정보 확인 중...")
         
@@ -327,42 +336,66 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
    - 기어 잇수 (예: "20치", "30개 이", "teeth 40")
 
 아래 규칙에 따라 답변포멧 형식으로만 응답하세요:
- - 규칙1. 모든 INFO는 YES or NO로 답변한다.
- - 규칙2. 모든 INFO는 YES or NO 뒤의 괄호()안에 상세 정보를 입력하여 답변한다.
+ - 규칙1. has_speed, has_power, has_ratio는 YES or NO로 답변한다.
  - 규칙3. SPEED_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (GEAR1: 속도 [단위], GEAR2: 속도 [단위], ... )
  - 규칙4. POWER_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (GEAR1: 출력or토크 [단위], GEAR2: 출력or토크 [단위], ... )
  - 규칙5. RATIO_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (기어비: 3) 또는 (Z1: 잇수, Z2: 잇수, ...)
  - 규칙5. 모든 INFO는 답변이 NO 인 경우 괄호()안에 상세 이유를 기입한다.
 
-## 답변포멧
-SPEED_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
-POWER_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
-RATIO_INFO: YES or NO (상세정보, 포멧은 규칙 참조)
+## 답변포멧 JSON
+has_speed: YES or NO 
+speed_info: 규칙에 의거한 상세 정보
+has_power: YES or NO 
+power_info: 규칙에 의거한 상세 정보
+has_ratio: YES or NO 
+ratio_info: 규칙에 의거한 상세 정보
 
 ## 응답 예시:
 사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
-SPEED_INFO: NO (속도 정보 누락)   
-POWER_INFO: NO (파워 전달 기어명칭 정보 누락)
-RATIO_INFO: YES (기어비: 3)
+has_speed: NO 
+speed_info: 속도 정보 누락
+has_power: NO 
+power_info: 파워 전달 기어명칭 정보 누락
+has_ratio: YES 
+ratio_info: 기어비: 3
+
+사용자 입력: "속도 200 rpm, 토크 100 Nm, 기어비 3으로 설계해주세요"
+응답: 
+has_speed: NO 
+speed_info: 속도 전달 기어명칭 정보 누락
+has_power: NO 
+power_info: 토크 전달 기어명칭 정보 누락
+has_ratio: YES 
+ratio_info: 기어비: 3
 
 사용자 입력: "출력속도 200 rpm, 기어 잇수 23:41로 기어쌍 설계해주세요"
 응답: 
-SPEED_INFO: YES (GEAR2: 200 [rpm])
-POWER_INFO: NO (파워 정보 누락)
-RATIO_INFO: YES (Z1: 23, Z2: 41)
+has_speed: YES 
+speed_info: GEAR2: 200 [rpm]
+has_power: NO 
+power_info: 파워 정보 누락
+has_ratio: YES 
+ratio_info: Z1: 23, Z2: 41
 
 사용자 입력: "입력파워 100kW, 입력속도 1000 rpm, 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
-SPEED_INFO: YES (GEAR1: 1000 [rpm])
-POWER_INFO: YES (GEAR1: 100 [kW])
-RATIO_INFO: YES (기어비: 3)
+has_speed: YES 
+speed_info: GEAR1: 1000 [rpm]
+has_power: YES
+power_info: GEAR1: 100 [kW]
+has_ratio: YES 
+ratio_info: 기어비: 3
 
 사용자 입력: "기어쌍 설계 부탁드립니다"
 응답:
-SPEED_INFO: NO (속도 정보 누락)
-POWER_INFO: NO (파워 정보 누락) 
-RATIO_INFO: NO (기어비 정보 누락)
+has_speed: NO 
+speed_info: 속도 정보 누락
+has_power: NO
+power_info: 파워 정보 누락
+has_ratio: NO 
+ratio_info: 기어비 정보 누락
+
 """
 
         # 메시지 히스토리 고려한 템플릿 생성
@@ -370,16 +403,18 @@ RATIO_INFO: NO (기어비 정보 누락)
             chat_template = ChatPromptTemplate.from_messages([
                 ("system", system_prompt + "\n\n이전 대화 맥락을 고려하여 필수 정보를 확인해주세요. 이전 메시지에서 언급된 파워나 기어비 정보도 포함하여 판단해주세요."),
                 MessagesPlaceholder("conversation_history"),
-                ("human", "현재 사용자 입력: {user_input}"),
+                ("human", "#Format: {format_instructions}\n\n현재 사용자 입력: {user_input}"),
             ])
         else:
             chat_template = ChatPromptTemplate.from_messages([
                 ("system", system_prompt),
-                ("human", "사용자 입력: {user_input}"),
+                ("human", "#Format: {format_instructions}\n\n사용자 입력: {user_input}"),
             ])
         
+        chat_template = chat_template.partial(format_instructions=parser.get_format_instructions())
+
         try:
-            chain = chat_template | self.llm
+            chain = chat_template | self.llm | parser
             # 메시지 히스토리 포함하여 invoke
             if state["messages"] and len(state["messages"]) > 1:
                 conversation_history = state["messages"][:-1]
@@ -389,39 +424,24 @@ RATIO_INFO: NO (기어비 정보 누락)
                 })
             else:
                 response_chain = chain.invoke({"user_input": state["user_input"]})
-            info_check_result = response_chain.content.strip()
+            
+            # JSON 응답 파싱 (JsonOutputParser가 자동으로 파싱)
+            gear_info = response_chain
+            
+            print(f"필수 정보 확인 결과: {gear_info}")
 
-            print(f"필수 정보 확인 결과: {info_check_result}")
-
-            # 상세 정보 추출 및 저장
-            import re
+            # JSON 응답에서 정보 추출 및 state 업데이트
+            # has_speed 변환 (YES/NO -> bool)
+            state["has_speed_info"] = gear_info.has_speed == "YES" if isinstance(gear_info.has_speed, str) else gear_info.has_speed
+            state["speed_info"] = gear_info.speed_info
             
-            # 속도 정보 확인 및 추출
-            speed_match = re.search(r'SPEED_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
-            if speed_match:
-                state["has_speed_info"] = speed_match.group(1) == "YES"
-                state["speed_info"] = speed_match.group(2).strip() if speed_match.group(1) == "YES" else ""
-            else:
-                state["has_speed_info"] = False
-                state["speed_info"] = ""
+            # has_power 변환 (YES/NO -> bool)
+            state["has_power_info"] = gear_info.has_power == "YES" if isinstance(gear_info.has_power, str) else gear_info.has_power
+            state["power_info"] = gear_info.power_info
             
-            # 파워 정보 확인 및 추출
-            power_match = re.search(r'POWER_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
-            if power_match:
-                state["has_power_info"] = power_match.group(1) == "YES"
-                state["power_info"] = power_match.group(2).strip() if power_match.group(1) == "YES" else ""
-            else:
-                state["has_power_info"] = False
-                state["power_info"] = ""
-            
-            # 기어비/잇수 정보 확인 및 추출  
-            ratio_match = re.search(r'RATIO_INFO:\s*(YES|NO)\s*\((.*?)\)', info_check_result, re.DOTALL)
-            if ratio_match:
-                state["has_ratio_info"] = ratio_match.group(1) == "YES"
-                state["ratio_info"] = ratio_match.group(2).strip() if ratio_match.group(1) == "YES" else ""
-            else:
-                state["has_ratio_info"] = False
-                state["ratio_info"] = ""
+            # has_ratio 변환 (YES/NO -> bool)
+            state["has_ratio_info"] = gear_info.has_ratio == "YES" if isinstance(gear_info.has_ratio, str) else gear_info.has_ratio
+            state["ratio_info"] = gear_info.ratio_info
             
             # 누락된 정보 분류 - speed, power, ratio 모두 고려
             missing_items = []
