@@ -1075,6 +1075,20 @@ others_info: 정보 없음
             # state 저장 (gear_agent에서 접근할 수 있도록)
             self.state = result
             
+            # shared_data에 classifier 결과 저장
+            self.set_shared_data("classifier_result", {
+                "gear_type": result.get("detected_gear_type", ""),
+                "speed_info": result.get("speed_info", ""),
+                "power_info": result.get("power_info", ""),
+                "ratio_info": result.get("ratio_info", ""),
+                "others_info": result.get("others_info", ""),
+                "classification": result.get("classification", ""),
+                "missing_info": result.get("missing_info", ""),
+                "has_speed_info": result.get("has_speed_info", False),
+                "has_power_info": result.get("has_power_info", False),
+                "has_ratio_info": result.get("has_ratio_info", False)
+            })
+            
             # 최종 진행 상황과 결과 표시
             all_progress = "".join(self.progress_messages)
             final_display = f"{all_progress}\n🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"

@@ -65,6 +65,9 @@ class GearAgent(BaseAgent):
         }
         self.gear_design = GearDesignAgent(design_config)
         
+        # shared_data를 공유하도록 설정
+        self.gear_design.shared_data = self.gear_classifier.shared_data
+        
         # LangGraph 워크플로우 구성
         self.workflow = self._create_workflow()
         
@@ -367,13 +370,9 @@ class GearAgent(BaseAgent):
     async def _call_design_prep_mcp(self, classification_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """MCP를 통한 설계 준비 호출"""
         try:
-            # gear_classifier_agent의 state를 JSON으로 변환하여 전달
-            # gear_design_agent에서 파싱할 수 있도록 state 구조 그대로 전달
-            prep_input = json.dumps(classification_result, ensure_ascii=False)
-            
-            # 제원 표시 단계까지만 실행하도록 설정
+            # shared_data는 이미 공유되어 있으므로 더미 입력만 전달
             result = await self.gear_design.process_with_callback(
-                prep_input,
+                "shared_data에서 classifier 결과 사용",  # 더미 입력
                 lambda x: None  # 임시 콜백
             )
             

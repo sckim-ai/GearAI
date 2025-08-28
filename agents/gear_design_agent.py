@@ -212,42 +212,32 @@ class GearDesignAgent(BaseAgent):
                 self.callback("📥 **기어 정보 수신 중**\n\n" \
                 "gear_classifier_agent로부터 설계 정보를 받고 있습니다...")
             
-            # gear_classifier_agent의 state를 파싱하여 정보 추출
-            user_input = state.get("user_input", "")
-            
-            try:
-                # JSON 형태로 전달된 classifier state 파싱 시도
-                classifier_data = json.loads(user_input)
+            # shared_data에서 classifier 결과 확인
+            if self.has_shared_data("classifier_result"):
+                # shared_data에서 classifier 결과 가져오기
+                classifier_data = self.get_shared_data("classifier_result")
                 
-                # gear_classifier_agent의 state에서 직접 정보 추출
-                if isinstance(classifier_data, dict):
-                    # detected_gear_type을 gear_type에 매핑
-                    detected_type = classifier_data.get("detected_gear_type", "")
-                    if detected_type in ["gear_pair", "three_gear", "simple_planetary", "double_pinion_planetary"]:
-                        state["gear_type"] = detected_type
-                    else:
-                        state["gear_type"] = classifier_data.get("gear_type", "")
+                # classifier 결과에서 정보 직접 매핑
+                state["gear_type"] = classifier_data.get("gear_type", "")
+                state["speed_info"] = classifier_data.get("speed_info", "")
+                state["power_info"] = classifier_data.get("power_info", "")
+                state["ratio_info"] = classifier_data.get("ratio_info", "")
+                state["others_info"] = classifier_data.get("others_info", "")
+                state["gear_info_parsed"] = True
+                
+                self.progress_messages.append("✅ **1단계 완료:** shared_data에서 classifier 결과 수신 성공")
+                
+                if self.callback:
+                    gear_type_names = {
+                        "gear_pair": "기어쌍 (2단 기어)",
+                        "three_gear": "3단 기어", 
+                        "simple_planetary": "단순 유성기어",
+                        "double_pinion_planetary": "이중 피니언 유성기어"
+                    }
+                    gear_name = gear_type_names.get(state.get("gear_type", ""), state.get("gear_type", "미지정"))
                     
-                    # classifier state에서 정보 직접 매핑
-                    state["speed_info"] = classifier_data.get("speed_info", "")
-                    state["power_info"] = classifier_data.get("power_info", "") 
-                    state["ratio_info"] = classifier_data.get("ratio_info", "")
-                    state["others_info"] = classifier_data.get("others_info", "")
-                    state["gear_info_parsed"] = True
-                    
-                    self.progress_messages.append("✅ **1단계 완료:** gear_classifier_agent state에서 정보 수신 성공")
-                    
-                    if self.callback:
-                        gear_type_names = {
-                            "gear_pair": "기어쌍 (2단 기어)",
-                            "three_gear": "3단 기어",
-                            "simple_planetary": "단순 유성기어",
-                            "double_pinion_planetary": "이중 피니언 유성기어"
-                        }
-                        gear_name = gear_type_names.get(state.get("gear_type", ""), state.get("gear_type", "미지정"))
-                        
-                        summary = f"""
-📋 **수신된 기어 정보:**
+                    summary = f"""
+📋 **수신된 기어 정보:** (shared_data 경유)
 - **기어 타입:** {gear_name}
 - **속도 정보:** {state.get('speed_info', '미지정') or '미지정'}
 - **동력 정보:** {state.get('power_info', '미지정') or '미지정'}
@@ -256,16 +246,15 @@ class GearDesignAgent(BaseAgent):
 
 📊 **추가 분석 정보:**
 - **분류 결과:** {classifier_data.get('classification', '미지정')}
-- **설계 가능 여부:** {classifier_data.get('gear_type', '미지정')}
 - **누락 정보:** {classifier_data.get('missing_info', 'none')}
+- **속도 정보 여부:** {'있음' if classifier_data.get('has_speed_info') else '없음'}
+- **동력 정보 여부:** {'있음' if classifier_data.get('has_power_info') else '없음'}
+- **기어비 정보 여부:** {'있음' if classifier_data.get('has_ratio_info') else '없음'}
 """
-                        self.callback(summary)
-                        
-                else:
-                    raise ValueError("Invalid classifier state format")
+                    self.callback(summary)
                     
-            except (json.JSONDecodeError, ValueError):
-                # JSON 파싱 실패시 기존 방식으로 폴백 (사용자 입력에서 직접 파싱)
+            else:
+                # shared_data에 classifier 결과가 없을 때 사용자 입력에서 파싱
                 system_prompt = """
 사용자 입력에서 기어 설계에 필요한 정보를 추출하세요.
 다음 정보들을 JSON 형태로 반환하세요:
