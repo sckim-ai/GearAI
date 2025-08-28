@@ -24,6 +24,8 @@ from utils.llm import llm_call
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 
 
 class GearDesignState(TypedDict):
@@ -90,8 +92,25 @@ class GearDesignAgent(BaseAgent):
         # 진행 상황 메시지 저장
         self.progress_messages = []
         
+        # LangChain LLM 초기화
+        self.model_name = config.get("model", "gpt-4o-mini")
+        self.temperature = config.get("temperature", 0.0)
+        self.llm = self._initialize_llm()
+        
         # LangGraph 워크플로우 구성
         self.graph = self._build_graph()
+        
+    def _initialize_llm(self):
+        """LangChain LLM 초기화"""
+        try:
+            return ChatOpenAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                streaming=True
+            )
+        except Exception as e:
+            print(f"LLM 초기화 실패: {e}")
+            return None
         
     def initialize_gear_manager(self):
         """GearDesignManager 초기화"""
@@ -254,33 +273,39 @@ class GearDesignAgent(BaseAgent):
                     self.callback(summary)
                     
             else:
-                # shared_data에 classifier 결과가 없을 때 사용자 입력에서 파싱
-                system_prompt = """
+                # shared_data에 classifier 결과가 없을 때 사용자 입력에서 파싱 (LangChain 사용)
+                user_input = state.get("user_input", "")
+                
+                # ChatPromptTemplate 정의
+                prompt_template = ChatPromptTemplate.from_messages([
+                    ("system", """
 사용자 입력에서 기어 설계에 필요한 정보를 추출하세요.
 다음 정보들을 JSON 형태로 반환하세요:
 
-{
+{{
   "gear_type": "gear_pair|three_gear|simple_planetary|double_pinion_planetary",
   "speed_info": "속도 정보 문자열",
   "power_info": "파워/토크 정보 문자열", 
   "ratio_info": "기어비/잇수 정보 문자열",
   "others_info": "추가 정보 문자열 (모듈, 치폭, 재료 등)"
-}
+}}
 
 정보가 없는 경우 해당 필드는 빈 문자열로 설정하세요.
-"""
+"""),
+                    ("human", "{input}")
+                ])
                 
-                prompt = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_input}
-                ]
+                # LangChain chain 구성
+                chain = prompt_template | self.llm
                 
-                response = llm_call(prompt=prompt, model="gpt-4o-mini")
+                # LLM 호출
+                response = chain.invoke({"input": user_input})
+                response_content = response.content
                 
                 # JSON 블록 제거
-                response = re.sub(r'```json\\s*|\\s*```', '', response).strip()
+                response_content = re.sub(r'```json\\s*|\\s*```', '', response_content).strip()
                 
-                gear_info = json.loads(response)
+                gear_info = json.loads(response_content)
                 
                 # 상태 업데이트
                 state["gear_type"] = gear_info.get("gear_type", "")

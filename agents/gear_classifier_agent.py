@@ -1081,12 +1081,7 @@ others_info: 정보 없음
                 "speed_info": result.get("speed_info", ""),
                 "power_info": result.get("power_info", ""),
                 "ratio_info": result.get("ratio_info", ""),
-                "others_info": result.get("others_info", ""),
-                "classification": result.get("classification", ""),
-                "missing_info": result.get("missing_info", ""),
-                "has_speed_info": result.get("has_speed_info", False),
-                "has_power_info": result.get("has_power_info", False),
-                "has_ratio_info": result.get("has_ratio_info", False)
+                "others_info": result.get("others_info", ""),                
             })
             
             # 최종 진행 상황과 결과 표시
