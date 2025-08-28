@@ -219,14 +219,39 @@ with col1:
                     current_config = st.session_state.agent_settings[agent_type]
                     
                     try:
-                        # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
+                        # 진행 상황과 최종 응답을 분리하여 표시
+                        progress_parts = []
                         response_parts = []
+                        is_final_response = False
+                        
+                        # 진행 상황 표시용 컨테이너 생성
+                        progress_container = st.empty()
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            response_parts.append(chunk)
-                            # 현재까지의 전체 응답 표시
-                            response_placeholder.markdown("".join(response_parts))
+                            nonlocal is_final_response
+                            
+                            # 구분자로 최종 응답 시작점 확인
+                            if "🎉 **분석 완료!**" in chunk:
+                                is_final_response = True
+                                progress_parts.append(chunk)
+                                # 진행 상황 최종 업데이트
+                                progress_container.markdown("".join(progress_parts))
+                                return
+                            elif "---" in chunk and is_final_response:
+                                # 구분선 이후는 최종 응답
+                                return
+                            
+                            if not is_final_response:
+                                # 진행 상황 업데이트
+                                progress_parts.append(chunk)
+                                progress_container.markdown("".join(progress_parts))
+                            else:
+                                # 최종 응답 업데이트
+                                response_parts.append(chunk)
+                                # 진행 상황과 최종 응답을 함께 표시
+                                combined_content = "".join(progress_parts) + "\n" + "".join(response_parts)
+                                response_placeholder.markdown(combined_content)
                         
                         # 비동기 함수를 동기적으로 실행
                         loop = asyncio.get_event_loop()
@@ -238,8 +263,12 @@ with col1:
                             )
                         )
                         
-                        # 최종 응답 조합
-                        response_text = "".join(response_parts)
+                        # 최종 응답 조합 (진행 상황 포함)
+                        if response_parts:
+                            response_text = "".join(response_parts)
+                        else:
+                            # 최종 응답이 없는 경우 진행 상황만 저장
+                            response_text = "".join(progress_parts)
                         
                         # 기어 선택 옵션 플래그 확인
                         if "[SHOW_GEAR_OPTIONS]" in response_text:
@@ -285,14 +314,39 @@ with col1:
                     current_config = st.session_state.agent_settings[agent_type]
                     
                     try:
-                        # 결과를 누적할 변수를 리스트로 변경 (파이썬에서 리스트는 가변객체라 nonlocal 없이도 변경 가능)
+                        # 진행 상황과 최종 응답을 분리하여 표시
+                        progress_parts = []
                         response_parts = []
+                        is_final_response = False
+                        
+                        # 진행 상황 표시용 컨테이너 생성
+                        progress_container = st.empty()
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            response_parts.append(chunk)
-                            # 현재까지의 전체 응답 표시
-                            response_placeholder.markdown("".join(response_parts))
+                            nonlocal is_final_response
+                            
+                            # 구분자로 최종 응답 시작점 확인
+                            if "🎉 **분석 완료!**" in chunk:
+                                is_final_response = True
+                                progress_parts.append(chunk)
+                                # 진행 상황 최종 업데이트
+                                progress_container.markdown("".join(progress_parts))
+                                return
+                            elif "---" in chunk and is_final_response:
+                                # 구분선 이후는 최종 응답
+                                return
+                            
+                            if not is_final_response:
+                                # 진행 상황 업데이트
+                                progress_parts.append(chunk)
+                                progress_container.markdown("".join(progress_parts))
+                            else:
+                                # 최종 응답 업데이트
+                                response_parts.append(chunk)
+                                # 진행 상황과 최종 응답을 함께 표시
+                                combined_content = "".join(progress_parts) + "\n" + "".join(response_parts)
+                                response_placeholder.markdown(combined_content)
                         
                         # 비동기 함수를 동기적으로 실행
                         loop = asyncio.get_event_loop()
@@ -304,8 +358,12 @@ with col1:
                             )
                         )
                         
-                        # 최종 응답 조합
-                        response_text = "".join(response_parts)
+                        # 최종 응답 조합 (진행 상황 포함)
+                        if response_parts:
+                            response_text = "".join(response_parts)
+                        else:
+                            # 최종 응답이 없는 경우 진행 상황만 저장
+                            response_text = "".join(progress_parts)
                         
                         # 기어 선택 옵션 플래그 확인
                         if "[SHOW_GEAR_OPTIONS]" in response_text:
