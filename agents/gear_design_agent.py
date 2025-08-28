@@ -287,6 +287,41 @@ class GearDesignAgent(BaseAgent):
         
         return state
     
+    def _modify_initial_config_node(self, state: GearDesignState) -> GearDesignState:
+        """1.5단계: 초기 JSON 설정 수정 및 템플릿 로드"""
+        try:
+            # 진행 상황 저장
+            self.progress_messages.append("⚙️ **1.5단계:** 초기 설정 수정 중...")
+            
+            if self.callback:
+                self.callback("⚙️ **초기 설정 수정 중**\n\n기어 정보를 바탕으로 JSON 템플릿을 수정하고 있습니다...")
+            
+            # GearDesignManager 초기화 (필요한 경우)
+            if not self.initialize_gear_manager():
+                raise Exception("GearDesignManager 초기화 실패")
+            
+            # 템플릿 설정 로드
+            template_config = self.load_template_config()
+            if not template_config:
+                raise Exception("템플릿 설정 로드 실패")
+            
+            state["template_config"] = template_config
+            
+            # 기어 정보를 바탕으로 JSON 설정 수정
+            modified_config = self.modify_config_from_gear_info(state)
+            state["modified_config"] = modified_config
+            state["config_modified"] = True
+            
+            self.progress_messages.append("✅ **1.5단계 완료:** 초기 설정 수정 완료")
+            
+        except Exception as e:
+            error_msg = f"초기 설정 수정 오류: {e}"
+            print(error_msg)
+            state["response"] = f"❌ **1.5단계 오류:** {error_msg}"
+            self.progress_messages.append(f"❌ **1.5단계 오류:** {error_msg}")
+        
+        return state
+    
     def _display_gear_specs_node(self, state: GearDesignState) -> GearDesignState:
         """2단계: 기어 제원 표시 및 사용자 승인 요청"""
         try:
@@ -296,8 +331,8 @@ class GearDesignAgent(BaseAgent):
             if self.callback:
                 self.callback("📋 **기어 제원 준비 중**\\n\\n수신된 정보를 바탕으로 기어 제원을 생성하고 있습니다...")
             
-            # 기어 제원 요약 생성
-            gear_specs = self._generate_gear_specs_summary(state)
+            # 수정된 설정을 바탕으로 기어 제원 요약 생성
+            gear_specs = self._generate_gear_specs_summary_from_config(state)
             state["gear_specs_summary"] = gear_specs
             state["specs_displayed"] = True
             
@@ -324,6 +359,94 @@ class GearDesignAgent(BaseAgent):
             self.progress_messages.append(f"❌ **2단계 오류:** {error_msg}")
         
         return state
+    
+    def _generate_gear_specs_summary_from_config(self, state: GearDesignState) -> str:
+        """수정된 JSON 설정을 바탕으로 기어 제원 요약 생성"""
+        try:
+            modified_config = state.get("modified_config", {})
+            if not modified_config:
+                # 설정이 없으면 기본 방식으로 생성
+                return self._generate_gear_specs_summary(state)
+            
+            gear_type_names = {
+                0: "기어 쌍",
+                1: "3단 기어", 
+                2: "단순 유성기어",
+                3: "이중 피니언 유성기어"
+            }
+            
+            basic_data = modified_config.get("Basic Data", {})
+            rating_data = modified_config.get("Rating", {})
+            
+            gear_type_num = basic_data.get("GearTypeNum", 0)
+            gear_name = gear_type_names.get(gear_type_num, "기어")
+            
+            specs_lines = [
+                f"🔧 **기어 타입**: {gear_name}",
+                ""
+            ]
+            
+            # Load spectrum에서 작동 조건 추출
+            specs_lines.append("⚡ **작동 조건:**")
+            load_spectrum_str = rating_data.get("Load spectrum", "[]")
+            try:
+                import json
+                load_spectrum = json.loads(load_spectrum_str)
+                if load_spectrum and len(load_spectrum) > 0:
+                    load_case = load_spectrum[0]
+                    
+                    speed1 = load_case.get("\rSpeed1\r[rpm]")
+                    if speed1:
+                        specs_lines.append(f"  • 속도: {speed1} RPM")
+                    
+                    power1 = load_case.get("\rPower1\r[kW]")
+                    if power1:
+                        specs_lines.append(f"  • 파워: {power1} kW")
+                    
+                    torque1 = load_case.get("Gear 1\rTorque1\r[N.m]")
+                    if torque1:
+                        specs_lines.append(f"  • 토크: {torque1} N.m")
+            except:
+                pass
+            
+            specs_lines.append("")
+            
+            # 기어 제원
+            specs_lines.append("⚙️ **기어 제원:**")
+            
+            # 잇수 정보
+            z1 = basic_data.get("z1")
+            z2 = basic_data.get("z2")
+            if z1 and z2:
+                gear_ratio = float(z2) / float(z1) if float(z1) != 0 else 1
+                specs_lines.append(f"  • 잇수: Z1={z1}, Z2={z2} (기어비: {gear_ratio:.2f})")
+            
+            # 모듈 정보
+            module = basic_data.get("Normal Module")
+            if module:
+                specs_lines.append(f"  • 모듈: {module} mm")
+            
+            # 압력각 정보
+            pressure_angle = basic_data.get("Pressure angle")
+            if pressure_angle:
+                specs_lines.append(f"  • 압력각: {pressure_angle}°")
+            
+            # 치폭 정보
+            b1 = basic_data.get("b1")
+            if b1:
+                specs_lines.append(f"  • 치폭: {b1} mm")
+            
+            # 재료 정보 (기본값)
+            specs_lines.append("  • 재료: DIN 18CrNiMo7 (기본값)")
+            
+            specs_lines.append("")
+            specs_lines.append("🏭 **윤활:** Oil: Kluberoil GEM 1-220 N (기본값)")
+            
+            return "\n".join(specs_lines)
+            
+        except Exception as e:
+            print(f"설정 기반 기어 제원 요약 생성 오류: {e}")
+            return self._generate_gear_specs_summary(state)
     
     def _generate_gear_specs_summary(self, state: GearDesignState) -> str:
         """기어 제원 요약 생성"""
@@ -481,8 +604,12 @@ class GearDesignAgent(BaseAgent):
             # 기존 정보 업데이트
             self._apply_user_modifications(state, modifications)
             
-            # 수정된 제원 요약 재생성
-            updated_specs = self._generate_gear_specs_summary(state)
+            # 수정된 제원 요약 재생성 (설정도 다시 수정)
+            if state.get("modified_config"):
+                modified_config = self.modify_config_from_gear_info(state)
+                state["modified_config"] = modified_config
+            
+            updated_specs = self._generate_gear_specs_summary_from_config(state)
             state["gear_specs_summary"] = updated_specs
             
             # 수정된 제원을 다시 표시
@@ -696,6 +823,15 @@ class GearDesignAgent(BaseAgent):
     def _route_after_receive(self, state: GearDesignState) -> str:
         """기어 정보 수신 후 라우팅"""
         if state["gear_info_parsed"] == True:
+            return "modify_initial_config"
+        else:
+            return "END"
+    
+    def _route_after_initial_config(self, state: GearDesignState) -> str:
+        """초기 설정 수정 후 라우팅"""
+        if state.get("response", "").startswith("❌"):
+            return "END"
+        elif state.get("config_modified", False):
             return "display_specs"
         else:
             return "END"
@@ -714,7 +850,7 @@ class GearDesignAgent(BaseAgent):
         if state.get("response", "").startswith("❌"):
             return END
         elif state.get("user_approved", False):
-            return "initialize_manager"
+            return "perform_calculation"  # manager는 이미 초기화되었으므로 바로 계산으로
         elif state.get("user_requested_changes", False):
             return "handle_modifications"
         else:
@@ -732,7 +868,7 @@ class GearDesignAgent(BaseAgent):
         if state.get("response", "").startswith("❌"):
             return END
         elif state.get("manager_initialized", False):
-            return "modify_config"
+            return "perform_calculation"  # 설정 수정은 이미 완료되었으므로
         else:
             return END
     
@@ -764,6 +900,7 @@ class GearDesignAgent(BaseAgent):
         
         # 노드 추가
         workflow.add_node("receive_gear_info", self._receive_gear_info_node)
+        workflow.add_node("modify_initial_config", self._modify_initial_config_node)
         workflow.add_node("display_specs", self._display_gear_specs_node)
         workflow.add_node("process_user_response", self._process_user_response_node)
         workflow.add_node("handle_modifications", self._handle_modifications_node)
@@ -778,6 +915,15 @@ class GearDesignAgent(BaseAgent):
         workflow.add_conditional_edges(
             "receive_gear_info",
             self._route_after_receive,
+            {
+                "modify_initial_config": "modify_initial_config",
+                "END": END
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "modify_initial_config",
+            self._route_after_initial_config,
             {
                 "display_specs": "display_specs",
                 "END": END
