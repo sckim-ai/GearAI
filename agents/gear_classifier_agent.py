@@ -468,84 +468,157 @@ RATIO_INFO: NO
             "ratio": []
         }
         
-        # 속도 정보 추출 (rpm, 분당회전수)
+        # 속도 정보 추출 (기어 유형 포함)
         speed_patterns = [
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*rpm',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*RPM',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*분당\s*회전수?',
-            r'입력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'출력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*회전',
-            r'Sun\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'Carrier\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'Ring\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)'
+            # 구체적인 기어 유형이 명시된 경우
+            (r'입력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "입력"),
+            (r'출력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "출력"),
+            (r'Sun\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Sun기어"),
+            (r'sun\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Sun기어"),
+            (r'태양기어\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Sun기어"),
+            (r'Carrier\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Carrier"),
+            (r'carrier\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Carrier"),
+            (r'캐리어\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Carrier"),
+            (r'Ring\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Ring기어"),
+            (r'ring\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Ring기어"),
+            (r'링기어\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Ring기어"),
+            (r'피니언\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "피니언"),
+            (r'기어1\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "기어1"),
+            (r'기어2\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "기어2"),
+            (r'기어3\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "기어3"),
+            (r'Gear1\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Gear1"),
+            (r'Gear2\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Gear2"),
+            (r'Gear3\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "Gear3"),
+            # 일반적인 속도 (기어 유형 불명)
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*rpm', ""),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*RPM', ""),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*분당\s*회전수?', ""),
+            (r'속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', ""),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*회전', "")
         ]
         
-        for pattern in speed_patterns:
+        for pattern, gear_type in speed_patterns:
             matches = re.findall(pattern, user_input, re.IGNORECASE)
             for match in matches:
                 clean_match = match.replace(',', '')  # 콤마 제거
-                extracted["speed"].append(f"{clean_match}rpm")
-        
-        # 파워/토크 정보 추출
-        power_patterns = [
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kw',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*W',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*w',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*nm',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*토크',
-            r'파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*파워',
-            r'토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'입력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'출력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'입력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)',
-            r'출력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)'
-        ]
-        
-        for pattern in power_patterns:
-            matches = re.findall(pattern, user_input, re.IGNORECASE)
-            for match in matches:
-                clean_match = match.replace(',', '')  # 콤마 제거
-                if 'kW' in user_input.upper() or 'kw' in user_input.lower():
-                    extracted["power"].append(f"{clean_match}kW")
-                elif 'Nm' in user_input or 'nm' in user_input or '토크' in user_input:
-                    extracted["power"].append(f"{clean_match}Nm")
-                elif 'W' in user_input or 'w' in user_input or '파워' in user_input:
-                    extracted["power"].append(f"{clean_match}W")
+                if gear_type:
+                    extracted["speed"].append(f"{gear_type}: {clean_match}rpm")
                 else:
-                    extracted["power"].append(f"{clean_match}W")  # 기본값
+                    extracted["speed"].append(f"{clean_match}rpm")
         
-        # 기어비/잇수 정보 추출
-        ratio_patterns = [
-            r'(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)',  # 3:1 형태
-            r'기어비\s*(\d+(?:\.\d+)?)',
-            r'감속비\s*(\d+(?:\.\d+)?)',
-            r'증속비\s*(\d+(?:\.\d+)?)',
-            r'비율\s*(\d+(?:\.\d+)?)',
-            r'(\d+(?:\.\d+)?)\s*치',
-            r'(\d+(?:\.\d+)?)\s*개?\s*이',
-            r'teeth\s*(\d+(?:\.\d+)?)',
-            r'잇수\s*(\d+(?:\.\d+)?)',
-            r'(\d+(?:\.\d+)?)\s*개\s*치',
-            r'피니언\s*(\d+(?:\.\d+)?)\s*치',
-            r'기어\s*(\d+(?:\.\d+)?)\s*치'
+        # 파워/토크 정보 추출 (기어 유형 포함)
+        power_patterns = [
+            # 구체적인 기어 유형이 명시된 경우 - kW
+            (r'입력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "입력", "kW"),
+            (r'출력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "출력", "kW"),
+            (r'Sun\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "Sun기어", "kW"),
+            (r'Carrier\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "Carrier", "kW"),
+            (r'Ring\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "Ring기어", "kW"),
+            (r'기어1\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "기어1", "kW"),
+            (r'기어2\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "기어2", "kW"),
+            (r'기어3\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "기어3", "kW"),
+            # 구체적인 기어 유형이 명시된 경우 - W
+            (r'입력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "입력", "W"),
+            (r'출력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "출력", "W"),
+            (r'Sun\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "Sun기어", "W"),
+            (r'Carrier\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "Carrier", "W"),
+            (r'Ring\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "Ring기어", "W"),
+            (r'기어1\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "기어1", "W"),
+            (r'기어2\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "기어2", "W"),
+            (r'기어3\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "기어3", "W"),
+            # 구체적인 기어 유형이 명시된 경우 - Nm (토크)
+            (r'입력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "입력", "Nm"),
+            (r'출력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "출력", "Nm"),
+            (r'Sun\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "Sun기어", "Nm"),
+            (r'Carrier\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "Carrier", "Nm"),
+            (r'Ring\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "Ring기어", "Nm"),
+            (r'기어1\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "기어1", "Nm"),
+            (r'기어2\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "기어2", "Nm"),
+            (r'기어3\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "기어3", "Nm"),
+            # 패턴 매칭 순서가 중요한 항목들
+            (r'입력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "입력", "W"),
+            (r'출력\s*파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "출력", "W"),
+            (r'입력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "입력", "Nm"),
+            (r'출력\s*토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "출력", "Nm"),
+            # 일반적인 파워/토크 (기어 유형 불명)
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "", "kW"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kw', "", "kW"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "", "W"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*w', "", "W"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "", "Nm"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*nm', "", "Nm"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*토크', "", "Nm"),
+            (r'파워\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "", "W"),
+            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*파워', "", "W"),
+            (r'토크\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "", "Nm")
         ]
         
-        for pattern in ratio_patterns:
+        for pattern, gear_type, unit in power_patterns:
             matches = re.findall(pattern, user_input, re.IGNORECASE)
-            if ':' in pattern:  # 비율 형태
+            for match in matches:
+                clean_match = match.replace(',', '')  # 콤마 제거
+                if gear_type:
+                    extracted["power"].append(f"{gear_type}: {clean_match}{unit}")
+                else:
+                    extracted["power"].append(f"{clean_match}{unit}")
+        
+        # 기어비/잇수 정보 추출 (기어 유형 포함)
+        ratio_patterns = [
+            # 기어비 패턴
+            (r'(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)', "", "ratio"),  # 3:1 형태
+            (r'기어비\s*(\d+(?:\.\d+)?)', "", "gear_ratio"),
+            (r'감속비\s*(\d+(?:\.\d+)?)', "", "reduction_ratio"),
+            (r'증속비\s*(\d+(?:\.\d+)?)', "", "speed_up_ratio"),
+            (r'비율\s*(\d+(?:\.\d+)?)', "", "ratio"),
+            
+            # 구체적인 기어의 잇수
+            (r'입력\s*기어\s*(\d+(?:\.\d+)?)\s*치', "입력기어", "teeth"),
+            (r'출력\s*기어\s*(\d+(?:\.\d+)?)\s*치', "출력기어", "teeth"),
+            (r'피니언\s*(\d+(?:\.\d+)?)\s*치', "피니언", "teeth"),
+            (r'Sun\s*기어\s*(\d+(?:\.\d+)?)\s*치', "Sun기어", "teeth"),
+            (r'sun\s*기어\s*(\d+(?:\.\d+)?)\s*치', "Sun기어", "teeth"),
+            (r'태양기어\s*(\d+(?:\.\d+)?)\s*치', "Sun기어", "teeth"),
+            (r'Carrier\s*(\d+(?:\.\d+)?)\s*치', "Carrier", "teeth"),
+            (r'캐리어\s*(\d+(?:\.\d+)?)\s*치', "Carrier", "teeth"),
+            (r'Ring\s*기어\s*(\d+(?:\.\d+)?)\s*치', "Ring기어", "teeth"),
+            (r'ring\s*기어\s*(\d+(?:\.\d+)?)\s*치', "Ring기어", "teeth"),
+            (r'링기어\s*(\d+(?:\.\d+)?)\s*치', "Ring기어", "teeth"),
+            (r'기어1\s*(\d+(?:\.\d+)?)\s*치', "기어1", "teeth"),
+            (r'기어2\s*(\d+(?:\.\d+)?)\s*치', "기어2", "teeth"),
+            (r'기어3\s*(\d+(?:\.\d+)?)\s*치', "기어3", "teeth"),
+            (r'Gear1\s*(\d+(?:\.\d+)?)\s*치', "Gear1", "teeth"),
+            (r'Gear2\s*(\d+(?:\.\d+)?)\s*치', "Gear2", "teeth"),
+            (r'Gear3\s*(\d+(?:\.\d+)?)\s*치', "Gear3", "teeth"),
+            
+            # 일반적인 잇수 (기어 유형 불명)
+            (r'(\d+(?:\.\d+)?)\s*치', "", "teeth"),
+            (r'(\d+(?:\.\d+)?)\s*개?\s*이', "", "teeth"),
+            (r'teeth\s*(\d+(?:\.\d+)?)', "", "teeth"),
+            (r'잇수\s*(\d+(?:\.\d+)?)', "", "teeth"),
+            (r'(\d+(?:\.\d+)?)\s*개\s*치', "", "teeth"),
+            (r'기어\s*(\d+(?:\.\d+)?)\s*치', "", "teeth")
+        ]
+        
+        for pattern, gear_type, info_type in ratio_patterns:
+            matches = re.findall(pattern, user_input, re.IGNORECASE)
+            if info_type == "ratio" and ':' in pattern:  # 비율 형태
                 for match in matches:
                     if isinstance(match, tuple):
-                        extracted["ratio"].append(f"{match[0]}:{match[1]}")
+                        extracted["ratio"].append(f"기어비 {match[0]}:{match[1]}")
             else:
                 for match in matches:
-                    if '치' in user_input or '이' in user_input or 'teeth' in user_input.lower():
-                        extracted["ratio"].append(f"{match}치")
-                    else:
+                    if info_type == "gear_ratio":
+                        extracted["ratio"].append(f"기어비 {match}")
+                    elif info_type == "reduction_ratio":
+                        extracted["ratio"].append(f"감속비 {match}")
+                    elif info_type == "speed_up_ratio":
+                        extracted["ratio"].append(f"증속비 {match}")
+                    elif info_type == "teeth":
+                        if gear_type:
+                            extracted["ratio"].append(f"{gear_type}: {match}치")
+                        else:
+                            extracted["ratio"].append(f"{match}치")
+                    else:  # ratio
                         extracted["ratio"].append(f"비율 {match}")
         
         # 결과 정리
