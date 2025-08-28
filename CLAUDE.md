@@ -120,3 +120,4 @@ Multi-step AI research pipeline:
 
 ### 답변
 - 답변은 한글로 할 것.
+- 줄바꿈은 "\r\n" 등으로 명확하게 정의할 것.

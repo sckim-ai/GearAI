@@ -297,7 +297,7 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
             has_ratio: bool = Field(description="기어비 또는 기어 잇수 정보 유무") 
             ratio_info: str = Field(description="상세 기어비/잇수 정보") 
 
-        parser = JsonOutputParser(pydantic_object=GearInfo)
+        parser = PydanticOutputParser(pydantic_object=GearInfo)
         # 진행 상황 저장
         self.progress_messages.append("📋 **3단계:** 필수 설계 정보 확인 중...")
         
@@ -342,7 +342,7 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
  - 규칙5. RATIO_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> (기어비: 3) 또는 (Z1: 잇수, Z2: 잇수, ...)
  - 규칙5. 모든 INFO는 답변이 NO 인 경우 괄호()안에 상세 이유를 기입한다.
 
-## 답변포멧 JSON
+## 답변포멧
 has_speed: YES or NO 
 speed_info: 규칙에 의거한 상세 정보
 has_power: YES or NO 
@@ -504,173 +504,16 @@ ratio_info: 기어비 정보 누락
         state["response"] = f"""✅ {gear_name} 설계에 필요한 모든 정보가 확인되었습니다!
 
 📊 **확인된 설계 정보**:
-🔧 **설계 타입**: {gear_name}
+🔧 **설계 타입**: {gear_name}\r\n
 📋 **요청사항**: {state['user_input']}
 
-🏃 **속도 정보**: {speed_info}
-⚡ **파워/토크 정보**: {power_info}  
-⚙️ **기어비/잇수 정보**: {ratio_info}
+🏃 **속도 정보**: {speed_info}\r\n
+⚡ **파워/토크 정보**: {power_info}\r\n
+⚙️ **기어비/잇수 정보**: {ratio_info}\r\n
 
 다음 단계로 상세 기어 설계 사양을 생성하겠습니다..."""
         
         return state
-    
-    def _extract_specific_info(self, user_input: str) -> dict:
-        """사용자 입력에서 구체적인 수치 정보를 LLM으로 추출"""
-        
-        system_prompt = """당신은 기어 설계 정보를 추출하는 전문가입니다. 
-주어진 텍스트에서 다음 정보를 정확히 추출해주세요:
-
-1. **속도 정보**: 
-   - rpm, 분당회전수, rotation speed 등 모든 속도 관련 표현
-   - 어떤 기어인지 명시 (입력/출력, Sun/Carrier/Ring, 기어1/2/3, 피니언 등)
-   - 예시: "입력: 1000rpm", "Sun기어: 1200rpm", "출력: 500rpm"
-
-2. **파워/토크 정보**:
-   - kW, W, Nm, power, torque 등 모든 파워/토크 관련 표현 
-   - 어떤 기어인지 명시 (입력/출력, Sun/Carrier/Ring, 기어1/2/3 등)
-   - 예시: "입력: 100kW", "출력: 500Nm", "Ring기어: 2kW"
-
-3. **기어비/잇수 정보**:
-   - 기어비, 감속비, 증속비, 잇수, teeth 등 모든 비율/잇수 관련 표현
-   - 어떤 기어인지 명시 (Sun/Ring/피니언 등의 잇수)
-   - 예시: "기어비 3:1", "감속비 10", "Sun기어: 30치", "피니언: 15치"
-
-**응답 형식** (JSON):
-{
-  "speed": ["입력: 1000rpm", "출력: 500rpm"],
-  "power": ["입력: 100kW", "출력: 500Nm"], 
-  "ratio": ["기어비 3:1", "Sun기어: 30치"]
-}
-
-**중요 사항**:
-- 다양한 언어 표현 (한국어, 영어, 수치 표기법) 모두 처리
-- 기어 유형이 명시되지 않은 경우 수치만 기록
-- 없는 정보는 빈 배열로 반환
-- 중복 제거하여 고유한 값만 포함"""
-
-        try:
-            from langchain_core.prompts import ChatPromptTemplate
-            
-            chat_template = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", "다음 텍스트에서 기어 설계 정보를 추출해주세요:\n\n{text}")
-            ])
-            
-            chain = chat_template | self.llm
-            response = chain.invoke({"text": user_input})
-            
-            # LLM 응답에서 JSON 추출
-            response_text = response.content.strip()
-            print(f"LLM 정보 추출 응답: {response_text}")
-            
-            # JSON 파싱 시도
-            import json
-            import re
-            
-            # JSON 블록 찾기
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # JSON 블록이 없으면 전체에서 JSON 찾기
-                json_match = re.search(r'(\{[^{}]*"speed"[^{}]*\})', response_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(1)
-                else:
-                    json_str = response_text
-            
-            try:
-                extracted_data = json.loads(json_str)
-                
-                # 결과 검증 및 정리
-                result = {
-                    "speed": ", ".join(extracted_data.get("speed", [])) if extracted_data.get("speed") else "",
-                    "power": ", ".join(extracted_data.get("power", [])) if extracted_data.get("power") else "",
-                    "ratio": ", ".join(extracted_data.get("ratio", [])) if extracted_data.get("ratio") else ""
-                }
-                
-                print(f"추출된 정보: {result}")
-                return result
-                
-            except json.JSONDecodeError:
-                print(f"JSON 파싱 오류, 폴백 정규식 방식 사용")
-                # JSON 파싱 실패 시 폴백으로 정규식 방식 사용
-                return self._extract_info_with_regex(user_input)
-                
-        except Exception as e:
-            print(f"LLM 정보 추출 중 오류: {e}")
-            # LLM 호출 실패 시 폴백으로 정규식 방식 사용
-            return self._extract_info_with_regex(user_input)
-    
-    def _extract_info_with_regex(self, user_input: str) -> dict:
-        """정규식을 사용한 폴백 정보 추출 방식"""
-        import re
-        
-        extracted = {
-            "speed": [],
-            "power": [],
-            "ratio": []
-        }
-        
-        # 간단한 정규식 패턴들 (주요 패턴만)
-        speed_patterns = [
-            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*rpm', ""),
-            (r'입력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "입력"),
-            (r'출력\s*속도\s*(\d+(?:,\d{3})*(?:\.\d+)?)', "출력")
-        ]
-        
-        power_patterns = [
-            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*kW', "", "kW"),
-            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*W', "", "W"),
-            (r'(\d+(?:,\d{3})*(?:\.\d+)?)\s*Nm', "", "Nm")
-        ]
-        
-        ratio_patterns = [
-            (r'(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)', "", "ratio"),
-            (r'(\d+(?:\.\d+)?)\s*치', "", "teeth")
-        ]
-        
-        # 속도 추출
-        for pattern, gear_type in speed_patterns:
-            matches = re.findall(pattern, user_input, re.IGNORECASE)
-            for match in matches:
-                clean_match = match.replace(',', '')
-                if gear_type:
-                    extracted["speed"].append(f"{gear_type}: {clean_match}rpm")
-                else:
-                    extracted["speed"].append(f"{clean_match}rpm")
-        
-        # 파워/토크 추출
-        for pattern, gear_type, unit in power_patterns:
-            matches = re.findall(pattern, user_input, re.IGNORECASE)
-            for match in matches:
-                clean_match = match.replace(',', '')
-                if gear_type:
-                    extracted["power"].append(f"{gear_type}: {clean_match}{unit}")
-                else:
-                    extracted["power"].append(f"{clean_match}{unit}")
-        
-        # 기어비/잇수 추출
-        for pattern, gear_type, info_type in ratio_patterns:
-            matches = re.findall(pattern, user_input, re.IGNORECASE)
-            if info_type == "ratio" and ':' in pattern:
-                for match in matches:
-                    if isinstance(match, tuple):
-                        extracted["ratio"].append(f"기어비 {match[0]}:{match[1]}")
-            else:
-                for match in matches:
-                    if info_type == "teeth":
-                        extracted["ratio"].append(f"{match}치")
-        
-        # 결과 정리
-        result = {
-            "speed": ", ".join(list(set(extracted["speed"]))) if extracted["speed"] else "",
-            "power": ", ".join(list(set(extracted["power"]))) if extracted["power"] else "",
-            "ratio": ", ".join(list(set(extracted["ratio"]))) if extracted["ratio"] else ""
-        }
-        
-        return result
 
     def _handle_missing_info(self, state: GearClassifierState) -> GearClassifierState:
         """필수 정보가 누락된 경우 처리"""
@@ -692,63 +535,177 @@ ratio_info: 기어비 정보 누락
         
         if not state["has_speed_info"]:
             speed_reason = state.get("speed_info", "속도 정보 누락")
-            missing_details.append(f"**🏃 속도 정보**: {speed_reason}")
+            missing_details.append(f"   **🏃 속도 정보**: {speed_reason}\r\n")
         
         if not state["has_power_info"]:
             power_reason = state.get("power_info", "파워/토크 정보 누락")
-            missing_details.append(f"**⚡ 파워/토크 정보**: {power_reason}")
+            missing_details.append(f"   **⚡ 파워/토크 정보**: {power_reason}\r\n")
         
         if not state["has_ratio_info"]:
             ratio_reason = state.get("ratio_info", "기어비/잇수 정보 누락")
-            missing_details.append(f"**⚙️ 기어비/잇수 정보**: {ratio_reason}")
+            missing_details.append(f"   **⚙️ 기어비/잇수 정보**: {ratio_reason}\r\n")
         
-        # 누락된 정보 개수에 따른 예시 생성
+        # 기어 타입별 올바른 예시 생성
+        gear_type = state["detected_gear_type"]
         missing_count = len(missing_details)
-        if missing_count == 3:
-            examples = """
+        
+        if missing_count == 3:  # 모든 정보 누락
+            if gear_type == "gear_pair":
+                examples = """
+📋 **기어 쌍 종합 입력 예시** (속도 1개 + 파워/토크 1개 + 기어비/잇수):
+• "입력속도 1000rpm, 출력파워 50kW, 기어비 3:1로 기어쌍 설계"
+• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 기어쌍 설계" 
+• "입력속도 1800rpm, 출력토크 150Nm, 잇수비 20:60으로 기어쌍 설계"
+• "pinion 속도 1200rpm, wheel 파워 80kW, 기어비 4로 기어쌍 설계" \""""
+            elif gear_type == "three_gear":
+                examples = """
+📋 **3단 기어 종합 입력 예시** (속도 1개 + 파워/토크 2개):
+• "입력속도 1000rpm, 아이들러 파워 100kW, 출력토크 500Nm로 3단 기어 설계"
+• "Gear1 속도 1500rpm, Gear2 토크 200Nm, Gear3 파워 80kW로 3단 기어 설계"
+• "pinion 속도 1800rpm, idler 파워 120kW, wheel 토크 600Nm로 3단 기어 설계" \""""
+            elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                examples = """
+📋 **유성기어 종합 입력 예시** (속도 2개 + 파워/토크 1개 + 잇수):
+• "Sun속도 1000rpm, Carrier속도 400rpm, Ring파워 50kW, 태양기어 30치로 유성기어 설계"
+• "태양기어 속도 1500rpm, 캐리어 속도 500rpm, 링기어 토크 800Nm, 링기어 90치로 유성기어 설계"
+• "Sun속도 2000rpm, Ring속도 0rpm(고정), Carrier파워 100kW, 기어비 4로 유성기어 설계" \""""
+            else:
+                examples = """
 📋 **종합 입력 예시**:
-• "1000rpm 입력속도, 100W 파워로 기어비 3:1인 기어쌍 설계"
-• "입력속도 1800rpm, 출력토크 50Nm, 감속비 5인 유성기어 설계"
-• "선기어 속도 1000rpm, 캐리어 속도 500rpm, Ring 출력 2kW인 유성기어 설계\""""
+• "입력속도 1000rpm, 출력파워 100kW, 기어비 3:1로 설계"
+• "출력속도 500rpm, 입력토크 200Nm, 감속비 5로 설계\""""
+                
         elif missing_count == 2:
             if not state["has_speed_info"] and not state["has_power_info"]:
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 속도/파워 정보 예시** (기어 명칭 포함 필수):
+• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"
+• 파워: "입력파워 100kW" 또는 "출력토크 200Nm" 또는 "wheel토크 300Nm" \""""
+                elif gear_type == "three_gear":
+                    examples = """
+📋 **3단 기어 속도/파워 정보 예시** (기어 명칭 포함 필수):
+• 속도: "입력속도 1000rpm" 또는 "Gear1 속도 1500rpm" (1개 필요)
+• 파워: "아이들러 파워 80kW, 출력토크 400Nm" 또는 "Gear2 토크 200Nm, Gear3 파워 100kW" (2개 필요) \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 속도/파워 정보 예시** (기어 명칭 포함 필수):
+• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)
+• 파워: "Ring파워 50kW" 또는 "Carrier토크 800Nm" 또는 "태양기어 파워 100kW" (1개 필요) \""""
+                else:
+                    examples = """
 📋 **속도/파워 정보 예시**:
-• 속도: "1000rpm", "1800rpm" (입력 또는 출력)
-• 파워: "100W", "2kW" / 토크: "50Nm", "200Nm\""""
+• 속도: "속도 1000rpm" (기어 명칭 필요)
+• 파워: "파워 100kW" 또는 "토크 200Nm" (기어 명칭 필요) \""""
+                    
             elif not state["has_speed_info"] and not state["has_ratio_info"]:
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 속도/기어비 정보 예시** (기어 명칭 포함 필수):
+• 속도: "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm"
+• 기어비: "기어비 3:1" 또는 "감속비 5" 또는 "잇수비 20:60" \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 속도/기어비 정보 예시** (기어 명칭 포함 필수):
+• 속도: "Sun속도 1000rpm, Carrier속도 400rpm" 또는 "태양기어 1500rpm, 링기어 0rpm(고정)" (2개 필요)
+• 잇수: "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 또는 "기어비 3" \""""
+                else:
+                    examples = """
 📋 **속도/기어비 정보 예시**:
-• 속도: "1000rpm", "1800rpm"
-• 기어비: "3:1", "감속비 5" / 잇수: "20치", "40치\""""
+• 속도: "속도 1000rpm" (기어 명칭 필요)
+• 기어비: "기어비 3:1" 또는 "잇수 정보" \""""
+                    
             else:  # power와 ratio 누락
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 파워/기어비 정보 예시** (기어 명칭 포함 필수):
+• 파워: "입력파워 100kW" 또는 "출력토크 200Nm" 또는 "pinion파워 80kW"
+• 기어비: "기어비 3:1" 또는 "감속비 5" 또는 "잇수비 20:60" \""""
+                elif gear_type == "three_gear":
+                    examples = """
+📋 **3단 기어 파워/기어비 정보 예시** (기어 명칭 포함 필수):
+• 파워: "입력파워 100kW, 출력토크 500Nm" 또는 "Gear1 토크 200Nm, Gear3 파워 80kW" (2개 필요)
+• 기어비는 3단 기어에서는 잇수 정보로 대체: "잇수 정보 필요" \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 파워/기어비 정보 예시** (기어 명칭 포함 필수):
+• 파워: "Ring파워 50kW" 또는 "Carrier토크 800Nm" 또는 "Sun파워 100kW" (1개 필요)
+• 잇수: "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 또는 "기어비 3" \""""
+                else:
+                    examples = """
 📋 **파워/기어비 정보 예시**:
-• 파워: "100W", "2kW" / 토크: "50Nm", "200Nm"
-• 기어비: "3:1", "감속비 5" / 잇수: "20치", "40치\""""
+• 파워: "파워 100kW" 또는 "토크 200Nm" (기어 명칭 필요)
+• 기어비: "기어비 3:1" 또는 "잇수 정보" \""""
+                    
         else:  # 1개 누락
             if not state["has_speed_info"]:
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 속도 정보 예시** (기어 명칭 포함 필수):
+• "입력속도 1000rpm" 또는 "출력속도 500rpm" 또는 "pinion속도 1200rpm" 또는 "wheel속도 400rpm" (1개 필요) \""""
+                elif gear_type == "three_gear":
+                    examples = """
+📋 **3단 기어 속도 정보 예시** (기어 명칭 포함 필수):
+• "입력속도 1000rpm" 또는 "출력속도 333rpm" 또는 "Gear1속도 1500rpm" 또는 "아이들러속도 750rpm" (1개 필요) \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 속도 정보 예시** (기어 명칭 포함, 2개 필요):
+• "Sun속도 1000rpm, Carrier속도 400rpm" 
+• "태양기어 속도 1500rpm, 링기어 속도 0rpm(고정)"
+• "Ring속도 200rpm, Carrier속도 600rpm" \""""
+                else:
+                    examples = """
 📋 **속도 정보 예시**:
-• 입력/출력 속도: "1000rpm", "1800rpm"
-• 유성기어의 경우: "Sun속도 1000rpm", "Carrier속도 500rpm\""""
+• "입력속도 1000rpm" 또는 "출력속도 500rpm"\""""
+                    
             elif not state["has_power_info"]:
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 파워/토크 정보 예시** (기어 명칭 포함 필수):
+• "입력파워 100kW" 또는 "출력토크 200Nm" 또는 "pinion파워 80kW" 또는 "wheel토크 400Nm" (1개 필요) \""""
+                elif gear_type == "three_gear":
+                    examples = """
+📋 **3단 기어 파워/토크 정보 예시** (기어 명칭 포함, 2개 필요):
+• "입력파워 100kW, 출력토크 500Nm" 
+• "Gear1 토크 200Nm, Gear3 파워 80kW"
+• "아이들러 파워 120kW, 출력토크 600Nm" \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 파워/토크 정보 예시** (기어 명칭 포함 필수):
+• "Ring파워 50kW" 또는 "Carrier토크 800Nm" 또는 "Sun파워 100kW" 또는 "태양기어 토크 300Nm" (1개 필요) \""""
+                else:
+                    examples = """
 📋 **파워/토크 정보 예시**:
-• 파워: "100W", "2kW"
-• 토크: "50Nm", "200Nm\""""
+• "파워 100kW" 또는 "토크 200Nm"\""""
+                    
             else:  # ratio 누락
-                examples = """
+                if gear_type == "gear_pair":
+                    examples = """
+📋 **기어 쌍 기어비/잇수 정보 예시**:
+• "기어비 3:1" 또는 "감속비 5" 또는 "증속비 0.5"
+• "잇수비 20:60" 또는 "pinion 25치, wheel 75치" \""""
+                elif gear_type == "three_gear":
+                    examples = """
+📋 **3단 기어 잇수 정보 예시** (기어비 대신 잇수 정보 필요):
+• "기어1 20치, 기어2 40치, 기어3 80치"
+• "입력기어 24teeth, 아이들러 48teeth, 출력기어 96teeth" \""""
+                elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                    examples = """
+📋 **유성기어 기어비/잇수 정보 예시**:
+• "태양기어 30치, 링기어 90치" 또는 "Sun 24teeth, Ring 72teeth" 
+• "기어비 3" 또는 "감속비 4" \""""
+                else:
+                    examples = """
 📋 **기어비/잇수 정보 예시**:
-• 기어비: "3:1", "감속비 5", "기어비 2.5"
-• 기어 잇수: "20치", "40치", "60치\""""
+• "기어비 3:1" 또는 "감속비 5" 또는 "증속비 2"
+• "잇수 20:60" 또는 "태양기어 30치, 링기어 90치" \""""
 
-        state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.
+        state["response"] = f"""⚠️ {gear_name} 설계를 위해 추가 정보가 필요합니다.\r\n
 
-🔧 **설계 타입**: {gear_name}
-📝 **현재 요청**: {state['user_input']}
+🔧 **설계 타입**: {gear_name}\r\n
+📝 **현재 요청**: {state['user_input']}\r\n
 
-❌ **누락된 정보 상세**:
+❌ **누락된 정보 상세**:\r\n
 {chr(10).join(missing_details)}
 
 {examples}
