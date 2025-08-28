@@ -54,29 +54,42 @@ class GearClassifierAgent(BaseAgent):
     def _initialize_llm(self):
         """LLM 모델 초기화"""
         try:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise Exception("OPENAI_API_KEY가 설정되지 않았습니다.")
+                
+            print(f"LLM 초기화 - Provider: {self.provider}, Model: {self.model_name}, Temperature: {self.temperature}")
+            
             if self.provider == "openai":
                 return ChatOpenAI(
                     model=self.model_name,
                     temperature=self.temperature,
-                    api_key=os.getenv("OPENAI_API_KEY"),
+                    api_key=api_key,
                     streaming=False
                 )
             else:
                 # 기본값은 OpenAI
                 return ChatOpenAI(
-                    model="gpt-5-mini",
+                    model="gpt-4o-mini",  # 유효한 모델명으로 변경
+                    temperature=0.0,
+                    api_key=api_key,
+                    streaming=False
+                )
+        except Exception as e:
+            import traceback
+            error_detail = f"LLM 초기화 오류: {str(e)}\n상세: {traceback.format_exc()}"
+            print(error_detail)
+            # 폴백으로 기본 모델 시도
+            try:
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
                     temperature=0.0,
                     api_key=os.getenv("OPENAI_API_KEY"),
                     streaming=False
                 )
-        except Exception as e:
-            print(f"LLM 초기화 오류: {e}")
-            return ChatOpenAI(
-                model="gpt-5-mini",
-                temperature=0.0,
-                api_key=os.getenv("OPENAI_API_KEY"),
-                streaming=False
-            )
+            except Exception as e2:
+                print(f"폴백 LLM 초기화도 실패: {e2}")
+                raise e  # 원본 에러 다시 던지기
     
     def _classify_input(self, state: GearClassifierState) -> GearClassifierState:
         """사용자 입력이 기어 설계 관련인지 분류"""
@@ -167,7 +180,11 @@ class GearClassifierAgent(BaseAgent):
                     self._current_callback("🔍 **1단계 완료:** 기어 설계와 관련없는 요청으로 분류됨\n\n")
                 
         except Exception as e:
-            print(f"분류 중 오류 발생: {e}")
+            import traceback
+            error_detail = f"분류 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
+            print(error_detail)
+            if hasattr(self, '_current_callback') and self._current_callback:
+                self._current_callback(f"🔍 **1단계 오류:** {str(e)}\n\n")
             # 오류 시 기본적으로 기어 관련으로 처리
             state["classification"] = "gear_related"
         
@@ -260,7 +277,11 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
                     self._current_callback("⚙️ **2단계 완료:** 설계 불가능한 기어 타입으로 분류됨\n\n")
                 
         except Exception as e:
-            print(f"기어 타입 분류 중 오류 발생: {e}")
+            import traceback
+            error_detail = f"기어 타입 분류 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
+            print(error_detail)
+            if hasattr(self, '_current_callback') and self._current_callback:
+                self._current_callback(f"⚙️ **2단계 오류:** {str(e)}\n\n")
             # 오류 시 기본적으로 설계 불가능으로 처리
             state["gear_type"] = "not_designable"
             state["detected_gear_type"] = "unknown"
@@ -389,7 +410,11 @@ RATIO_INFO: NO
                     self._current_callback("📋 **3단계 완료:** 모든 설계 정보가 누락됨 ⚠️\n\n")
                 
         except Exception as e:
-            print(f"필수 정보 확인 중 오류 발생: {e}")
+            import traceback
+            error_detail = f"필수 정보 확인 중 오류 발생: {str(e)}\n상세: {traceback.format_exc()}"
+            print(error_detail)
+            if hasattr(self, '_current_callback') and self._current_callback:
+                self._current_callback(f"📋 **3단계 오류:** {str(e)}\n\n")
             # 오류 시 모든 정보가 없다고 가정
             state["has_speed_info"] = False
             state["has_power_info"] = False
@@ -675,8 +700,18 @@ RATIO_INFO: NO
             # 처리 시작 알림
             callback("🚀 **기어 설계 요청 분석을 시작합니다...**\n\n")
             
+            print(f"그래프 실행 시작 - 입력: {input_text}")
+            print(f"초기 상태: {initial_state}")
+            
             # 그래프 실행
-            result = await asyncio.to_thread(self.graph.invoke, initial_state)
+            try:
+                result = await asyncio.to_thread(self.graph.invoke, initial_state)
+                print(f"그래프 실행 완료 - 결과: {result}")
+            except Exception as graph_error:
+                print(f"그래프 실행 중 오류: {graph_error}")
+                import traceback
+                print(f"그래프 실행 오류 상세: {traceback.format_exc()}")
+                raise graph_error
             
             # 결과 처리
             response_text = result["response"]
@@ -695,7 +730,9 @@ RATIO_INFO: NO
             return response_text
         
         except Exception as e:
-            error_msg = f"오류 발생: {str(e)}"
+            import traceback
+            error_msg = f"오류 발생: {str(e)}\n\n상세 오류:\n{traceback.format_exc()}"
+            print(f"gear_classifier_agent 오류: {error_msg}")  # 콘솔에 출력
             callback(error_msg)
             # 콜백 초기화
             self._current_callback = None
