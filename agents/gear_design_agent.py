@@ -190,7 +190,7 @@ class GearDesignAgent(BaseAgent):
     # ===========================================
     
     def _receive_gear_info_node(self, state: GearDesignState) -> GearDesignState:
-        """1단계: gear_classifier_agent로부터 기어 정보 수신 (현재는 사용자 입력에서 파싱)"""
+        """1단계: gear_classifier_agent로부터 기어 정보 수신"""
         try:
             # 진행 상황 저장
             self.progress_messages.append("📥 **1단계:** 기어 설계 정보 수신 중...")
@@ -198,9 +198,41 @@ class GearDesignAgent(BaseAgent):
             if self.callback:
                 self.callback("📥 **기어 정보 수신 중**\\n\\ngear_classifier_agent로부터 설계 정보를 받고 있습니다...")
             
-            # TODO: 실제로는 gear_classifier_agent의 state에서 정보를 받아야 함
-            # 현재는 사용자 입력에서 파싱하는 방식으로 구현
-            system_prompt = """
+            # gear_classifier_agent의 state를 파싱하여 정보 추출
+            user_input = state.get("user_input", "")
+            
+            try:
+                # JSON 형태로 전달된 classifier state 파싱 시도
+                classifier_data = json.loads(user_input)
+                
+                # gear_classifier_agent의 state에서 직접 정보 추출
+                if isinstance(classifier_data, dict):
+                    state["gear_type"] = classifier_data.get("gear_type", "")
+                    state["speed_info"] = classifier_data.get("speed_info", "")
+                    state["power_info"] = classifier_data.get("power_info", "") 
+                    state["ratio_info"] = classifier_data.get("ratio_info", "")
+                    state["others_info"] = classifier_data.get("others_info", "")
+                    state["gear_info_parsed"] = True
+                    
+                    self.progress_messages.append("✅ **1단계 완료:** gear_classifier_agent state에서 정보 수신 성공")
+                    
+                    if self.callback:
+                        summary = f"""
+📋 **수신된 기어 정보:**
+- **기어 타입:** {state.get('gear_type', '미지정')}
+- **속도 정보:** {state.get('speed_info', '미지정')}
+- **동력 정보:** {state.get('power_info', '미지정')}
+- **기어비 정보:** {state.get('ratio_info', '미지정')}
+- **기타 정보:** {state.get('others_info', '미지정')}
+"""
+                        self.callback(summary)
+                        
+                else:
+                    raise ValueError("Invalid classifier state format")
+                    
+            except (json.JSONDecodeError, ValueError):
+                # JSON 파싱 실패시 기존 방식으로 폴백 (사용자 입력에서 직접 파싱)
+                system_prompt = """
 사용자 입력에서 기어 설계에 필요한 정보를 추출하세요.
 다음 정보들을 JSON 형태로 반환하세요:
 
@@ -214,28 +246,28 @@ class GearDesignAgent(BaseAgent):
 
 정보가 없는 경우 해당 필드는 빈 문자열로 설정하세요.
 """
-            
-            prompt = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": state["user_input"]}
-            ]
-            
-            response = llm_call(prompt=prompt, model="gpt-4o-mini")
-            
-            # JSON 블록 제거
-            response = re.sub(r'```json\\s*|\\s*```', '', response).strip()
-            
-            gear_info = json.loads(response)
-            
-            # 상태 업데이트
-            state["gear_type"] = gear_info.get("gear_type", "")
-            state["speed_info"] = gear_info.get("speed_info", "")
-            state["power_info"] = gear_info.get("power_info", "")
-            state["ratio_info"] = gear_info.get("ratio_info", "")
-            state["others_info"] = gear_info.get("others_info", "")
-            state["gear_info_parsed"] = True
-            
-            self.progress_messages.append("✅ **1단계 완료:** 기어 정보 수신 성공")
+                
+                prompt = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_input}
+                ]
+                
+                response = llm_call(prompt=prompt, model="gpt-4o-mini")
+                
+                # JSON 블록 제거
+                response = re.sub(r'```json\\s*|\\s*```', '', response).strip()
+                
+                gear_info = json.loads(response)
+                
+                # 상태 업데이트
+                state["gear_type"] = gear_info.get("gear_type", "")
+                state["speed_info"] = gear_info.get("speed_info", "")
+                state["power_info"] = gear_info.get("power_info", "")
+                state["ratio_info"] = gear_info.get("ratio_info", "")
+                state["others_info"] = gear_info.get("others_info", "")
+                state["gear_info_parsed"] = True
+                
+                self.progress_messages.append("✅ **1단계 완료:** 사용자 입력에서 기어 정보 파싱 성공")
             
         except Exception as e:
             error_msg = f"기어 정보 수신 오류: {e}"

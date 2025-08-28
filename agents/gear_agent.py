@@ -365,7 +365,8 @@ class GearAgent(BaseAgent):
     async def _call_design_prep_mcp(self, classification_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """MCP를 통한 설계 준비 호출"""
         try:
-            # classification 결과를 design agent에 전달
+            # gear_classifier_agent의 state를 JSON으로 변환하여 전달
+            # gear_design_agent에서 파싱할 수 있도록 state 구조 그대로 전달
             prep_input = json.dumps(classification_result, ensure_ascii=False)
             
             # 제원 표시 단계까지만 실행하도록 설정
