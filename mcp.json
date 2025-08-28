@@ -1,9 +1,21 @@
 {
     "mcpServers": {
-      "GearDesign_agent": {
+      "gear_classifier": {
         "command": "D:\\SW\\Streamlit\\venv\\Scripts\\python.exe",
         "args": [
-          "D:\\SW\\Streamlit\\agents\\GearDesign_agent.py"
+          "D:\\SW\\Streamlit\\agents\\gear_classifier_agent.py"
+        ]
+      },
+      "gear_design": {
+        "command": "D:\\SW\\Streamlit\\venv\\Scripts\\python.exe",
+        "args": [
+          "D:\\SW\\Streamlit\\agents\\gear_design_agent.py"
+        ]
+      },
+      "gear_agent": {
+        "command": "D:\\SW\\Streamlit\\venv\\Scripts\\python.exe",
+        "args": [
+          "D:\\SW\\Streamlit\\agents\\gear_agent.py"
         ]
       }
     }

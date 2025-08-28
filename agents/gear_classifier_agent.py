@@ -564,7 +564,7 @@ others_info: 정보 없음
 ⚡ **파워/토크 정보**: {power_info}\r\n
 ⚙️ **기어비/잇수 정보**: {ratio_info}\r\n{others_display}
 
-🔧 **다음 단계**: 기어 설계 수행을 시작하겠습니다..."""
+🔧 **다음 단계**: 기어 설계를 시작할 수 있습니다!"""
         
         # 기어 설계 수행을 위한 플래그 설정
         state["proceed_to_design"] = True
