@@ -350,11 +350,11 @@ GEAR_PAIR, THREE_GEAR, SIMPLE_PLANETARY, DOUBLE_PINION_PLANETARY, UNKNOWN
 
 아래 규칙에 따라 답변포멧 형식으로만 응답하세요:
  - 규칙1. has_speed, has_power, has_ratio는 YES or NO로 답변한다.
- - 규칙3. SPEED_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 속도 [단위], GEAR2: 속도 [단위], ... 
- - 규칙4. POWER_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 출력or토크 [단위], GEAR2: 출력or토크 [단위], ... 
- - 규칙5. RATIO_INFO는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> 기어비: 3, 또는 Z1: 잇수, Z2: 잇수, ...
- - 규칙6. OTHERS_INFO는 추가 기어 정보가 있는 경우 JSON dict 형태로 기입한다. -> {"module": "2.5mm", "face_width": "25mm", "material": "SCM420"}
- - 규칙7. 모든 INFO는 답변이 NO 인 경우 괄호()안에 상세 이유를 기입한다.
+ - 규칙3. speed_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 속도 [단위], GEAR2: 속도 [단위], ... 
+ - 규칙4. power_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> GEAR1: 출력or토크 [단위], GEAR2: 출력or토크 [단위], ... 
+ - 규칙5. ratio_info는 답변이 YES인 경우 다음의 형식으로 상세 정보를 기입한다. -> 기어비: 3, 또는 Z1: 잇수, Z2: 잇수, ...
+ - 규칙6. others_info는 추가 기어 정보가 있는 경우 JSON dict 형태로 기입한다. -> {{"module": "2.5mm", "face_width": "25mm", "material": "SCM420"}}
+ - 규칙7. speed_info, power_info, ratio_info는 답변이 NO 인 경우 그 상세 이유를 기입한다.
 
 ## 답변포멧 (총 7개)
 has_speed: YES or NO 
@@ -363,7 +363,7 @@ has_power: YES or NO
 power_info: 규칙에 의거한 상세 정보
 has_ratio: YES or NO 
 ratio_info: 규칙에 의거한 상세 정보
-others_info: 추가 기어 정보 JSON dict (없으면 빈 dict {})
+others_info: 추가 기어 정보 JSON dict (없으면 빈 dict {{}})
 
 ## 응답 예시:
 사용자 입력: "100W에서 기어비 3:1로 기어쌍 설계해주세요"
@@ -374,7 +374,7 @@ has_power: NO
 power_info: 파워 전달 기어명칭 정보 누락
 has_ratio: YES 
 ratio_info: 기어비: 3
-others_info: {}
+others_info: {{}}
 
 사용자 입력: "속도 200 rpm, 토크 100 Nm, 기어비 3으로 설계해주세요"
 응답: 
@@ -384,6 +384,7 @@ has_power: NO
 power_info: 토크 전달 기어명칭 정보 누락
 has_ratio: YES 
 ratio_info: 기어비: 3
+others_info: {{}}
 
 사용자 입력: "출력속도 200 rpm, 기어 잇수 23:41로 기어쌍 설계해주세요"
 응답: 
@@ -393,6 +394,7 @@ has_power: NO
 power_info: 파워 정보 누락
 has_ratio: YES 
 ratio_info: Z1: 23, Z2: 41
+others_info: {{}}
 
 사용자 입력: "입력파워 100kW, 입력속도 1000 rpm, 기어비 3:1로 기어쌍 설계해주세요"
 응답: 
@@ -402,7 +404,7 @@ has_power: YES
 power_info: GEAR1: 100 [kW]
 has_ratio: YES 
 ratio_info: 기어비: 3
-others_info: {}
+others_info: {{}}
 
 사용자 입력: "입력파워 50kW, 출력속도 500rpm, 기어비 4:1, 모듈 2.5mm, SCM420 재료로 기어쌍 설계"
 응답:
@@ -412,7 +414,7 @@ has_power: YES
 power_info: GEAR1: 50 [kW]
 has_ratio: YES 
 ratio_info: 기어비: 4
-others_info: {"module": "2.5mm", "material": "SCM420"}
+others_info: {{"module": "2.5mm", "material": "SCM420"}}
 
 사용자 입력: "기어쌍 설계 부탁드립니다"
 응답:
@@ -422,7 +424,7 @@ has_power: NO
 power_info: 파워 정보 누락
 has_ratio: NO 
 ratio_info: 기어비 정보 누락
-others_info: {}
+others_info: {{}}
 
 """
 
