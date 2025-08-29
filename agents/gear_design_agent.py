@@ -1197,10 +1197,10 @@ JSON만 반환하고 설명은 제외하세요."""
                 if result['score'] >= 70:  # 높은 점수만
                     all_paths.add(result['path'])
             
-            # 값 검색도 수행 (필요한 경우)
+            # 값 검색도 수행 (description이 있는 것만 추가)
             value_results = searcher.search_value(keyword, threshold=80)
             for result in value_results:
-                if result['score'] >= 80:
+                if result['score'] >= 80 and 'description' in result:
                     all_paths.add(result['path'])
         
         return list(all_paths)
