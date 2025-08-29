@@ -1187,14 +1187,14 @@ JSON만 반환하고 설명은 제외하세요."""
         return list(set(keywords))
     
     def find_relevant_json_paths(self, searcher: JSONPathSearcher, keywords: List[str]) -> List[str]:
-        """키워드들을 바탕으로 관련 JSON 경로들 찾기"""
+        """키워드들을 바탕으로 관련 JSON 경로들 찾기 (description이 있는 키만)"""
         all_paths = set()
         
         for keyword in keywords:
             # 키 검색만 수행
             key_results = searcher.search(keyword, threshold=60)
             for result in key_results:
-                if result['score'] >= 70:  # 높은 점수만
+                if result['score'] >= 70 and 'description' in result:  # 높은 점수이면서 description이 있는 것만
                     all_paths.add(result['path'])
         
         return list(all_paths)
