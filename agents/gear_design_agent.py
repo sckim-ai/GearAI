@@ -1148,43 +1148,60 @@ JSON만 반환하고 설명은 제외하세요."""
             raise e
     
     def extract_search_keywords(self, user_requirements: str) -> List[str]:
-        """사용자 요구사항에서 JSON 검색에 사용할 키워드들 추출"""
-        keywords = []
+        """LLM을 사용하여 사용자 요구사항에서 JSON 검색 키워드들 추출"""
         
-        # 기본 기어 용어 키워드
-        gear_keywords = {
-            "기어": ["gear", "GearTypeNum"],
-            "잇수": ["z1", "z2", "teeth"],
-            "모듈": ["module", "Normal Module"],
-            "압력각": ["pressure", "angle"],
-            "치폭": ["b1", "b2", "face", "width"],
-            "속도": ["speed", "rpm", "Speed1"],
-            "파워": ["power", "Power1", "kW"],
-            "토크": ["torque", "Torque1", "N.m"],
-            "기어비": ["ratio", "z1", "z2"],
-            "하중": ["load", "spectrum", "Load spectrum"],
-            "중심거리": ["center", "distance", "CDMethod"]
-        }
-        
-        # 요구사항 텍스트 분석
-        req_lower = user_requirements.lower()
-        
-        for korean_term, eng_keywords in gear_keywords.items():
-            if korean_term in req_lower:
-                keywords.extend(eng_keywords)
-        
-        # 숫자가 포함된 키워드도 추출 (모듈 3.0, 잇수 25 등)
-        import re
-        number_patterns = re.findall(r'([가-힣]+)\s*([0-9.]+)', user_requirements)
-        for term, number in number_patterns:
-            if term in gear_keywords:
-                keywords.extend(gear_keywords[term])
-        
-        # 기본 필수 키워드 추가
-        keywords.extend(["Basic Data", "Rating", "Load spectrum", "GearTypeNum", "CDMethod"])
-        
-        # 중복 제거
-        return list(set(keywords))
+        system_prompt = """당신은 기어 설계 전문가입니다. 사용자의 요구사항을 분석해서 JSON 설정에서 검색해야 할 영어 키워드들을 추출해주세요.
+
+**기어 설계 JSON 주요 키워드들:**
+- 기어 타입: GearTypeNum, gear, type
+- 잇수: z1, z2, teeth
+- 모듈: module, Normal Module
+- 압력각: pressure, angle
+- 치폭: b1, b2, face, width
+- 속도: speed, rpm, Speed1, Speed2
+- 파워: power, Power1, Power2, kW
+- 토크: torque, Torque1, Torque2
+- 기어비: ratio
+- 하중: load, spectrum, Load spectrum
+- 중심거리: center, distance, CDMethod
+- 기본 데이터: Basic Data
+- 평가: Rating
+
+사용자 요구사항에서 관련된 영어 키워드들을 JSON 배열로 반환하세요. 너무 많지 않게 핵심적인 키워드들만 추출하세요."""
+
+        user_prompt = f"""**사용자 요구사항:**
+{user_requirements}
+
+위 요구사항과 관련된 JSON 검색 키워드들을 추출해서 JSON 배열로만 반환하세요.
+예시: ["z1", "z2", "module", "Basic Data"]"""
+
+        try:
+            # LLM 호출
+            response = llm_call(
+                prompt=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model=self.model_name
+            )
+            
+            # JSON 파싱
+            json_text = re.sub(r'```json\s*|\s*```', '', response).strip()
+            keywords = json.loads(json_text)
+            
+            # 기본 필수 키워드 추가
+            essential_keywords = ["Basic Data", "Rating", "GearTypeNum", "CDMethod"]
+            keywords.extend(essential_keywords)
+            
+            # 중복 제거 후 반환
+            return list(set(keywords))
+            
+        except Exception as e:
+            print(f"LLM 키워드 추출 실패: {e}")
+            # 폴백: 기본 키워드들 반환
+            return ["Basic Data", "Rating", "z1", "z2", "module", "Normal Module", 
+                   "pressure", "angle", "b1", "b2", "speed", "power", "torque", 
+                   "GearTypeNum", "CDMethod", "Load spectrum"]
     
     def find_relevant_json_paths(self, searcher: JSONPathSearcher, keywords: List[str]) -> List[str]:
         """키워드들을 바탕으로 관련 JSON 경로들 찾기 (description이 있는 키만)"""

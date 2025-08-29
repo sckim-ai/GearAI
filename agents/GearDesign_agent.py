@@ -156,6 +156,7 @@ if __name__ == "__main__":
     jgeo = calc_geometry(jgear)
     print("---- 종료 ----")
     print(jgear)
+    print(jgeo)
     mcp.run()
 
 
