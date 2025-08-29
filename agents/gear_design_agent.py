@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from agents.base_agent import BaseAgent
 from gear_design_manager import GearDesignManager
 from utils.llm import llm_call
+from SmartJsonSearch import JSONPathSearcher
 
 # LangGraph 관련 imports
 from langgraph.graph import StateGraph, END
@@ -75,7 +76,7 @@ class GearDesignAgent(BaseAgent):
         # 경로 설정
         self.gear_design_path = config.get(
             'gear_design_path', 
-            r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
+            r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
         )
         self.template_json_path = config.get(
             'template_json_path',
@@ -288,7 +289,7 @@ class GearDesignAgent(BaseAgent):
         return state
     
     def _modify_initial_config_node(self, state: GearDesignState) -> GearDesignState:
-        """1.5단계: 초기 JSON 설정 수정 및 템플릿 로드"""
+        """1.5단계: LLM 기반 초기 JSON 설정 수정 및 템플릿 로드"""
         try:
             # 진행 상황 저장
             self.progress_messages.append("⚙️ **1.5단계:** 초기 설정 수정 중...")
@@ -307,8 +308,8 @@ class GearDesignAgent(BaseAgent):
             
             state["template_config"] = template_config
             
-            # 기어 정보를 바탕으로 JSON 설정 수정
-            modified_config = self.modify_config_from_gear_info(state)
+            # LLM 기반 JSON 설정 수정 (validation 루프 포함)
+            modified_config = self.modify_config_with_llm(state)
             state["modified_config"] = modified_config
             state["config_modified"] = True
             
@@ -604,9 +605,9 @@ class GearDesignAgent(BaseAgent):
             # 기존 정보 업데이트
             self._apply_user_modifications(state, modifications)
             
-            # 수정된 제원 요약 재생성 (설정도 다시 수정)
+            # LLM 기반 설정 재수정 (validation 루프 포함)
             if state.get("modified_config"):
-                modified_config = self.modify_config_from_gear_info(state)
+                modified_config = self.modify_config_with_llm(state)
                 state["modified_config"] = modified_config
             
             updated_specs = self._generate_gear_specs_summary_from_config(state)
@@ -719,8 +720,8 @@ class GearDesignAgent(BaseAgent):
             if self.callback:
                 self.callback("🔧 **설계 파라미터 설정 중**\\n\\n기어 정보를 바탕으로 JSON 설정을 수정하고 있습니다...")
             
-            # JSON 설정 수정
-            modified_config = self.modify_config_from_gear_info(state)
+            # LLM 기반 JSON 설정 수정 (validation 루프 포함)
+            modified_config = self.modify_config_with_llm(state)
             
             state["modified_config"] = modified_config
             state["config_modified"] = True
@@ -988,8 +989,167 @@ class GearDesignAgent(BaseAgent):
     # 기존 헬퍼 메서드들 (상태 기반으로 수정)
     # ===========================================
     
-    def modify_config_from_gear_info(self, state: GearDesignState) -> Dict[str, Any]:
-        """기어 정보를 바탕으로 JSON 설정을 수정"""
+    def modify_config_with_llm(self, state: GearDesignState) -> Dict[str, Any]:
+        """LLM과 SmartJsonSearch를 사용하여 JSON 설정을 수정 (validation 루프 포함)"""
+        template_config = state["template_config"].copy()
+        max_attempts = 3
+        
+        try:
+            # SmartJsonSearch 초기화
+            searcher = JSONPathSearcher(json_data=template_config)
+            
+            # 사용자 요구사항 수집
+            user_requirements = self.collect_user_requirements(state)
+            
+            for attempt in range(max_attempts):
+                try:
+                    # LLM에게 JSON 수정 요청
+                    modified_config = self.llm_modify_json_config(
+                        template_config, user_requirements, searcher, attempt
+                    )
+                    
+                    # Validation 수행
+                    if self.validate_config_with_manager(modified_config):
+                        return modified_config
+                    else:
+                        print(f"Validation 실패 (시도 {attempt + 1}/{max_attempts})")
+                        if attempt < max_attempts - 1:
+                            # 다음 시도를 위해 validation 오류 정보 추가
+                            user_requirements += "\n\n[이전 시도에서 validation 실패함. 더 보수적으로 수정 필요]"
+                        
+                except Exception as e:
+                    print(f"JSON 수정 시도 {attempt + 1} 실패: {e}")
+                    if attempt == max_attempts - 1:
+                        raise e
+            
+            # 모든 시도 실패 시 기본값 반환
+            print("모든 LLM 수정 시도 실패, 기본 수정 방식 사용")
+            return self.modify_config_from_gear_info_fallback(state)
+            
+        except Exception as e:
+            print(f"LLM 기반 설정 수정 오류: {e}")
+            return self.modify_config_from_gear_info_fallback(state)
+    
+    def collect_user_requirements(self, state: GearDesignState) -> str:
+        """상태에서 사용자 요구사항을 수집하여 문자열로 변환"""
+        requirements = []
+        
+        # 기어 타입
+        gear_type = state.get("gear_type", "")
+        if gear_type:
+            gear_type_names = {
+                "gear_pair": "기어 쌍 (2개 기어)",
+                "three_gear": "3단 기어 (3개 기어)",
+                "simple_planetary": "단순 유성기어",
+                "double_pinion_planetary": "이중 피니언 유성기어"
+            }
+            gear_name = gear_type_names.get(gear_type, gear_type)
+            requirements.append(f"기어 타입: {gear_name}")
+        
+        # 속도 정보
+        speed_info = state.get("speed_info", "")
+        if speed_info:
+            requirements.append(f"속도 조건: {speed_info}")
+        
+        # 파워/토크 정보
+        power_info = state.get("power_info", "")
+        if power_info:
+            requirements.append(f"파워/토크 조건: {power_info}")
+        
+        # 기어비/잇수 정보
+        ratio_info = state.get("ratio_info", "")
+        if ratio_info:
+            requirements.append(f"기어비/잇수 조건: {ratio_info}")
+        
+        # 추가 정보 (모듈, 치폭, 압력각 등)
+        others_info = state.get("others_info", "")
+        if others_info:
+            requirements.append(f"추가 설계 조건: {others_info}")
+        
+        # 사용자 수정 요청 (있는 경우)
+        user_feedback = state.get("user_feedback", "")
+        if user_feedback:
+            requirements.append(f"사용자 수정 요청: {user_feedback}")
+        
+        return "\n".join(requirements) if requirements else "기본 설정 사용"
+    
+    def llm_modify_json_config(self, template_config: Dict[str, Any], user_requirements: str, 
+                              searcher: JSONPathSearcher, attempt: int) -> Dict[str, Any]:
+        """LLM을 사용하여 JSON 설정을 수정"""
+        
+        # LLM 프롬프트 구성
+        system_prompt = f"""당신은 기어 설계 전문가입니다. 사용자의 요구사항에 따라 JSON 설정을 수정해야 합니다.
+
+**주요 JSON 구조:**
+1. Basic Data: 기본 기어 설정 (기어 타입, 잇수, 모듈, 압력각, 치폭 등)
+2. Rating: 하중 스펙트럼 (Load spectrum) - 속도, 파워, 토크 정보
+
+**수정 가이드라인:**
+1. 기어 타입: GearTypeNum (0=기어쌍, 1=3단기어, 2=단순유성, 3=이중피니언)
+2. 잇수: z1, z2 (정수값, 문자열로 저장)
+3. 모듈: Normal Module (실수값, 문자열로 저장)
+4. 압력각: Pressure angle (도 단위, 문자열로 저장)
+5. 치폭: b1, b2 (mm 단위, 문자열로 저장)
+6. 중심거리: CDMethod=1로 설정 (자동계산)
+7. Load spectrum: JSON 문자열 형태로 속도/파워/토크 정보 저장
+
+**중요 주의사항:**
+- 모든 숫자값은 문자열로 저장
+- Load spectrum은 JSON 배열 문자열 형태
+- 기존 구조를 최대한 유지하며 필요한 값만 수정
+- 시도 {attempt + 1}번째: {"보수적으로 수정" if attempt > 0 else "정확하게 수정"}
+
+다음 JSON을 사용자 요구사항에 맞게 수정하여 완전한 JSON을 반환하세요."""
+
+        user_prompt = f"""**사용자 요구사항:**
+{user_requirements}
+
+**수정할 JSON 템플릿:**
+{json.dumps(template_config, ensure_ascii=False, indent=2)}
+
+위 요구사항에 맞게 JSON을 수정하여 완전한 JSON만 반환하세요. 설명은 제외하고 JSON만 반환하세요."""
+
+        try:
+            # LLM 호출
+            response = llm_call(
+                prompt=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model=self.model_name
+            )
+            
+            # JSON 파싱
+            # ```json과 ``` 제거
+            json_text = re.sub(r'```json\s*|\s*```', '', response).strip()
+            modified_config = json.loads(json_text)
+            
+            return modified_config
+            
+        except json.JSONDecodeError as e:
+            print(f"LLM 응답 JSON 파싱 오류: {e}")
+            print(f"LLM 응답: {response[:500]}...")
+            raise e
+        except Exception as e:
+            print(f"LLM 호출 오류: {e}")
+            raise e
+    
+    def validate_config_with_manager(self, config: Dict[str, Any]) -> bool:
+        """GearDesignManager를 사용하여 설정 유효성 검증"""
+        try:
+            if self.manager is None:
+                print("GearDesignManager가 초기화되지 않음")
+                return False
+            
+            # 임시로 설정 로드 및 검증 시도
+            return self.manager.load_and_validate_config(config)
+            
+        except Exception as e:
+            print(f"설정 검증 오류: {e}")
+            return False
+    
+    def modify_config_from_gear_info_fallback(self, state: GearDesignState) -> Dict[str, Any]:
+        """기존 수동 방식의 폴백 메서드"""
         modified_config = state["template_config"].copy()
         
         try:
@@ -1027,7 +1187,7 @@ class GearDesignAgent(BaseAgent):
             return modified_config
             
         except Exception as e:
-            print(f"설정 수정 오류: {e}")
+            print(f"폴백 설정 수정 오류: {e}")
             return state["template_config"]
     
     def apply_ratio_info(self, config: Dict[str, Any], ratio_info: str, gear_type: str):

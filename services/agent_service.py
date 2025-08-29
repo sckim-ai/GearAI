@@ -47,7 +47,7 @@ class AgentService:
         gear_design_config = {
             "model": "gpt-5-mini",
             "temperature": 0.0,
-            "gear_design_path": r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
+            "gear_design_path": r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
             "template_json_path": str(os.path.join(project_root, "TestGD.GD1"))
         }
         self.register_agent("Gear Design", GearDesignAgent(gear_design_config))
@@ -56,7 +56,7 @@ class AgentService:
         gear_agent_config = {
             "model": "gpt-5-mini",
             "temperature": 0.0,
-            "gear_design_path": r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
+            "gear_design_path": r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
             "template_json_path": str(os.path.join(project_root, "TestGD.GD1"))
         }
         self.register_agent("Gear Agent", GearAgent(gear_agent_config)) 
