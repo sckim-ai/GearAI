@@ -1075,39 +1075,50 @@ class GearDesignAgent(BaseAgent):
     
     def llm_modify_json_config(self, template_config: Dict[str, Any], user_requirements: str, 
                               searcher: JSONPathSearcher, attempt: int) -> Dict[str, Any]:
-        """LLM을 사용하여 JSON 설정을 수정"""
+        """LLM과 SmartJsonSearch를 활용하여 JSON 설정을 수정"""
+        
+        # 1. 사용자 요구사항에서 관련 키워드 추출
+        search_keywords = self.extract_search_keywords(user_requirements)
+        
+        # 2. SmartJsonSearch로 관련 경로들 찾기
+        relevant_paths = self.find_relevant_json_paths(searcher, search_keywords)
+        
+        # 3. 관련 경로의 현재 값들 가져오기
+        current_values = self.get_current_values_for_paths(searcher, relevant_paths)
         
         # LLM 프롬프트 구성
-        system_prompt = f"""당신은 기어 설계 전문가입니다. 사용자의 요구사항에 따라 JSON 설정을 수정해야 합니다.
+        system_prompt = f"""당신은 기어 설계 전문가입니다. 사용자의 요구사항에 따라 JSON 설정의 특정 경로 값들을 수정해야 합니다.
 
-**주요 JSON 구조:**
-1. Basic Data: 기본 기어 설정 (기어 타입, 잇수, 모듈, 압력각, 치폭 등)
-2. Rating: 하중 스펙트럼 (Load spectrum) - 속도, 파워, 토크 정보
-
-**수정 가이드라인:**
-1. 기어 타입: GearTypeNum (0=기어쌍, 1=3단기어, 2=단순유성, 3=이중피니언)
-2. 잇수: z1, z2 (정수값, 문자열로 저장)
-3. 모듈: Normal Module (실수값, 문자열로 저장)
-4. 압력각: Pressure angle (도 단위, 문자열로 저장)
-5. 치폭: b1, b2 (mm 단위, 문자열로 저장)
-6. 중심거리: CDMethod=1로 설정 (자동계산)
-7. Load spectrum: JSON 문자열 형태로 속도/파워/토크 정보 저장
+**JSON 경로 수정 가이드라인:**
+1. 기어 타입: Basic Data.GearTypeNum (0=기어쌍, 1=3단기어, 2=단순유성, 3=이중피니언)
+2. 잇수: Basic Data.z1, Basic Data.z2 (정수값, 문자열로 저장)
+3. 모듈: Basic Data.Normal Module (실수값, 문자열로 저장)
+4. 압력각: Basic Data.Pressure angle (도 단위, 문자열로 저장)
+5. 치폭: Basic Data.b1, Basic Data.b2 (mm 단위, 문자열로 저장)
+6. 중심거리: Basic Data.CDMethod=1로 설정 (자동계산)
+7. 하중조건: Rating.Load spectrum (JSON 문자열 배열 형태)
 
 **중요 주의사항:**
-- 모든 숫자값은 문자열로 저장
-- Load spectrum은 JSON 배열 문자열 형태
-- 기존 구조를 최대한 유지하며 필요한 값만 수정
-- 시도 {attempt + 1}번째: {"보수적으로 수정" if attempt > 0 else "정확하게 수정"}
+- 모든 숫자값은 문자열로 저장해야 함
+- Load spectrum은 JSON 배열을 문자열로 변환한 형태
+- 시도 {attempt + 1}번째: {"기본값에 가깝게 보수적으로" if attempt > 0 else "사용자 요구에 정확히"}
 
-다음 JSON을 사용자 요구사항에 맞게 수정하여 완전한 JSON을 반환하세요."""
+아래 현재 값들을 사용자 요구사항에 맞게 수정하여 JSON 형태로 반환하세요."""
 
         user_prompt = f"""**사용자 요구사항:**
 {user_requirements}
 
-**수정할 JSON 템플릿:**
-{json.dumps(template_config, ensure_ascii=False, indent=2)}
+**현재 관련 설정 값들:**
+{json.dumps(current_values, ensure_ascii=False, indent=2)}
 
-위 요구사항에 맞게 JSON을 수정하여 완전한 JSON만 반환하세요. 설명은 제외하고 JSON만 반환하세요."""
+위 설정들을 사용자 요구사항에 맞게 수정한 후, 다음 형태로 반환하세요:
+{{
+  "path1": "새로운값1",
+  "path2": "새로운값2",
+  ...
+}}
+
+JSON만 반환하고 설명은 제외하세요."""
 
         try:
             # LLM 호출
@@ -1120,9 +1131,11 @@ class GearDesignAgent(BaseAgent):
             )
             
             # JSON 파싱
-            # ```json과 ``` 제거
             json_text = re.sub(r'```json\s*|\s*```', '', response).strip()
-            modified_config = json.loads(json_text)
+            path_updates = json.loads(json_text)
+            
+            # 4. 원본 config에 업데이트 적용
+            modified_config = self.apply_path_updates(template_config, path_updates)
             
             return modified_config
             
@@ -1132,6 +1145,139 @@ class GearDesignAgent(BaseAgent):
             raise e
         except Exception as e:
             print(f"LLM 호출 오류: {e}")
+            raise e
+    
+    def extract_search_keywords(self, user_requirements: str) -> List[str]:
+        """사용자 요구사항에서 JSON 검색에 사용할 키워드들 추출"""
+        keywords = []
+        
+        # 기본 기어 용어 키워드
+        gear_keywords = {
+            "기어": ["gear", "GearTypeNum"],
+            "잇수": ["z1", "z2", "teeth"],
+            "모듈": ["module", "Normal Module"],
+            "압력각": ["pressure", "angle"],
+            "치폭": ["b1", "b2", "face", "width"],
+            "속도": ["speed", "rpm", "Speed1"],
+            "파워": ["power", "Power1", "kW"],
+            "토크": ["torque", "Torque1", "N.m"],
+            "기어비": ["ratio", "z1", "z2"],
+            "하중": ["load", "spectrum", "Load spectrum"],
+            "중심거리": ["center", "distance", "CDMethod"]
+        }
+        
+        # 요구사항 텍스트 분석
+        req_lower = user_requirements.lower()
+        
+        for korean_term, eng_keywords in gear_keywords.items():
+            if korean_term in req_lower:
+                keywords.extend(eng_keywords)
+        
+        # 숫자가 포함된 키워드도 추출 (모듈 3.0, 잇수 25 등)
+        import re
+        number_patterns = re.findall(r'([가-힣]+)\s*([0-9.]+)', user_requirements)
+        for term, number in number_patterns:
+            if term in gear_keywords:
+                keywords.extend(gear_keywords[term])
+        
+        # 기본 필수 키워드 추가
+        keywords.extend(["Basic Data", "Rating", "Load spectrum", "GearTypeNum", "CDMethod"])
+        
+        # 중복 제거
+        return list(set(keywords))
+    
+    def find_relevant_json_paths(self, searcher: JSONPathSearcher, keywords: List[str]) -> List[str]:
+        """키워드들을 바탕으로 관련 JSON 경로들 찾기"""
+        all_paths = set()
+        
+        for keyword in keywords:
+            # 키 검색
+            key_results = searcher.search(keyword, threshold=60)
+            for result in key_results:
+                if result['score'] >= 70:  # 높은 점수만
+                    all_paths.add(result['path'])
+            
+            # 값 검색도 수행 (필요한 경우)
+            value_results = searcher.search_value(keyword, threshold=80)
+            for result in value_results:
+                if result['score'] >= 80:
+                    all_paths.add(result['path'])
+        
+        return list(all_paths)
+    
+    def get_current_values_for_paths(self, searcher: JSONPathSearcher, paths: List[str]) -> Dict[str, Any]:
+        """경로들에 대한 현재 값들과 설명 가져오기"""
+        current_values = {}
+        
+        for path in paths:
+            try:
+                value = searcher.get_value_by_path(path)
+                if value is not None:
+                    current_values[path] = {
+                        "current_value": value,
+                        "type": type(value).__name__
+                    }
+                    
+                    # 설명도 함께 검색
+                    path_parts = path.split('.')
+                    if len(path_parts) >= 2:
+                        # 마지막 키에 대한 설명 키 찾기
+                        last_key = path_parts[-1]
+                        parent_path = '.'.join(path_parts[:-1])
+                        desc_path = f"{parent_path}.${last_key}"
+                        description = searcher.get_value_by_path(desc_path)
+                        if description:
+                            current_values[path]["description"] = description
+                            
+            except Exception as e:
+                print(f"경로 {path}에서 값 가져오기 실패: {e}")
+        
+        return current_values
+    
+    def apply_path_updates(self, original_config: Dict[str, Any], path_updates: Dict[str, Any]) -> Dict[str, Any]:
+        """경로 기반 업데이트를 원본 config에 적용"""
+        import copy
+        modified_config = copy.deepcopy(original_config)
+        
+        for path, new_value in path_updates.items():
+            try:
+                self.set_value_by_path(modified_config, path, new_value)
+            except Exception as e:
+                print(f"경로 {path}에 값 {new_value} 설정 실패: {e}")
+        
+        return modified_config
+    
+    def set_value_by_path(self, config: Dict[str, Any], path: str, value: Any):
+        """경로를 통해 config에 값 설정"""
+        try:
+            import re
+            
+            # 경로를 파싱 (점과 대괄호 처리)
+            parts = re.split(r'\.|\[|\]', path)
+            parts = [p for p in parts if p]  # 빈 문자열 제거
+            
+            current = config
+            
+            # 마지막 키를 제외하고 경로 따라가기
+            for part in parts[:-1]:
+                if part.isdigit():
+                    # 숫자인 경우 리스트 인덱스로 처리
+                    current = current[int(part)]
+                else:
+                    # 문자열인 경우 딕셔너리 키로 처리
+                    if part not in current:
+                        current[part] = {}
+                    current = current[part]
+            
+            # 마지막 키에 값 설정
+            last_key = parts[-1]
+            if last_key.isdigit():
+                current[int(last_key)] = value
+            else:
+                current[last_key] = value
+                
+        except Exception as e:
+            print(f"경로 {path}에 값 설정 중 오류: {e}")
             raise e
     
     def validate_config_with_manager(self, config: Dict[str, Any]) -> bool:
