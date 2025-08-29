@@ -1167,7 +1167,7 @@ JSON만 반환하고 설명은 제외하세요."""
 - 기본 데이터: Basic Data
 - 평가: Rating
 
-사용자 요구사항에서 관련된 영어 키워드들을 JSON 배열로 반환하세요. 너무 많지 않게 핵심적인 키워드들만 추출하세요."""
+사용자 요구사항에서 관련된 영어 키워드들을 JSON 배열로 반환하세요. 모든 사용자 요구사항이 반영되도록 키워드들 **모두** 추출하세요."""
 
         user_prompt = f"""**사용자 요구사항:**
 {user_requirements}
@@ -1198,10 +1198,8 @@ JSON만 반환하고 설명은 제외하세요."""
             
         except Exception as e:
             print(f"LLM 키워드 추출 실패: {e}")
-            # 폴백: 기본 키워드들 반환
-            return ["Basic Data", "Rating", "z1", "z2", "module", "Normal Module", 
-                   "pressure", "angle", "b1", "b2", "speed", "power", "torque", 
-                   "GearTypeNum", "CDMethod", "Load spectrum"]
+            # 폴백: 반환 X
+            return []
     
     def find_relevant_json_paths(self, searcher: JSONPathSearcher, keywords: List[str]) -> List[str]:
         """키워드들을 바탕으로 관련 JSON 경로들 찾기 (description이 있는 키만)"""
