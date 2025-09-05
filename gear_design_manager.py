@@ -180,6 +180,16 @@ class GearDesignManager:
         """기어 물림 이미지 추출. 성공 시 true 반환"""
         issuccess = self.form.SaveGearImage(path)
         return issuccess
+    
+    def get_gear3Dimage(self, path: str) -> bool:
+        """기어 3D 이미지 추출. 성공 시 true 반환"""
+        issuccess = self.form.Save3DGearImage(path, 800, 600)
+        return issuccess
+    
+    def get_gear3DModeling(self, path: str) -> bool:
+        """기어 3D 모델링 추출. 성공 시 true 반환"""
+        issuccess = self.form.Save3DGearModeling(path)
+        return issuccess
         
     def create_simple_sizing_input(self) -> Any:
         """빈 SimpleSizingInput 객체 생성 (설정은 외부에서 수행)"""

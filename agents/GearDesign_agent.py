@@ -1,5 +1,6 @@
 import time
 import functools
+import asyncio
 
 def time_it(description):
     def decorator(func):
@@ -151,12 +152,7 @@ def clear_messages() -> dict:
     return {"message": "메시지가 초기화되었습니다."}
 
 if __name__ == "__main__":
-    print("---- 시작 ----")
-    jgear = edit_gear_data("모듈 3으로 바꿔줘")
-    jgeo = calc_geometry(jgear)
-    print("---- 종료 ----")
-    print(jgear)
-    print(jgeo)
-    mcp.run()
+    print("Starting MCP server...")
+    asyncio.run(mcp.run())
 
 
