@@ -295,7 +295,8 @@ class JSONPathSearcher:
                                        include_descriptions, required_descriptions or [])
         
         # 필수 설명 필터링
-        if required_descriptions:
+        # include_descriptions=True이고 required_descriptions가 있을 때만 필터링 적용
+        if required_descriptions and include_descriptions:
             filtered_results = []
             for result in results:
                 # 설명이 있는 경우에만 필터링 적용
@@ -304,8 +305,6 @@ class JSONPathSearcher:
                     # 필수 키워드가 설명에 포함되어 있는지 확인
                     if any(req_desc.lower() in description_lower for req_desc in required_descriptions):
                         filtered_results.append(result)
-                elif not required_descriptions:  # 필수 설명이 없고 설명도 없으면 통과
-                    filtered_results.append(result)
             results = filtered_results
         
         # 점수 순으로 정렬
@@ -329,13 +328,12 @@ class JSONPathSearcher:
             required_descriptions: 필수 포함 설명 키워드 목록
         """
         if isinstance(obj, dict):
-            # 설명 키($키) 수집
+            # 설명 키($키) 항상 수집 (결과에 포함하기 위해)
             description_map = {}
-            if include_descriptions:
-                for key, value in obj.items():
-                    if key.startswith('$') and isinstance(value, str):
-                        original_key = key[1:]  # $ 제거
-                        description_map[original_key] = value
+            for key, value in obj.items():
+                if key.startswith('$') and isinstance(value, str):
+                    original_key = key[1:]  # $ 제거
+                    description_map[original_key] = value
             
             for key, value in obj.items():
                 # 설명 키($로 시작)는 키 매칭에서 제외하지만, 내용 검색은 별도 처리
