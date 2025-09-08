@@ -272,6 +272,170 @@ class JSONPathSearcher:
             'values': self.search_value(query, threshold)
         }
     
+    def search_advanced(self, query: str, threshold: float = 70.0, 
+                       include_descriptions: bool = True, 
+                       required_keys: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        고급 검색: 설명 내용도 포함하고, 필수 키 필터링 기능
+        
+        Args:
+            query: 검색할 문자열
+            threshold: 유사도 임계값 (0-100, 기본값 70)
+            include_descriptions: 설명($키)의 내용도 검색에 포함할지 여부
+            required_keys: 검색 결과에 반드시 포함되어야 할 키 목록
+        
+        Returns:
+            매칭된 결과 리스트 [{"path": "경로", "value": "값", "description": "설명", "score": 점수}, ...]
+        """
+        results = []
+        query_lower = query.lower()
+        
+        # 재귀적으로 JSON 탐색 (고급 버전)
+        self._search_advanced_recursive(self.data, query_lower, "", results, threshold, 
+                                       include_descriptions, required_keys or [])
+        
+        # 필수 키 필터링
+        if required_keys:
+            filtered_results = []
+            for result in results:
+                path_parts = result['path'].lower().split('.')
+                # 필수 키가 경로에 포함되어 있는지 확인
+                if any(req_key.lower() in '.'.join(path_parts) for req_key in required_keys):
+                    filtered_results.append(result)
+            results = filtered_results
+        
+        # 점수 순으로 정렬
+        results.sort(key=lambda x: x['score'], reverse=True)
+        
+        return results
+    
+    def _search_advanced_recursive(self, obj: Any, query: str, current_path: str, 
+                                  results: List[Dict], threshold: float,
+                                  include_descriptions: bool, required_keys: List[str]):
+        """
+        고급 재귀 검색 - 설명 내용도 검색 대상에 포함
+        
+        Args:
+            obj: 현재 탐색 중인 객체
+            query: 검색 쿼리 (소문자)
+            current_path: 현재까지의 경로
+            results: 결과를 저장할 리스트
+            threshold: 유사도 임계값
+            include_descriptions: 설명 검색 포함 여부
+            required_keys: 필수 포함 키 목록
+        """
+        if isinstance(obj, dict):
+            # 설명 키($키) 수집
+            description_map = {}
+            if include_descriptions:
+                for key, value in obj.items():
+                    if key.startswith('$') and isinstance(value, str):
+                        original_key = key[1:]  # $ 제거
+                        description_map[original_key] = value
+            
+            for key, value in obj.items():
+                # 설명 키($로 시작)는 키 매칭에서 제외하지만, 내용 검색은 별도 처리
+                if key.startswith('$'):
+                    continue
+                
+                # 현재 경로 생성
+                if current_path:
+                    new_path = f"{current_path}.{key}"
+                else:
+                    new_path = key
+                
+                # 키 이름과 쿼리 비교
+                key_lower = key.lower()
+                match_found = False
+                result_entry = None
+                
+                # 1. 키 이름에서 정확한 매칭
+                if query == key_lower:
+                    result_entry = {
+                        'path': new_path,
+                        'value': value,
+                        'score': 100.0,
+                        'match_type': 'exact'
+                    }
+                    match_found = True
+                
+                # 2. 키 이름에서 부분 문자열 매칭
+                elif query in key_lower:
+                    score = (len(query) / len(key_lower)) * 90
+                    result_entry = {
+                        'path': new_path,
+                        'value': value,
+                        'score': score,
+                        'match_type': 'partial'
+                    }
+                    match_found = True
+                
+                # 3. 키 이름에서 퍼지 매칭
+                else:
+                    similarity = fuzz.ratio(query, key_lower)
+                    if similarity >= threshold:
+                        result_entry = {
+                            'path': new_path,
+                            'value': value,
+                            'score': similarity,
+                            'match_type': 'fuzzy'
+                        }
+                        match_found = True
+                
+                # 4. 설명 내용에서 검색 (include_descriptions가 True인 경우)
+                if not match_found and include_descriptions and key in description_map:
+                    desc_text = description_map[key].lower()
+                    desc_match = False
+                    desc_score = 0
+                    
+                    if query == desc_text:
+                        desc_score = 95.0  # 설명 정확 매칭
+                        desc_match = True
+                    elif query in desc_text:
+                        desc_score = (len(query) / len(desc_text)) * 85  # 설명 부분 매칭
+                        desc_match = True
+                    else:
+                        desc_similarity = fuzz.partial_ratio(query, desc_text)
+                        if desc_similarity >= threshold:
+                            desc_score = desc_similarity * 0.8  # 설명 매칭은 키 매칭보다 낮은 점수
+                            desc_match = True
+                    
+                    if desc_match:
+                        result_entry = {
+                            'path': new_path,
+                            'value': value,
+                            'score': desc_score,
+                            'match_type': 'description'
+                        }
+                        match_found = True
+                
+                # 매칭된 경우 설명 키 추가
+                if match_found and result_entry:
+                    # 현재 레벨에서 설명 키 찾기
+                    description_key = f"${key}"
+                    if description_key in obj:
+                        result_entry['description'] = obj[description_key]
+                    
+                    results.append(result_entry)
+                
+                # 값이 딕셔너리나 리스트인 경우 재귀 탐색
+                if isinstance(value, (dict, list)):
+                    self._search_advanced_recursive(value, query, new_path, results, threshold,
+                                                   include_descriptions, required_keys)
+        
+        elif isinstance(obj, list):
+            for idx, item in enumerate(obj):
+                # 리스트 인덱스를 경로에 포함
+                if current_path:
+                    new_path = f"{current_path}[{idx}]"
+                else:
+                    new_path = f"[{idx}]"
+                
+                # 리스트 아이템이 딕셔너리나 리스트인 경우 재귀 탐색
+                if isinstance(item, (dict, list)):
+                    self._search_advanced_recursive(item, query, new_path, results, threshold,
+                                                   include_descriptions, required_keys)
+    
     def get_value_by_path(self, path: str) -> Any:
         """
         경로를 통해 값 가져오기
@@ -407,3 +571,37 @@ if __name__ == "__main__":
     all_results = searcher.search_all("module")
     print(f"  키에서 발견: {len(all_results['keys'])}개")
     print(f"  값에서 발견: {len(all_results['values'])}개")
+    
+    # 6. 고급 검색: 설명 내용 포함
+    print("\n6. 고급 검색 - '인증' 설명 내용 검색:")
+    advanced_results = searcher.search_advanced("인증", include_descriptions=True)
+    for r in advanced_results:
+        print(f"  경로: {r['path']}")
+        print(f"  값: {r['value']}")
+        if 'description' in r:
+            print(f"  설명: {r['description']}")
+        print(f"  점수: {r['score']:.1f} ({r['match_type']})")
+        print()
+    
+    # 7. 고급 검색: 필수 키 필터링
+    print("\n7. 고급 검색 - 'module' 검색 with 'system' 필수 포함:")
+    filtered_results = searcher.search_advanced("module", required_keys=["system"])
+    for r in filtered_results[:3]:
+        print(f"  경로: {r['path']}")
+        if 'description' in r:
+            print(f"  설명: {r['description']}")
+        print(f"  점수: {r['score']:.1f} ({r['match_type']})")
+        print()
+    
+    # 8. 고급 검색: 설명 검색 + 필수 키 조합
+    print("\n8. 고급 검색 조합 - '설정' 설명 검색 with 'profile' 필수 포함:")
+    combo_results = searcher.search_advanced("설정", 
+                                           include_descriptions=True, 
+                                           required_keys=["profile"])
+    for r in combo_results:
+        print(f"  경로: {r['path']}")
+        print(f"  값: {r['value']}")
+        if 'description' in r:
+            print(f"  설명: {r['description']}")
+        print(f"  점수: {r['score']:.1f} ({r['match_type']})")
+        print()
