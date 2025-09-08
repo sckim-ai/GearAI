@@ -274,15 +274,15 @@ class JSONPathSearcher:
     
     def search_advanced(self, query: str, threshold: float = 70.0, 
                        include_descriptions: bool = True, 
-                       required_keys: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+                       required_descriptions: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
-        고급 검색: 설명 내용도 포함하고, 필수 키 필터링 기능
+        고급 검색: 설명 내용도 포함하고, 필수 설명 필터링 기능
         
         Args:
             query: 검색할 문자열
             threshold: 유사도 임계값 (0-100, 기본값 70)
             include_descriptions: 설명($키)의 내용도 검색에 포함할지 여부
-            required_keys: 검색 결과에 반드시 포함되어야 할 키 목록
+            required_descriptions: 검색 결과의 설명에 반드시 포함되어야 할 키워드 목록
         
         Returns:
             매칭된 결과 리스트 [{"path": "경로", "value": "값", "description": "설명", "score": 점수}, ...]
@@ -292,15 +292,19 @@ class JSONPathSearcher:
         
         # 재귀적으로 JSON 탐색 (고급 버전)
         self._search_advanced_recursive(self.data, query_lower, "", results, threshold, 
-                                       include_descriptions, required_keys or [])
+                                       include_descriptions, required_descriptions or [])
         
-        # 필수 키 필터링
-        if required_keys:
+        # 필수 설명 필터링
+        if required_descriptions:
             filtered_results = []
             for result in results:
-                path_parts = result['path'].lower().split('.')
-                # 필수 키가 경로에 포함되어 있는지 확인
-                if any(req_key.lower() in '.'.join(path_parts) for req_key in required_keys):
+                # 설명이 있는 경우에만 필터링 적용
+                if 'description' in result and result['description']:
+                    description_lower = result['description'].lower()
+                    # 필수 키워드가 설명에 포함되어 있는지 확인
+                    if any(req_desc.lower() in description_lower for req_desc in required_descriptions):
+                        filtered_results.append(result)
+                elif not required_descriptions:  # 필수 설명이 없고 설명도 없으면 통과
                     filtered_results.append(result)
             results = filtered_results
         
@@ -311,7 +315,7 @@ class JSONPathSearcher:
     
     def _search_advanced_recursive(self, obj: Any, query: str, current_path: str, 
                                   results: List[Dict], threshold: float,
-                                  include_descriptions: bool, required_keys: List[str]):
+                                  include_descriptions: bool, required_descriptions: List[str]):
         """
         고급 재귀 검색 - 설명 내용도 검색 대상에 포함
         
@@ -322,7 +326,7 @@ class JSONPathSearcher:
             results: 결과를 저장할 리스트
             threshold: 유사도 임계값
             include_descriptions: 설명 검색 포함 여부
-            required_keys: 필수 포함 키 목록
+            required_descriptions: 필수 포함 설명 키워드 목록
         """
         if isinstance(obj, dict):
             # 설명 키($키) 수집
@@ -421,7 +425,7 @@ class JSONPathSearcher:
                 # 값이 딕셔너리나 리스트인 경우 재귀 탐색
                 if isinstance(value, (dict, list)):
                     self._search_advanced_recursive(value, query, new_path, results, threshold,
-                                                   include_descriptions, required_keys)
+                                                   include_descriptions, required_descriptions)
         
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
@@ -434,7 +438,7 @@ class JSONPathSearcher:
                 # 리스트 아이템이 딕셔너리나 리스트인 경우 재귀 탐색
                 if isinstance(item, (dict, list)):
                     self._search_advanced_recursive(item, query, new_path, results, threshold,
-                                                   include_descriptions, required_keys)
+                                                   include_descriptions, required_descriptions)
     
     def get_value_by_path(self, path: str) -> Any:
         """
@@ -583,9 +587,9 @@ if __name__ == "__main__":
         print(f"  점수: {r['score']:.1f} ({r['match_type']})")
         print()
     
-    # 7. 고급 검색: 필수 키 필터링
-    print("\n7. 고급 검색 - 'module' 검색 with 'system' 필수 포함:")
-    filtered_results = searcher.search_advanced("module", required_keys=["system"])
+    # 7. 고급 검색: 필수 설명 필터링
+    print("\n7. 고급 검색 - 'module' 검색 with '모듈' 설명 필수 포함:")
+    filtered_results = searcher.search_advanced("module", required_descriptions=["모듈"])
     for r in filtered_results[:3]:
         print(f"  경로: {r['path']}")
         if 'description' in r:
@@ -593,11 +597,11 @@ if __name__ == "__main__":
         print(f"  점수: {r['score']:.1f} ({r['match_type']})")
         print()
     
-    # 8. 고급 검색: 설명 검색 + 필수 키 조합
-    print("\n8. 고급 검색 조합 - '설정' 설명 검색 with 'profile' 필수 포함:")
+    # 8. 고급 검색: 설명 검색 + 필수 설명 조합
+    print("\n8. 고급 검색 조합 - '설정' 설명 검색 with '테마' 설명 필수 포함:")
     combo_results = searcher.search_advanced("설정", 
                                            include_descriptions=True, 
-                                           required_keys=["profile"])
+                                           required_descriptions=["테마"])
     for r in combo_results:
         print(f"  경로: {r['path']}")
         print(f"  값: {r['value']}")
