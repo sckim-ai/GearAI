@@ -190,7 +190,12 @@ class GearDesignManager:
         """기어 3D 모델링 추출. 성공 시 true 반환"""
         issuccess = self.form.Save3DGearModeling(path)
         return issuccess
-        
+    
+    def get_gearReport(self, path: str, jGear: json) -> bool:
+        """기어 보고서 추출. 성공 시 true 반환"""
+        issuccess = self.form.SaveGearReport(path, jGear)
+        return issuccess
+    
     def create_simple_sizing_input(self) -> Any:
         """빈 SimpleSizingInput 객체 생성 (설정은 외부에서 수행)"""
         _input = self.SimpleSizingInput()

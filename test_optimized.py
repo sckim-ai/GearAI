@@ -70,6 +70,8 @@ def main():
         getimage = manager.get_gearimage(output_file)
         if getimage:
             print("success!")
+        else:
+            print("이미지 추출 실패")
 
         # 기어 3D 이미지 추출
         print("기어 3D 이미지 추출 중...")
@@ -79,6 +81,8 @@ def main():
         getimage = manager.get_gear3Dimage(output_file)
         if getimage:
             print("success!")
+        else:
+            print("3D 이미지 추출 실패")
 
         # 기어 3D 모델링 추출
         print("기어 3D 모델링 추출 중...")
@@ -87,7 +91,21 @@ def main():
         output_file = os.path.join(original_dir, f"gear_3Dmodeling_{timestamp}.step")
         getmodeling = manager.get_gear3DModeling(output_file)
         if getmodeling:
-            print("success!")        
+            print("success!")    
+        else:
+            print("3D 모델링 추출 실패")    
+
+        # 기어 보고서 추출
+        print("기어 보고서 추출 중...") 
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        original_dir = r"D:\SW\Streamlit"   # 경로 지정
+        output_file = os.path.join(original_dir, f"gear_report_{timestamp}.pdf")
+        getreport = manager.get_gearReport(output_file, rating_result)
+
+        if getreport:
+            print("success!")
+        else:
+            print("기어 보고서 추출 실패")   
             
         # SimpleSizing 계산 수행
         print("7. SimpleSizing 계산 수행 중...")
