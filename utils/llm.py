@@ -38,31 +38,15 @@ async def llm_call_async(
 
 def llm_call(
     prompt: List[Dict[str, str]],
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.7
+    model: str = "gpt-5-mini",
+    temperature: float = 0.1
 ) -> str:
     """동기 LLM 호출"""
     try:
         response = sync_client.chat.completions.create(
             model=model,
             messages=prompt,
-            temperature=temperature
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        raise Exception(f"LLM 호출 중 오류 발생: {str(e)}")
-
-def llm_call(
-    prompt: str,
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.7
-) -> str:
-    """동기 LLM 호출"""
-    try:
-        response = sync_client.chat.completions.create(
-            model=model,
-            messages=prompt,
-            temperature=temperature
+            # temperature=temperature
         )
         return response.choices[0].message.content
     except Exception as e:

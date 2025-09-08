@@ -18,14 +18,13 @@ def main():
     
     # 경로 설정
     gear_design_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
-    default_json_path = r"D:\SW\Streamlit\agents\data\schema\Default.json"
     
     print("=== GearDesign 최적화 테스트 시작 ===")
     
     try:
         # GearDesignManager 초기화
         print("1. GearDesignManager 초기화 중...")
-        manager = GearDesignManager(gear_design_path, default_json_path)
+        manager = GearDesignManager(gear_design_path)
         
         # Form 초기화
         print("2. Form 초기화 중...")

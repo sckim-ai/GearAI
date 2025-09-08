@@ -76,9 +76,8 @@ class DotNetInitializer:
 class GearDesignManager:
     """GearDesign 작업을 관리하는 메인 클래스"""
     
-    def __init__(self, gear_design_path: str, default_json_path: str):
+    def __init__(self, gear_design_path: str):
         self.gear_design_path = gear_design_path
-        self.default_json_path = default_json_path
         self.form = None
         self._dotnet_init = DotNetInitializer(gear_design_path)
         self._initialize_dotnet()
@@ -130,9 +129,9 @@ class GearDesignManager:
         jGear = self.form.SaveDataInput_Json(True)
         jGear_py = json.loads(jGear.ToString())
         
-        # 파일에 저장
-        with open(self.default_json_path, "w", encoding="utf-8") as f:
-            json.dump(jGear_py, f, ensure_ascii=False, indent=2)
+        # # 파일에 저장
+        # with open(self.default_json_path, "w", encoding="utf-8") as f:
+        #     json.dump(jGear_py, f, ensure_ascii=False, indent=2)
             
         return jGear_py
         

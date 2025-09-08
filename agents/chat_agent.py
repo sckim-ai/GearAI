@@ -144,4 +144,94 @@ class ChatAgent(BaseAgent):
             callback(error_msg)
             self.add_message("assistant", error_msg)
             return error_msg
+    
+    @traceable
+    async def process(self, input_text: str) -> str:
+        """비스트리밍 방식으로 처리합니다. 전체 응답을 한 번에 반환합니다."""
+        try:
+            # 사용자 메시지 추가
+            self.add_message("user", input_text)
+            
+            # LangChain 메시지 형식으로 변환
+            messages = self._convert_messages_to_langchain()
+            
+            # 비스트리밍 LLM 인스턴스 생성 (스트리밍 비활성화)
+            non_streaming_llm = self._create_non_streaming_llm()
+            
+            # 전체 응답을 한 번에 받기
+            response = await non_streaming_llm.ainvoke(messages)
+            full_response = response.content if hasattr(response, 'content') else str(response)
+            
+            # 최종 응답을 메시지에 추가
+            self.add_message("assistant", full_response)
+            return full_response
+        
+        except Exception as e:
+            error_msg = f"오류 발생: {str(e)}"
+            self.add_message("assistant", error_msg)
+            return error_msg
+    
+    def _create_non_streaming_llm(self):
+        """스트리밍이 비활성화된 LLM 인스턴스 생성"""
+        try:
+            if self.provider == "openai":
+                return ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=False
+                )
+            elif self.provider == "anthropic":
+                return ChatAnthropic(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("ANTHROPIC_API_KEY"),
+                    streaming=False
+                )
+            elif self.provider == "google":
+                return ChatGoogleGenerativeAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    google_api_key=os.getenv("GEMINI_API_KEY"),
+                    streaming=False
+                )
+            else:
+                # 기본값은 OpenAI
+                return ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=False
+                )
+        except Exception as e:
+            print(f"비스트리밍 LLM 초기화 오류: {e}")
+            # 오류 시 기본 OpenAI 모델로 fallback
+            return ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.7,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                streaming=False
+            )
+    
+    async def process_sync(self, input_text: str) -> str:
+        """동기식 스타일의 비스트리밍 처리 (편의 함수)"""
+        return await self.process(input_text)
+    
+    def get_response(self, input_text: str) -> str:
+        """완전 동기식 응답 함수 (asyncio 내부 처리)"""
+        try:
+            # 이미 이벤트 루프가 실행 중인지 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 루프가 실행 중이면 새 태스크로 실행
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.process(input_text))
+                    return future.result()
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                return asyncio.run(self.process(input_text))
+                
+        except Exception as e:
+            return f"오류 발생: {str(e)}"
       
