@@ -49,6 +49,21 @@ agent_type = st.sidebar.selectbox(
     agent_service.get_available_agents()
 )
 
+# 에이전트 변경 감지 및 메시지 초기화
+if "current_agent" not in st.session_state:
+    st.session_state.current_agent = agent_type
+elif st.session_state.current_agent != agent_type:
+    # 에이전트가 변경되었으면 메시지 초기화
+    st.session_state.messages = []
+    st.session_state.show_message_history = False
+    st.session_state.show_gear_options = False
+    st.session_state.gear_selection_made = False
+    # 이전 에이전트의 메시지 히스토리도 초기화
+    if st.session_state.current_agent in agent_service.agents:
+        agent_service.agents[st.session_state.current_agent].clear_messages()
+    # 현재 에이전트 업데이트
+    st.session_state.current_agent = agent_type
+
 # 에이전트 설정 표시
 agent_config = agent_service.get_agent_config(agent_type)
 if agent_config:
