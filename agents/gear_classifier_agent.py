@@ -1087,9 +1087,8 @@ others_info: 정보 없음
                 "missing_info": result.get("missing_info", ""),
             })
             
-            # 최종 진행 상황과 결과 표시
-            all_progress = "".join(self.progress_messages)
-            final_display = f"{all_progress}\n🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"
+            # 최종 완료 메시지와 결과 표시 (진행 메시지는 이미 전송됨)
+            final_display = f"🎉 **분석 완료!** 결과를 표시합니다:\n\n---\n\n{response_text}"
             callback(final_display)
             
             # 최종 응답을 메시지에 추가
@@ -1112,9 +1111,10 @@ others_info: 정보 없음
                 await asyncio.sleep(0.5)  # 0.5초마다 체크
                 
                 if len(self.progress_messages) > last_message_count:
-                    # 새로운 진행 메시지가 있으면 업데이트
-                    current_progress = "".join(self.progress_messages)
-                    callback(current_progress)
+                    # 새로운 진행 메시지만 전송
+                    new_messages = self.progress_messages[last_message_count:]
+                    if new_messages:
+                        callback("".join(new_messages))
                     last_message_count = len(self.progress_messages)
         except asyncio.CancelledError:
             # 정상적인 종료
