@@ -14,7 +14,7 @@ from utils import llm_call, remove_code_block_llm  # LLM 호출 함수 임포트
 from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("GearDesign_agent")
 
-gear_design_path = r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
+gear_design_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
 GD = GearDesignManager(gear_design_path)
 
 isInitialized = False
@@ -187,7 +187,7 @@ def calc_geometry():
         return {"error": "초기화되지 않음"}
     
     results = GD.calculate_geometry()
-    GD_Results = results.copy()
+    GD_Results = results
 
     return results
 
@@ -437,10 +437,4 @@ def get_gear_report() -> dict:  # 함수명 스네이크 케이스로 통일
     
 if __name__ == "__main__":
     print("Starting MCP server...")
-
-    initialize()
-    result = modify_gear_data("기어 제원을 다음과 같이 설정해주세요:\n- 모듈: 3mm\n- 잇수: 20개\n- 압력각: 20도\n- 헬리컬 각도: 15도\n- 폭: 20mm\n- 재질: S45C (탄소강)\n- 표면 경도: HRC 50\n- 전달 동력: 5kW\n- 회전수: 1500rpm")
-
-    print(result)
-
     asyncio.run(mcp.run())

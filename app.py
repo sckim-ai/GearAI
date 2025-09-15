@@ -224,10 +224,9 @@ with col1:
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            response_parts.clear()  # 이전 내용 초기화
                             response_parts.append(chunk)
-                            # 현재 응답 표시
-                            response_placeholder.markdown(chunk)
+                            # 누적된 응답 표시
+                            response_placeholder.markdown("".join(response_parts))
                         
                         # 비동기 함수를 동기적으로 실행
                         loop = asyncio.get_event_loop()
@@ -291,10 +290,9 @@ with col1:
                         
                         # 콜백 함수 정의
                         def update_response(chunk):
-                            response_parts.clear()  # 이전 내용 초기화
                             response_parts.append(chunk)
-                            # 현재 응답 표시
-                            response_placeholder.markdown(chunk)
+                            # 누적된 응답 표시
+                            response_placeholder.markdown("".join(response_parts))
                         
                         # 비동기 함수를 동기적으로 실행
                         loop = asyncio.get_event_loop()
