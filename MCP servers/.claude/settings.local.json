@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/SW/Streamlit/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

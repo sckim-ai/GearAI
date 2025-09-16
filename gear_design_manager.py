@@ -190,6 +190,11 @@ class GearDesignManager:
         issuccess = self.form.Save3DGearModeling(path)
         return issuccess
     
+    def get_allresults_summary(self, jGear: json) -> dict:
+        """모든 계산 결과 요약 추출"""
+        summary = self.form.GetAllResultSummary(jGear)
+        return json.loads(summary.ToString())
+
     def get_gearReport(self, path: str, jGear: json) -> bool:
         """기어 보고서 추출. 성공 시 true 반환"""
         issuccess = self.form.SaveGearReport(path, jGear)

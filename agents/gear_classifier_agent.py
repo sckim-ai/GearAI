@@ -700,10 +700,10 @@ others_info: 정보 없음
 • "pinion 속도 1800rpm, idler 파워 120kW, wheel 토크 600Nm로 3단 기어 설계" \""""
             elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
                 examples = """
-📋 **유성기어 종합 입력 예시** (속도 2개 + 파워/토크 1개 + 잇수):\r\n
-• "Sun속도 1000rpm, Carrier속도 400rpm, Ring파워 50kW, 태양기어 30치로 유성기어 설계"\r\n
-• "태양기어 속도 1500rpm, 캐리어 속도 500rpm, 링기어 토크 800Nm, 링기어 90치로 유성기어 설계"\r\n
-• "Sun속도 2000rpm, Ring속도 0rpm(고정), Carrier파워 100kW, 기어비 4로 유성기어 설계" \""""
+📋 **유성기어 종합 입력 예시** (속도 2개 + 파워/토크 1개 + 잇수비):\r\n
+• "선기어 속도 1000rpm, 캐리어 속도 400rpm, Ring파워 50kW, 선기어 30치, 기어비 3으로 유성기어 설계"\r\n
+• "선기어 속도 1500rpm, 캐리어 속도 500rpm, 링기어 토크 800Nm, 링기어 잇수 90개, 기어비 4로 유성기어 설계"\r\n
+• "선기어 속도 2000rpm, 링기어 속도 0rpm(고정), 캐리어 파워 100kW, 기어비 4로 유성기어 설계" \""""
             else:
                 examples = """
 📋 **종합 입력 예시**:
