@@ -18,7 +18,7 @@ from utils import llm_call, remove_code_block_llm  # LLM 호출 함수 임포트
 from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("GearDesign_agent")
 
-gear_design_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
+gear_design_path = r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"
 
 # 세션 데이터 클래스
 class SessionData:

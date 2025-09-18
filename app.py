@@ -114,9 +114,9 @@ if agent_config:
         # 온도(temperature) 설정
         selected_temp = st.sidebar.slider(
             "온도(Temperature)", 
-            min_value=0.0, 
+            min_value=0.1, 
             max_value=1.0, 
-            value=st.session_state.agent_settings[agent_type].get("temperature", 0.0),
+            value=st.session_state.agent_settings[agent_type].get("temperature", 0.1),
             step=0.1
         )
 
@@ -164,8 +164,8 @@ with col1:
         gear_options = {
             "기어 쌍 (Gear Pair)": "두 개의 기어가 맞물리는 기본 구조로 설계해 주세요",
             "3단 기어 (Three Gear)": "세 개의 기어가 연결된 구조로 설계해 주세요", 
-            "단순 유성기어 (Simple Planetary)": "태양기어, 유성기어, 링기어로 구성된 유성기어로 설계해 주세요",
-            "이중 피니언 유성기어 (Double Pinion Planetary)": "2단계 유성기어 시스템으로 설계해 주세요"
+            "단순 유성기어 (Simple Planetary)": "단순 유성기어로 설계해 주세요",
+            "이중 피니언 유성기어 (Double Pinion Planetary)": "더블 피니언 유성기어 시스템으로 설계해 주세요"
         }
         
         st.markdown("### 🔧 설계 가능한 기어 타입 선택")

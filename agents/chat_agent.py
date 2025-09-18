@@ -62,8 +62,7 @@ class ChatAgent(BaseAgent):
                 return ChatGoogleGenerativeAI(
                     model=self.model_name,
                     temperature=self.temperature,
-                    google_api_key=os.getenv("GEMINI_API_KEY"),
-                    streaming=True
+                    google_api_key=os.getenv("GOOGLE_API_KEY"),
                 )
             else:
                 # 기본값은 OpenAI

@@ -23,6 +23,7 @@ from langgraph.graph.message import add_messages
 from typing_extensions import Annotated, TypedDict
 
 # LangChain imports  
+from agents.chat_agent import ChatAgent
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser, JsonOutputParser
@@ -65,43 +66,33 @@ class GearClassifierAgent(BaseAgent):
     def _initialize_llm(self):
         """LLM 모델 초기화"""
         try:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise Exception("OPENAI_API_KEY가 설정되지 않았습니다.")
-                
-            print(f"LLM 초기화 - Provider: {self.provider}, Model: {self.model_name}, Temperature: {self.temperature}")
-            
-            if self.provider == "openai":
-                return ChatOpenAI(
-                    model=self.model_name,
-                    temperature=self.temperature,
-                    api_key=api_key,
-                    streaming=False
-                )
-            else:
-                # 기본값은 OpenAI
-                return ChatOpenAI(
-                    model="gpt-4o-mini",  # 유효한 모델명으로 변경
-                    temperature=0.0,
-                    api_key=api_key,
-                    streaming=False
-                )
+            return ChatAgent(
+                {
+                    "model": self.model_name,
+                    "temperature": self.temperature,
+                    "provider": self.provider
+                }                  
+            ).llm
+
         except Exception as e:
             import traceback
             error_detail = f"LLM 초기화 오류: {str(e)}\n상세: {traceback.format_exc()}"
-            print(error_detail)
-            # 폴백으로 기본 모델 시도
-            try:
-                return ChatOpenAI(
-                    model="gpt-4o-mini",
-                    temperature=0.0,
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    streaming=False
-                )
-            except Exception as e2:
-                print(f"폴백 LLM 초기화도 실패: {e2}")
-                raise e  # 원본 에러 다시 던지기
+            print(error_detail)                
     
+    def update_config(self, new_config: Dict[str, Any]):
+        """설정을 업데이트하고 내부 변수를 갱신합니다."""
+        super().update_config(new_config)
+        old_provider = self.provider
+        old_model = self.model_name
+        
+        self.model_name = self.config.get("model", "gpt-4o-mini")
+        self.temperature = self.config.get("temperature", 0.7)
+        self.provider = self.config.get("provider", "openai")
+        
+        # 모델이나 프로바이더가 변경된 경우 LLM 재초기화
+        if old_provider != self.provider or old_model != self.model_name:
+            self.llm = self._initialize_llm()
+
     def _classify_input(self, state: GearClassifierState) -> GearClassifierState:
         """사용자 입력이 기어 설계 관련인지 분류"""
         
@@ -112,8 +103,8 @@ class GearClassifierAgent(BaseAgent):
         designable_gear_keywords = [
             "두 개의 기어가 맞물리는 기본 구조로 설계해 주세요",
             "세 개의 기어가 연결된 구조로 설계해 주세요",
-            "태양기어, 유성기어, 링기어로 구성된 유성기어로 설계해 주세요",
-            "2단계 유성기어 시스템으로 설계해 주세요"
+            "단순 유성기어로 설계해 주세요",
+            "더블 피니언 유성기어 시스템으로 설계해 주세요"
         ]
         
         # 사용자가 선택 옵션에서 designable gear를 선택한 경우
