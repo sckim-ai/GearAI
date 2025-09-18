@@ -228,6 +228,11 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
     Note:
         - 사전에 초기화가 완료되어야 합니다
         - 매크로 기어 제원 변경 시 CDMethod가 자동으로 1로 설정됩니다
+        - 기어비는 기어 타입에 따라 잇수비로 결정됩니다. 이에 대한 상세 내용은 아래와 같습니다.
+            1) Gear pair: z2 / z1,
+            2) Three gear: z3 / z1,
+            3) Planetary: z3 / z1 (링기어 잇수 / 선기어 잇수),
+            4) Double pinion planetary: z3 / z1 (링기어 잇수 / 선기어 잇수)
     """
     try:
         session = get_session(session_id)
@@ -489,11 +494,9 @@ def calc_load_case(session_id: str) -> dict:
 @mcp.tool()
 def get_messages(session_id: str) -> dict:
     """
-    계산 결과에 대한 실행 메시지를 반환합니다.
-
+    계산 결과에 대한 실행 메시지를 반환합니다. 
     기어 계산 과정에서 발생한 경고, 오류, 정보 메시지들을 가져옵니다.
-    메시지를 반환한 후에는 내부 메시지 버퍼가 초기화됩니다.
-
+    
     Args:
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
 
@@ -504,6 +507,7 @@ def get_messages(session_id: str) -> dict:
 
     Note:
         - 사전에 초기화가 완료되어야 합니다
+        - 하중계산이 완료된 후에 반드시 호출해야 합니다. 호출 결과에서 문제가 없는지 사용자에게 전달합니다.
         - 호출 후 메시지 버퍼는 자동으로 초기화됩니다
     """
     try:
@@ -566,6 +570,134 @@ def get_messages(session_id: str) -> dict:
     except Exception as e:
         return {
             "error": f"메시지 조회 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def save_GearDesignData(session_id: str) -> dict:
+    """
+    현재 기어 설계 데이터를 JSON 파일로 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 저장 결과
+            - 성공 시: {"success": True, "path": "파일경로", "filename": "파일명", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 저장된 파일은 세션의 출력 디렉토리에 위치합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_design_data_{timestamp}.json"
+        output_file = os.path.join(session.output_dir, filename)
+
+        # 현재 변경된 데이터를 JSON 파일로 저장
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(session.changed_data, f, ensure_ascii=False, indent=4)
+
+        # 생성된 파일을 세션에 추가
+        session.add_file(output_file, "data")
+
+        return {
+            "success": True,
+            "path": output_file,
+            "filename": filename,
+            "size": os.path.getsize(output_file),
+            "session_id": session.session_id,
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"파일 저장 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def load_GearDesignData(file_path: str, session_id: str) -> dict:
+    """
+    JSON 파일에서 기어 설계 데이터를 불러와 현재 세션에 적용합니다.
+
+    Args:
+        file_path (str): 불러올 JSON 파일의 경로
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 불러오기 결과
+            - 성공 시: {"success": True, "message": "데이터가 성공적으로 로드되었습니다", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 파일 경로는 서버에서 접근 가능한 위치여야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if not os.path.isfile(file_path):
+        return {
+            "success": False,
+            "error": f"파일을 찾을 수 없음: {file_path}",
+            "session_id": session.session_id
+        }
+
+    try:
+        # JSON 파일에서 데이터 로드
+        with open(file_path, 'r', encoding='utf-8') as f:
+            loaded_data = json.load(f)
+
+        # 데이터 검증 및 로드
+        valid = session.gd_manager.load_and_validate_config(loaded_data)
+
+        if valid:
+            session.changed_data = loaded_data  # 세션 데이터 업데이트
+            return {
+                "success": True,
+                "message": "데이터가 성공적으로 로드되었습니다",
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": "데이터 검증 실패. 올바른 형식의 JSON 파일인지 확인하세요.",
+                "session_id": session.session_id
+            }
+
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "error": f"JSON 파싱 오류: {str(e)}",
             "session_id": session.session_id
         }
 
@@ -657,7 +789,7 @@ def get_allresults_summary(session_id: str) -> dict:
     모든 계산 결과의 요약 정보를 반환합니다.
 
     현재 세션에 저장된 기하학적 계산 및 하중 계산 결과를 바탕으로
-    요약된 결과 정보를 추출하여 반환합니다.
+    요약된 결과 정보를 추출하여 반환합니다. 반환된 결과는 json 형식의 키에 markdown 형식으로 값이 저장됩니다.
 
     Args:
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
@@ -670,6 +802,7 @@ def get_allresults_summary(session_id: str) -> dict:
     Note:
         - 사전에 초기화와 기하학적 계산이 완료되어야 합니다
         - 하중 계산이 수행되지 않은 경우에도 기하학적 계산 결과는 포함됩니다
+        - JSON KEY의 메타데이터는 $로 시작합니다
     """
     try:
         session = get_session(session_id)
@@ -816,27 +949,6 @@ def get_active_sessions() -> dict:
     return get_session_info()
 
 @mcp.tool()
-def cleanup_sessions() -> dict:
-    """
-    만료된 세션들을 정리합니다.
-
-    Returns:
-        dict: 정리 결과
-            - cleaned_sessions: 정리된 세션 수
-            - remaining_sessions: 남은 세션 수
-    """
-    before_count = len(session_manager)
-    cleanup_expired_sessions()
-    after_count = len(session_manager)
-    cleaned_count = before_count - after_count
-
-    return {
-        "cleaned_sessions": cleaned_count,
-        "remaining_sessions": after_count,
-        "message": f"{cleaned_count}개의 만료된 세션이 정리되었습니다"
-    }
-
-@mcp.tool()
 def get_session_files(session_id: str) -> dict:
     """
     세션에서 생성된 파일 목록을 반환합니다.
@@ -862,69 +974,26 @@ def get_session_files(session_id: str) -> dict:
             "session_id": session_id
         }
 
-@mcp.tool()
-def get_file_content(session_id: str, filename: str) -> dict:
+def cleanup_sessions() -> dict:
     """
-    세션의 파일 내용을 base64로 인코딩하여 반환합니다.
-
-    Args:
-        session_id (str): 세션 ID
-        filename (str): 파일명
+    만료된 세션들을 정리합니다.
 
     Returns:
-        dict: 파일 내용 (base64 인코딩)
+        dict: 정리 결과
+            - cleaned_sessions: 정리된 세션 수
+            - remaining_sessions: 남은 세션 수
     """
-    try:
-        session = get_session(session_id)
+    before_count = len(session_manager)
+    cleanup_expired_sessions()
+    after_count = len(session_manager)
+    cleaned_count = before_count - after_count
 
-        # 파일 찾기
-        target_file = None
-        for file_info in session.files:
-            if os.path.basename(file_info["path"]) == filename:
-                target_file = file_info["path"]
-                break
+    return {
+        "cleaned_sessions": cleaned_count,
+        "remaining_sessions": after_count,
+        "message": f"{cleaned_count}개의 만료된 세션이 정리되었습니다"
+    }
 
-        if target_file is None:
-            return {
-                "success": False,
-                "error": f"파일 '{filename}'을 찾을 수 없습니다",
-                "session_id": session_id
-            }
-
-        if not os.path.exists(target_file):
-            return {
-                "success": False,
-                "error": f"파일 '{filename}'이 존재하지 않습니다",
-                "session_id": session_id
-            }
-
-        # 파일을 base64로 인코딩
-        import base64
-        with open(target_file, "rb") as f:
-            file_content = base64.b64encode(f.read()).decode('utf-8')
-
-        return {
-            "success": True,
-            "filename": filename,
-            "content": file_content,
-            "size": os.path.getsize(target_file),
-            "session_id": session_id
-        }
-
-    except ValueError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "session_id": session_id
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"파일 읽기 중 오류: {str(e)}",
-            "session_id": session_id
-        }
-
-@mcp.tool()
 def delete_session(session_id: str) -> dict:
     """
     특정 세션을 강제로 삭제합니다.
