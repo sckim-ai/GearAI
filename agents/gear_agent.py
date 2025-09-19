@@ -7,8 +7,15 @@ import json
 import asyncio
 from io import BytesIO
 from PIL import Image
+import os
 
 from agents.base_agent import BaseAgent
+
+# LLM 임포트
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 
 class GearAgentState(TypedDict):
@@ -28,6 +35,8 @@ class GearAgentState(TypedDict):
     # 요청 복잡도 분석
     complexity_level: str  # "simple", "complex"
     complexity_analysis: str
+    required_tools: List[str]  # LLM이 분석한 필요 도구들
+    estimated_steps: int  # LLM이 예상한 단계 수
 
     # Planning 관련 (복잡한 요청의 경우)
     plan: List[Dict[str, Any]]
@@ -53,11 +62,61 @@ class GearAgent(BaseAgent):
         super().__init__(config)
         self.agent_name = "Planning Gear Agent"
 
+        # LLM 설정
+        self.model_name = config.get("model", "gpt-4o-mini")
+        self.temperature = config.get("temperature", 0.1)
+        self.provider = config.get("provider", "openai")
+
+        # LLM 초기화
+        self.llm = self._initialize_llm()
+
         # LangGraph 워크플로우 구성
         self.workflow = self._create_workflow()
 
         # Tool 초기화
         self._initialize_tools()
+
+    def _initialize_llm(self):
+        """LLM 모델 초기화"""
+        try:
+            if self.provider == "openai":
+                return ChatOpenAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=False
+                )
+            elif self.provider == "anthropic":
+                return ChatAnthropic(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    api_key=os.getenv("ANTHROPIC_API_KEY"),
+                    streaming=False
+                )
+            elif self.provider == "google":
+                return ChatGoogleGenerativeAI(
+                    model=self.model_name,
+                    temperature=self.temperature,
+                    google_api_key=os.getenv("GOOGLE_API_KEY"),
+                    streaming=False
+                )
+            else:
+                # 기본값은 OpenAI
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    temperature=0.1,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    streaming=False
+                )
+        except Exception as e:
+            print(f"LLM 초기화 오류: {e}")
+            # 오류 시 기본 OpenAI 모델로 fallback
+            return ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.1,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                streaming=False
+            )
 
     def _create_workflow(self):
         """Planning 기반 LangGraph 워크플로우 구성"""
@@ -178,46 +237,85 @@ graph TD
         }
 
     async def _analyze_complexity_node(self, state: GearAgentState) -> GearAgentState:
-        """요청의 복잡도 분석"""
+        """LLM을 사용한 요청의 복잡도 분석"""
         try:
             input_text = state["input_text"]
             classifier_result = state.get("classifier_result", {})
+            gear_type = state.get("gear_type", "")
 
-            # 복잡도 판단 키워드
-            complex_keywords = [
-                "최적화", "optimize", "분석", "analyze", "검증", "verify",
-                "비교", "compare", "다중", "multiple", "여러", "various",
-                "단계별", "step", "과정", "process", "종합적", "comprehensive",
-                "시뮬레이션", "simulation", "모델링", "modeling"
+            # LLM에게 복잡도 분석을 요청하는 프롬프트
+            system_prompt = """당신은 기어 설계 전문가입니다. 사용자의 요청을 분석하여 복잡도를 판단해주세요.
+
+판단 기준:
+1. SIMPLE: 단일 계산, 기본 설계, 단순한 정보 요청
+   - 예: "모듈 2의 기어 설계해줘", "기어비 3:1로 계산해줘", "기본 치형 설계"
+
+2. COMPLEX: 다중 단계, 최적화, 분석, 검증이 필요한 요청
+   - 예: "최적화된 유성기어 설계", "강도 분석 후 재료 선택", "여러 조건을 만족하는 설계"
+
+응답 형식:
+{
+    "complexity_level": "simple" 또는 "complex",
+    "analysis": "판단 근거 설명",
+    "required_tools": ["필요한 도구들 목록"],
+    "estimated_steps": 예상 단계 수 (숫자)
+}
+
+JSON 형식으로만 응답해주세요."""
+
+            user_prompt = f"""사용자 요청: {input_text}
+
+gear_classifier 결과:
+- 기어 타입: {gear_type}
+- 분류 결과: {json.dumps(classifier_result, ensure_ascii=False, indent=2)}
+
+위 요청의 복잡도를 분석해주세요."""
+
+            # LLM 호출
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
             ]
 
-            simple_keywords = [
-                "계산", "calculate", "구하", "find", "알려줘", "tell me",
-                "설계", "design", "기본", "basic", "단순", "simple"
-            ]
+            response = await self.llm.ainvoke(messages)
+            response_text = response.content
 
-            # 키워드 기반 복잡도 분석
-            complex_score = sum(1 for keyword in complex_keywords if keyword in input_text.lower())
-            simple_score = sum(1 for keyword in simple_keywords if keyword in input_text.lower())
+            # JSON 파싱
+            try:
+                analysis_result = json.loads(response_text)
+                complexity_level = analysis_result.get("complexity_level", "simple")
+                analysis = analysis_result.get("analysis", "LLM 분석 완료")
+                required_tools = analysis_result.get("required_tools", [])
+                estimated_steps = analysis_result.get("estimated_steps", 1)
 
-            # 추가 조건 검사
-            has_multiple_requirements = len(input_text.split(',')) > 2 or len(input_text.split('그리고')) > 1
-            has_conditional_logic = any(word in input_text for word in ['만약', 'if', '경우', 'case'])
-
-            # 복잡도 결정
-            if complex_score > simple_score or has_multiple_requirements or has_conditional_logic:
-                complexity_level = "complex"
-                analysis = f"복잡한 요청 감지: 복잡도 점수 {complex_score}, 다중 요구사항 {has_multiple_requirements}"
-            else:
-                complexity_level = "simple"
-                analysis = f"단순한 요청: 단순도 점수 {simple_score}"
+            except json.JSONDecodeError:
+                # JSON 파싱 실패 시 기본값 사용
+                print(f"LLM 응답 JSON 파싱 실패: {response_text}")
+                if any(keyword in response_text.lower() for keyword in ["complex", "복잡", "다중", "최적화", "분석"]):
+                    complexity_level = "complex"
+                    analysis = "LLM 분석 결과: 복잡한 요청으로 판단"
+                else:
+                    complexity_level = "simple"
+                    analysis = "LLM 분석 결과: 단순한 요청으로 판단"
+                required_tools = []
+                estimated_steps = 1
 
             state["complexity_level"] = complexity_level
             state["complexity_analysis"] = analysis
 
+            # 추가 정보 저장
+            if "required_tools" not in state:
+                state["required_tools"] = required_tools
+            if "estimated_steps" not in state:
+                state["estimated_steps"] = estimated_steps
+
             return state
 
         except Exception as e:
+            # 오류 시 기본 분석으로 fallback
+            print(f"LLM 복잡도 분석 오류: {e}")
+            state["complexity_level"] = "simple"
+            state["complexity_analysis"] = f"오류로 인한 기본 분석: {str(e)}"
             state["error_message"] = f"복잡도 분석 중 오류: {str(e)}"
             return state
 

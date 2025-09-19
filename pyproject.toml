@@ -30,6 +30,8 @@ dependencies = [
     "langchain-mcp-adapters>=0.1.9",
     "graphviz>=0.21",
     "grandalf>=0.8",
+    "streamlit-mermaid>=0.3.0",
+    "pyppeteer>=2.0.0",
 ]
 
 [project.optional-dependencies]
