@@ -73,6 +73,9 @@ class GearAgent(BaseAgent):
         # LangGraph 워크플로우 구성
         self.workflow = self._create_workflow()
 
+        # gear_classifier_agent와의 호환성을 위해 graph 속성도 추가
+        self.graph = self.workflow
+
         # Tool 초기화
         self._initialize_tools()
 
@@ -171,7 +174,7 @@ class GearAgent(BaseAgent):
         """LangGraph에서 그래프 이미지를 생성하여 반환"""
         try:
             # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
-            png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
+            png_data = self.graph.get_graph(xray=True).draw_mermaid_png()
 
             # PNG 데이터를 PIL Image로 변환
             image = Image.open(BytesIO(png_data))
