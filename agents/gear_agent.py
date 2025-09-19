@@ -170,37 +170,14 @@ class GearAgent(BaseAgent):
     def get_graph_image(self):
         """LangGraph에서 그래프 이미지를 생성하여 반환"""
         try:
-            # 첫 번째 시도: draw_mermaid_png() 사용
-            try:
-                png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
-                image = Image.open(BytesIO(png_data))
-                return image
-            except Exception as mermaid_error:
-                print(f"Mermaid PNG 생성 실패: {mermaid_error}")
+            # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
+            png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
 
-                # 두 번째 시도: draw_ascii() 사용 (텍스트 기반)
-                try:
-                    ascii_graph = self.workflow.get_graph(xray=True).draw_ascii()
-                    print(f"ASCII 그래프 생성 성공: {ascii_graph[:100]}...")
-                    # ASCII를 이미지로 변환하지 않고 None 반환 (fallback은 app.py에서 처리)
-                    return None
-                except Exception as ascii_error:
-                    print(f"ASCII 그래프 생성도 실패: {ascii_error}")
-
-                    # 세 번째 시도: 기본 그래프 정보만 가져오기
-                    try:
-                        graph = self.workflow.get_graph(xray=True)
-                        print(f"기본 그래프 객체 생성 성공: {type(graph)}")
-                        return None
-                    except Exception as basic_error:
-                        print(f"기본 그래프 생성도 실패: {basic_error}")
-
-                raise mermaid_error  # 원래 에러를 다시 발생시킴
-
+            # PNG 데이터를 PIL Image로 변환
+            image = Image.open(BytesIO(png_data))
+            return image
         except Exception as e:
-            print(f"그래프 이미지 생성 전체 오류: {e}")
-            import traceback
-            print(traceback.format_exc())
+            print(f"그래프 이미지 생성 오류: {e}")
             return None
 
     def get_mermaid_graph(self):
@@ -211,18 +188,7 @@ class GearAgent(BaseAgent):
         except Exception as e:
             print(f"Mermaid 다이어그램 생성 오류: {e}")
             # 기본 다이어그램 반환
-            return """
-graph TD
-    A[analyze_complexity] --> B{complexity?}
-    B -->|simple| C[execute_simple_task]
-    B -->|complex| D[create_plan]
-    D --> E[execute_current_task]
-    E --> F[check_plan_completion]
-    F -->|more tasks| E
-    F -->|complete| G[synthesize_results]
-    C --> G
-    G --> H[END]
-            """
+            return ""
 
     def _initialize_tools(self):
         """사용 가능한 Tool들 초기화"""
@@ -800,3 +766,113 @@ gear_classifier 결과:
             error_msg = f"❌ Gear Agent 처리 오류: {str(e)}"
             callback(error_msg)
             return error_msg
+
+
+# 테스트 및 디버깅을 위한 main 함수
+if __name__ == "__main__":
+    import asyncio
+    import sys
+    import os
+    from dotenv import load_dotenv
+
+    # 프로젝트 루트 디렉토리를 Python 경로에 추가
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, project_root)
+
+    # 환경 변수 로드
+    load_dotenv()
+
+    async def test_gear_agent():
+        """Gear Agent 그래프 컴파일 및 기본 테스트"""
+        print("=" * 60)
+        print("🔧 Gear Agent 그래프 컴파일 테스트 시작")
+        print("=" * 60)
+
+        try:
+            # 1. Gear Agent 인스턴스 생성
+            config = {
+                "model": "gpt-4o-mini",
+                "temperature": 0.1,
+                "provider": "openai"
+            }
+
+            print("📋 1. Gear Agent 인스턴스 생성 중...")
+            agent = GearAgent(config)
+            print("✅ Gear Agent 인스턴스 생성 성공!")
+
+            # 2. 워크플로우 컴파일 확인
+            print("\n📋 2. 워크플로우 컴파일 상태 확인...")
+            print(f"   - 워크플로우 타입: {type(agent.workflow)}")
+            print(f"   - 그래프 노드 수: {len(agent.workflow.get_graph().nodes)}")
+            print("✅ 워크플로우 컴파일 성공!")
+
+            # 3. 그래프 이미지 생성 테스트
+            print("\n📋 3. 그래프 이미지 생성 테스트...")
+            try:
+                image = agent.get_graph_image()
+                if image:
+                    print(f"✅ 그래프 이미지 생성 성공! 크기: {image.size}")
+                else:
+                    print("⚠️ 그래프 이미지 생성 실패 (PNG 생성 실패)")
+            except Exception as img_error:
+                print(f"⚠️ 그래프 이미지 생성 오류: {img_error}")
+
+            # 4. Mermaid 다이어그램 생성 테스트
+            print("\n📋 4. Mermaid 다이어그램 생성 테스트...")
+            try:
+                mermaid = agent.get_mermaid_graph()
+                if mermaid:
+                    print(f"✅ Mermaid 다이어그램 생성 성공! 길이: {len(mermaid)} 문자")
+                    print("📄 Mermaid 다이어그램 일부:")
+                    print(mermaid[:200] + "..." if len(mermaid) > 200 else mermaid)
+                else:
+                    print("❌ Mermaid 다이어그램 생성 실패")
+            except Exception as mermaid_error:
+                print(f"❌ Mermaid 다이어그램 생성 오류: {mermaid_error}")
+
+            # 5. 그래프 노드 구조 확인
+            print("\n📋 5. 그래프 노드 구조 확인...")
+            graph = agent.workflow.get_graph()
+            nodes = graph.nodes
+            edges = graph.edges
+
+            print(f"   📍 노드 목록 ({len(nodes)}개):")
+            for i, node in enumerate(nodes, 1):
+                print(f"      {i}. {node}")
+
+            print(f"\n   🔗 엣지 목록 ({len(edges)}개):")
+            for i, edge in enumerate(edges, 1):
+                print(f"      {i}. {edge}")
+
+            # 6. 복잡도 분석 테스트
+            print("\n📋 6. 복잡도 분석 노드 테스트...")
+            test_state = {
+                'input_text': '모듈 2의 기어 쌍을 설계해주세요',
+                'classifier_result': {'designable': True, 'gear_type': 'gear_pair'},
+                'gear_type': 'gear_pair',
+                'messages': [],
+                'required_tools': [],
+                'estimated_steps': 0
+            }
+
+            try:
+                result = await agent._analyze_complexity_node(test_state)
+                print(f"✅ 복잡도 분석 성공!")
+                print(f"   - 복잡도: {result.get('complexity_level', 'N/A')}")
+                print(f"   - 분석: {result.get('complexity_analysis', 'N/A')[:100]}...")
+            except Exception as analysis_error:
+                print(f"❌ 복잡도 분석 오류: {analysis_error}")
+
+            print("\n" + "=" * 60)
+            print("🎉 Gear Agent 그래프 컴파일 테스트 완료!")
+            print("=" * 60)
+
+        except Exception as e:
+            print(f"\n❌ 전체 테스트 실패: {e}")
+            import traceback
+            print("\n📋 상세 오류 정보:")
+            traceback.print_exc()
+
+    # 비동기 테스트 실행
+    print("🚀 Gear Agent 테스트 시작...")
+    asyncio.run(test_gear_agent())
