@@ -5,6 +5,8 @@ from langgraph.graph.message import add_messages
 from typing_extensions import Annotated
 import json
 import asyncio
+from io import BytesIO
+from PIL import Image
 
 from agents.base_agent import BaseAgent
 
@@ -57,7 +59,7 @@ class GearAgent(BaseAgent):
         # Tool 초기화
         self._initialize_tools()
 
-    def _create_workflow(self) -> StateGraph:
+    def _create_workflow(self):
         """Planning 기반 LangGraph 워크플로우 구성"""
         workflow = StateGraph(GearAgentState)
 
@@ -105,6 +107,63 @@ class GearAgent(BaseAgent):
         workflow.add_edge("synthesize_results", END)
 
         return workflow.compile()
+
+    def get_graph_image(self):
+        """LangGraph에서 그래프 이미지를 생성하여 반환"""
+        try:
+            # 첫 번째 시도: draw_mermaid_png() 사용
+            try:
+                png_data = self.workflow.get_graph(xray=True).draw_mermaid_png()
+                image = Image.open(BytesIO(png_data))
+                return image
+            except Exception as mermaid_error:
+                print(f"Mermaid PNG 생성 실패: {mermaid_error}")
+
+                # 두 번째 시도: draw_ascii() 사용 (텍스트 기반)
+                try:
+                    ascii_graph = self.workflow.get_graph(xray=True).draw_ascii()
+                    print(f"ASCII 그래프 생성 성공: {ascii_graph[:100]}...")
+                    # ASCII를 이미지로 변환하지 않고 None 반환 (fallback은 app.py에서 처리)
+                    return None
+                except Exception as ascii_error:
+                    print(f"ASCII 그래프 생성도 실패: {ascii_error}")
+
+                    # 세 번째 시도: 기본 그래프 정보만 가져오기
+                    try:
+                        graph = self.workflow.get_graph(xray=True)
+                        print(f"기본 그래프 객체 생성 성공: {type(graph)}")
+                        return None
+                    except Exception as basic_error:
+                        print(f"기본 그래프 생성도 실패: {basic_error}")
+
+                raise mermaid_error  # 원래 에러를 다시 발생시킴
+
+        except Exception as e:
+            print(f"그래프 이미지 생성 전체 오류: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return None
+
+    def get_mermaid_graph(self):
+        """Mermaid 다이어그램 텍스트 반환 (app.py fallback에서 사용)"""
+        try:
+            # LangGraph에서 Mermaid 문법 가져오기
+            return self.workflow.get_graph(xray=True).draw_mermaid()
+        except Exception as e:
+            print(f"Mermaid 다이어그램 생성 오류: {e}")
+            # 기본 다이어그램 반환
+            return """
+graph TD
+    A[analyze_complexity] --> B{complexity?}
+    B -->|simple| C[execute_simple_task]
+    B -->|complex| D[create_plan]
+    D --> E[execute_current_task]
+    E --> F[check_plan_completion]
+    F -->|more tasks| E
+    F -->|complete| G[synthesize_results]
+    C --> G
+    G --> H[END]
+            """
 
     def _initialize_tools(self):
         """사용 가능한 Tool들 초기화"""
