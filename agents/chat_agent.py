@@ -7,6 +7,13 @@ import asyncio
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+# nest_asyncio를 사용하여 이벤트 루프 중첩 문제 해결
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    pass
+
 from .base_agent import BaseAgent
 import streamlit as st
 import time
@@ -56,7 +63,7 @@ class ChatAgent(BaseAgent):
                     model=self.model_name,
                     temperature=self.temperature,
                     api_key=os.getenv("ANTHROPIC_API_KEY"),
-                    streaming=True
+                    streaming=False
                 )
             elif self.provider == "google":
                 return ChatGoogleGenerativeAI(
@@ -219,18 +226,8 @@ class ChatAgent(BaseAgent):
     def get_response(self, input_text: str) -> str:
         """완전 동기식 응답 함수 (asyncio 내부 처리)"""
         try:
-            # 이미 이벤트 루프가 실행 중인지 확인
-            try:
-                loop = asyncio.get_running_loop()
-                # 이미 루프가 실행 중이면 새 태스크로 실행
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.process(input_text))
-                    return future.result()
-            except RuntimeError:
-                # 실행 중인 루프가 없으면 새로 생성
-                return asyncio.run(self.process(input_text))
-                
+            # nest_asyncio 적용으로 중첩 루프 문제 해결
+            return asyncio.run(self.process(input_text))
         except Exception as e:
             return f"오류 발생: {str(e)}"
       
