@@ -974,7 +974,7 @@ others_info: 정보 없음
         workflow.add_edge("missing_info", END)
         workflow.add_edge("not_designable_gear", END)
         workflow.add_edge("not_gear_related", END)
-        
+
         return workflow.compile()
     
     def get_graph_image(self):
@@ -1066,7 +1066,19 @@ others_info: 정보 없음
             
             # state 저장 (gear_agent에서 접근할 수 있도록)
             self.state = result
-            
+
+            # final_state 결정 - 워크플로우가 어떤 노드에서 끝났는지 추적
+            if result.get("proceed_to_design", False):
+                self.state["final_state"] = "perform_design"
+            elif result.get("classification") == "not_gear_related":
+                self.state["final_state"] = "not_gear_related"
+            elif result.get("detected_gear_type") == "not_designable":
+                self.state["final_state"] = "not_designable_gear"
+            elif result.get("missing_info") != "none":
+                self.state["final_state"] = "missing_info"
+            else:
+                self.state["final_state"] = "complete_info"
+
             # shared_data에 classifier 결과 저장
             self.set_shared_data("classifier_result", {
                 "gear_type": result.get("detected_gear_type", ""),

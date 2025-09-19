@@ -70,15 +70,45 @@ class AgentService:
         지정된 에이전트로 입력을 처리하고 콜백으로 결과를 반환합니다.
         - 에이전트의 실제 처리 로직은 BaseAgent의 process_with_callback에 위임
         - AgentService는 에이전트 선택 및 호출만 담당
+        - gear_classifier_agent의 perform_design 결과 시 gear_agent 자동 연결
         """
         if agent_name not in self.agents:
             error_msg = f"알 수 없는 에이전트 타입: {agent_name}"
             callback(error_msg)
             return error_msg
-            
+
         try:
             agent = self.agents[agent_name]
-            return await agent.process_with_callback(input_text, callback)
+            result = await agent.process_with_callback(input_text, callback)
+
+            # gear_classifier_agent의 결과를 확인하여 자동 연결 처리
+            if agent_name == "Gear Classifier" and hasattr(agent, 'state') and agent.state:
+                final_state = agent.state.get("final_state", "")
+
+                # perform_design으로 끝났다면 gear_agent를 자동 호출
+                if final_state == "perform_design":
+                    callback("\n" + "="*50 + "\n")
+                    callback("🔄 **자동 연결**: gear_classifier → gear_agent (Planning 모드)\n")
+                    callback("📋 기어 설계 Planning을 시작합니다...\n")
+                    callback("="*50 + "\n\n")
+
+                    # gear_agent에 classifier 결과 전달
+                    if "Gear Agent" in self.agents:
+                        gear_agent = self.agents["Gear Agent"]
+
+                        # shared_data를 gear_classifier에서 gear_agent로 복사
+                        if hasattr(agent, 'shared_data'):
+                            for key, value in agent.shared_data.items():
+                                gear_agent.set_shared_data(key, value)
+
+                        # gear_agent를 Planning 모드로 호출
+                        gear_result = await gear_agent.process_with_callback(input_text, callback)
+
+                        # 두 결과를 합쳐서 반환
+                        return result + "\n\n" + "="*50 + "\n🎯 **Planning 결과**:\n" + gear_result
+
+            return result
+
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
