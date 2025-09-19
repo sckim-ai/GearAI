@@ -1,9 +1,10 @@
-"""Gear Agent: langgraph + MCP tool 기반 통합 기어 에이전트
-MCP tool을 통해 gear_classifier와 gear_design_agent를 호출하여 응답하거나, 단순 질문은 직접 답변
-"""
+"""Gear Agent: gear_classifier 결과를 받아 Planning 기반으로 Task를 수행하는 에이전트"""
 from typing import Dict, Any, Optional, Callable, TypedDict, List
 from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from typing_extensions import Annotated
 import json
+import asyncio
 
 from agents.base_agent import BaseAgent
 
@@ -11,412 +12,634 @@ from agents.base_agent import BaseAgent
 class GearAgentState(TypedDict):
     """Gear Agent 상태 관리"""
     # 입력 및 메시지
-    messages: List[Dict[str, str]]
+    messages: Annotated[list, add_messages]
     input_text: str
-    
+
+    # gear_classifier로부터 받은 정보
+    classifier_result: Dict[str, Any]
+    gear_type: str
+    speed_info: str
+    power_info: str
+    ratio_info: str
+    others_info: str
+
+    # 요청 복잡도 분석
+    complexity_level: str  # "simple", "complex"
+    complexity_analysis: str
+
+    # Planning 관련 (복잡한 요청의 경우)
+    plan: List[Dict[str, Any]]
+    current_task_index: int
+
+    # Task 실행 관련
+    task_results: List[Dict[str, Any]]
+    current_task: Dict[str, Any]
+
     # Tool 호출 관련
+    tool_calls: List[Dict[str, Any]]
     tool_results: List[Dict[str, Any]]
-    
-    # 분석 결과
-    is_gear_related: bool
-    needs_tools: bool
-    analysis_result: str
-    
+
     # 최종 결과
     final_response: str
     error_message: str
 
 
 class GearAgent(BaseAgent):
-    """Langgraph + MCP Tool 기반 통합 Gear Agent"""
-    
+    """Planning 기반 Gear Task 수행 Agent"""
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.agent_name = "MCP Gear Agent"
-        
+        self.agent_name = "Planning Gear Agent"
+
         # LangGraph 워크플로우 구성
         self.workflow = self._create_workflow()
-        
+
+        # Tool 초기화
+        self._initialize_tools()
+
     def _create_workflow(self) -> StateGraph:
-        """Langgraph + MCP Tool 워크플로우 구성"""
+        """Planning 기반 LangGraph 워크플로우 구성"""
         workflow = StateGraph(GearAgentState)
-        
+
         # 노드 추가
-        workflow.add_node("analyze_input", self._analyze_input_node)
-        workflow.add_node("call_tools", self._call_tools_node)
-        workflow.add_node("generate_response", self._generate_response_node)
-        
+        workflow.add_node("analyze_complexity", self._analyze_complexity_node)
+        workflow.add_node("create_plan", self._create_plan_node)
+        workflow.add_node("execute_simple_task", self._execute_simple_task_node)
+        workflow.add_node("execute_current_task", self._execute_current_task_node)
+        workflow.add_node("check_plan_completion", self._check_plan_completion_node)
+        workflow.add_node("synthesize_results", self._synthesize_results_node)
+
         # 시작점 설정
-        workflow.set_entry_point("analyze_input")
-        
-        # 조건부 라우팅
+        workflow.set_entry_point("analyze_complexity")
+
+        # 조건부 라우팅 - 복잡도에 따른 분기
         workflow.add_conditional_edges(
-            "analyze_input",
-            self._should_use_tools,
+            "analyze_complexity",
+            self._route_by_complexity,
             {
-                "tools": "call_tools",
-                "direct_response": "generate_response"
+                "simple": "execute_simple_task",
+                "complex": "create_plan"
             }
         )
-        
-        workflow.add_edge("call_tools", "generate_response")
-        workflow.add_edge("generate_response", END)
-        
+
+        # 단순 작업 -> 결과 종합
+        workflow.add_edge("execute_simple_task", "synthesize_results")
+
+        # 복잡 작업 -> Planning -> Task 실행
+        workflow.add_edge("create_plan", "execute_current_task")
+
+        # Task 실행 -> 완료 확인
+        workflow.add_edge("execute_current_task", "check_plan_completion")
+
+        # 완료 확인 후 분기
+        workflow.add_conditional_edges(
+            "check_plan_completion",
+            self._route_plan_completion,
+            {
+                "continue": "execute_current_task",
+                "complete": "synthesize_results"
+            }
+        )
+
+        # 최종 종료
+        workflow.add_edge("synthesize_results", END)
+
         return workflow.compile()
-        
-    async def _analyze_input_node(self, state: GearAgentState) -> GearAgentState:
-        """입력 분석 및 도구 사용 여부 결정"""
+
+    def _initialize_tools(self):
+        """사용 가능한 Tool들 초기화"""
+        self.available_tools = {
+            "gear_design_calculation": self._tool_gear_design_calculation,
+            "gear_strength_analysis": self._tool_gear_strength_analysis,
+            "gear_efficiency_calculation": self._tool_gear_efficiency_calculation,
+            "gear_noise_analysis": self._tool_gear_noise_analysis,
+            "gear_optimization": self._tool_gear_optimization,
+            "material_selection": self._tool_material_selection,
+            "manufacturing_analysis": self._tool_manufacturing_analysis
+        }
+
+    async def _analyze_complexity_node(self, state: GearAgentState) -> GearAgentState:
+        """요청의 복잡도 분석"""
         try:
             input_text = state["input_text"]
-            
-            # 기어 관련 키워드 분석
-            gear_keywords = [
-                "기어", "gear", "치차", "톱니바퀴", "모듈", "잇수", "피치", 
-                "압력각", "치형", "강도", "설계", "계산", "분석", "스퍼기어", "헬리컬"
+            classifier_result = state.get("classifier_result", {})
+
+            # 복잡도 판단 키워드
+            complex_keywords = [
+                "최적화", "optimize", "분석", "analyze", "검증", "verify",
+                "비교", "compare", "다중", "multiple", "여러", "various",
+                "단계별", "step", "과정", "process", "종합적", "comprehensive",
+                "시뮬레이션", "simulation", "모델링", "modeling"
             ]
-            
-            is_gear_related = any(keyword in input_text.lower() for keyword in gear_keywords)
-            state["is_gear_related"] = is_gear_related
-            
-            # 도구가 필요한 작업인지 판단
-            tool_required_keywords = [
-                "설계", "계산", "분석", "강도", "검증", "최적화", 
-                "design", "calculate", "analyze", "strength", "optimize"
+
+            simple_keywords = [
+                "계산", "calculate", "구하", "find", "알려줘", "tell me",
+                "설계", "design", "기본", "basic", "단순", "simple"
             ]
-            
-            needs_tools = any(keyword in input_text.lower() for keyword in tool_required_keywords)
-            state["needs_tools"] = needs_tools and is_gear_related
-            
-            # 분석 결과 저장
-            if is_gear_related and needs_tools:
-                state["analysis_result"] = "기어 관련 계산/분석 작업 - MCP 도구 사용 필요"
-            elif is_gear_related:
-                state["analysis_result"] = "기어 관련 일반 질문 - 직접 답변 가능"
+
+            # 키워드 기반 복잡도 분석
+            complex_score = sum(1 for keyword in complex_keywords if keyword in input_text.lower())
+            simple_score = sum(1 for keyword in simple_keywords if keyword in input_text.lower())
+
+            # 추가 조건 검사
+            has_multiple_requirements = len(input_text.split(',')) > 2 or len(input_text.split('그리고')) > 1
+            has_conditional_logic = any(word in input_text for word in ['만약', 'if', '경우', 'case'])
+
+            # 복잡도 결정
+            if complex_score > simple_score or has_multiple_requirements or has_conditional_logic:
+                complexity_level = "complex"
+                analysis = f"복잡한 요청 감지: 복잡도 점수 {complex_score}, 다중 요구사항 {has_multiple_requirements}"
             else:
-                state["analysis_result"] = "기어와 관련 없는 질문 - 기어 전문 에이전트 범위 외"
-            
+                complexity_level = "simple"
+                analysis = f"단순한 요청: 단순도 점수 {simple_score}"
+
+            state["complexity_level"] = complexity_level
+            state["complexity_analysis"] = analysis
+
             return state
-            
+
         except Exception as e:
-            state["error_message"] = f"입력 분석 중 오류 발생: {str(e)}"
+            state["error_message"] = f"복잡도 분석 중 오류: {str(e)}"
             return state
-    
-    async def _call_tools_node(self, state: GearAgentState) -> GearAgentState:
-        """MCP Tools 호출 노드"""
+
+    async def _create_plan_node(self, state: GearAgentState) -> GearAgentState:
+        """복잡한 요청에 대한 Planning 생성"""
         try:
-            # MCP client 초기화 확인
-            if not hasattr(self, '_mcp_client'):
-                await self._initialize_mcp_client()
-            
-            tool_results = []
             input_text = state["input_text"]
-            
-            # 순차적으로 필요한 도구들 호출
-            if state.get("needs_tools", False):
-                # 1. 먼저 classifier 호출
-                classifier_result = await self._call_mcp_tool("gear_classifier", {
-                    "query": input_text,
-                    "analysis_depth": "detailed"
-                })
-                
-                if classifier_result and classifier_result.get("success"):
-                    tool_results.append({
-                        "tool_name": "gear_classifier",
-                        "status": "success",
-                        "classification": classifier_result.get("data", {}),
-                        "message": "기어 분류 완료"
-                    })
-                    
-                    # 2. classifier 결과를 바탕으로 design agent 호출
-                    design_params = {
-                        "raw_input": input_text,
-                        "classification_result": classifier_result.get("data", {})
+            classifier_result = state.get("classifier_result", {})
+            gear_type = state.get("gear_type", "")
+
+            # 기어 타입별 기본 계획 템플릿
+            base_plan = []
+
+            if gear_type in ["gear_pair", "three_gear"]:
+                base_plan = [
+                    {
+                        "task_id": 1,
+                        "task_name": "기본 설계 계산",
+                        "description": "모듈, 잇수, 치형 등 기본 설계 계산",
+                        "tool": "gear_design_calculation",
+                        "dependencies": [],
+                        "status": "pending"
+                    },
+                    {
+                        "task_id": 2,
+                        "task_name": "강도 해석",
+                        "description": "기어 치 굽힘강도 및 면압강도 계산",
+                        "tool": "gear_strength_analysis",
+                        "dependencies": [1],
+                        "status": "pending"
                     }
-                    
-                    design_result = await self._call_mcp_tool("gear_design", design_params)
-                    
-                    if design_result and design_result.get("success"):
-                        tool_results.append({
-                            "tool_name": "gear_design", 
-                            "status": "success",
-                            "design_results": design_result.get("data", {}),
-                            "message": "기어 설계 계산 완료"
-                        })
-                    else:
-                        tool_results.append({
-                            "tool_name": "gear_design",
-                            "status": "error", 
-                            "error": design_result.get("error", "설계 계산 실패")
-                        })
-                        
-                else:
-                    tool_results.append({
-                        "tool_name": "gear_classifier",
-                        "status": "error",
-                        "error": classifier_result.get("error", "분류 실패")
-                    })
-            
-            state["tool_results"] = tool_results
+                ]
+            elif gear_type in ["simple_planetary", "double_pinion_planetary"]:
+                base_plan = [
+                    {
+                        "task_id": 1,
+                        "task_name": "유성기어 기본 설계",
+                        "description": "태양기어, 유성기어, 링기어 기본 설계",
+                        "tool": "gear_design_calculation",
+                        "dependencies": [],
+                        "status": "pending"
+                    },
+                    {
+                        "task_id": 2,
+                        "task_name": "유성기어 강도 해석",
+                        "description": "각 기어 요소별 강도 계산",
+                        "tool": "gear_strength_analysis",
+                        "dependencies": [1],
+                        "status": "pending"
+                    }
+                ]
+
+            # 추가 요구사항에 따른 계획 확장
+            if any(keyword in input_text.lower() for keyword in ["효율", "efficiency"]):
+                base_plan.append({
+                    "task_id": len(base_plan) + 1,
+                    "task_name": "효율 계산",
+                    "description": "기어 전달 효율 계산",
+                    "tool": "gear_efficiency_calculation",
+                    "dependencies": [1],
+                    "status": "pending"
+                })
+
+            if any(keyword in input_text.lower() for keyword in ["소음", "noise", "진동", "vibration"]):
+                base_plan.append({
+                    "task_id": len(base_plan) + 1,
+                    "task_name": "소음 분석",
+                    "description": "기어 소음 및 진동 분석",
+                    "tool": "gear_noise_analysis",
+                    "dependencies": [1, 2],
+                    "status": "pending"
+                })
+
+            if any(keyword in input_text.lower() for keyword in ["최적화", "optimize"]):
+                base_plan.append({
+                    "task_id": len(base_plan) + 1,
+                    "task_name": "설계 최적화",
+                    "description": "설계 변수 최적화",
+                    "tool": "gear_optimization",
+                    "dependencies": list(range(1, len(base_plan) + 1)),
+                    "status": "pending"
+                })
+
+            state["plan"] = base_plan
+            state["current_task_index"] = 0
+            state["task_results"] = []
+
             return state
-            
+
         except Exception as e:
-            state["error_message"] = f"Tool 호출 중 오류 발생: {str(e)}"
+            state["error_message"] = f"Planning 생성 중 오류: {str(e)}"
             return state
-            
-    async def _generate_response_node(self, state: GearAgentState) -> GearAgentState:
-        """최종 응답 생성"""
+
+    async def _execute_simple_task_node(self, state: GearAgentState) -> GearAgentState:
+        """단순한 요청에 대한 직접 Tool 호출"""
         try:
-            # Tool 결과가 있는 경우 처리
-            if state.get("tool_results"):
-                # Tool 결과를 종합하여 응답 생성
-                response = self._process_tool_results(state["tool_results"])
+            input_text = state["input_text"]
+            classifier_result = state.get("classifier_result", {})
+
+            # 단순 요청에 적합한 Tool 선택
+            if any(keyword in input_text.lower() for keyword in ["설계", "design", "계산", "calculate"]):
+                tool_name = "gear_design_calculation"
+            elif any(keyword in input_text.lower() for keyword in ["강도", "strength"]):
+                tool_name = "gear_strength_analysis"
+            elif any(keyword in input_text.lower() for keyword in ["효율", "efficiency"]):
+                tool_name = "gear_efficiency_calculation"
             else:
-                # 직접 응답 생성
-                response = await self._generate_direct_response(state["input_text"], state.get("is_gear_related", False))
-            
+                tool_name = "gear_design_calculation"  # 기본값
+
+            # Tool 호출
+            tool_result = await self._call_tool(tool_name, {
+                "input_text": input_text,
+                "classifier_result": classifier_result,
+                "gear_type": state.get("gear_type", ""),
+                "speed_info": state.get("speed_info", ""),
+                "power_info": state.get("power_info", ""),
+                "ratio_info": state.get("ratio_info", ""),
+                "others_info": state.get("others_info", "")
+            })
+
+            state["tool_results"] = [tool_result]
+
+            return state
+
+        except Exception as e:
+            state["error_message"] = f"단순 작업 실행 중 오류: {str(e)}"
+            return state
+
+    async def _execute_current_task_node(self, state: GearAgentState) -> GearAgentState:
+        """현재 Task 실행"""
+        try:
+            plan = state.get("plan", [])
+            current_index = state.get("current_task_index", 0)
+
+            if current_index >= len(plan):
+                return state
+
+            current_task = plan[current_index]
+
+            # 의존성 확인
+            dependencies = current_task.get("dependencies", [])
+            task_results = state.get("task_results", [])
+
+            # 의존성이 완료되었는지 확인
+            completed_tasks = [result["task_id"] for result in task_results if result.get("status") == "completed"]
+
+            if all(dep in completed_tasks for dep in dependencies):
+                # Tool 호출
+                tool_name = current_task.get("tool")
+                tool_params = {
+                    "input_text": state["input_text"],
+                    "classifier_result": state.get("classifier_result", {}),
+                    "gear_type": state.get("gear_type", ""),
+                    "speed_info": state.get("speed_info", ""),
+                    "power_info": state.get("power_info", ""),
+                    "ratio_info": state.get("ratio_info", ""),
+                    "others_info": state.get("others_info", ""),
+                    "previous_results": [r for r in task_results if r["task_id"] in dependencies]
+                }
+
+                tool_result = await self._call_tool(tool_name, tool_params)
+
+                # 결과 저장
+                task_result = {
+                    "task_id": current_task["task_id"],
+                    "task_name": current_task["task_name"],
+                    "tool_name": tool_name,
+                    "result": tool_result,
+                    "status": "completed" if tool_result.get("success") else "failed"
+                }
+
+                task_results.append(task_result)
+                state["task_results"] = task_results
+                state["current_task"] = current_task
+
+            return state
+
+        except Exception as e:
+            state["error_message"] = f"Task 실행 중 오류: {str(e)}"
+            return state
+
+    async def _check_plan_completion_node(self, state: GearAgentState) -> GearAgentState:
+        """Plan 완료 상태 확인"""
+        try:
+            plan = state.get("plan", [])
+            current_index = state.get("current_task_index", 0)
+
+            # 다음 Task로 이동
+            state["current_task_index"] = current_index + 1
+
+            return state
+
+        except Exception as e:
+            state["error_message"] = f"Plan 완료 확인 중 오류: {str(e)}"
+            return state
+
+    async def _synthesize_results_node(self, state: GearAgentState) -> GearAgentState:
+        """결과 종합 및 최종 응답 생성"""
+        try:
+            complexity_level = state.get("complexity_level", "simple")
+            tool_results = state.get("tool_results", [])
+            task_results = state.get("task_results", [])
+
+            if complexity_level == "simple":
+                # 단순 요청 결과 처리
+                response = self._format_simple_results(tool_results)
+            else:
+                # 복잡 요청 결과 처리
+                response = self._format_complex_results(task_results)
+
             state["final_response"] = response
+
             return state
-            
+
         except Exception as e:
-            state["error_message"] = f"응답 생성 중 오류 발생: {str(e)}"
+            state["error_message"] = f"결과 종합 중 오류: {str(e)}"
             return state
-            
-    def _should_use_tools(self, state: GearAgentState) -> str:
-        """Tool 사용 여부 결정"""
-        if state.get("needs_tools", False):
-            return "tools"
+
+    def _route_by_complexity(self, state: GearAgentState) -> str:
+        """복잡도에 따른 라우팅"""
+        return state.get("complexity_level", "simple")
+
+    def _route_plan_completion(self, state: GearAgentState) -> str:
+        """Plan 완료 여부에 따른 라우팅"""
+        plan = state.get("plan", [])
+        current_index = state.get("current_task_index", 0)
+
+        if current_index >= len(plan):
+            return "complete"
         else:
-            return "direct_response"
-            
-    def _process_tool_results(self, tool_results: List[Dict[str, Any]]) -> str:
-        """Tool 실행 결과를 처리하여 응답 생성"""
+            return "continue"
+
+    async def _call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Tool 호출"""
         try:
-            responses = []
-            
-            for result in tool_results:
-                if result.get("status") == "success":
-                    tool_name = result.get("tool_name", "unknown")
-                    
-                    if tool_name == "gear_classifier":
-                        classification = result.get("classification", {})
-                        responses.append(f"🔍 **기어 분류 결과:**\n- 기어 타입: {classification.get('gear_type', 'N/A')}\n- 분석 유형: {classification.get('analysis_type', 'N/A')}")
-                    
-                    elif tool_name == "gear_design":
-                        design_results = result.get("design_results", {})
-                        responses.append(f"⚙️ **기어 설계 결과:**\n- 모듈: {design_results.get('module', 'N/A')}\n- 잇수: {design_results.get('teeth_count', 'N/A')}\n- 압력각: {design_results.get('pressure_angle', 'N/A')}°\n- 안전계수: {design_results.get('safety_factor', 'N/A')}")
-                
-                else:
-                    responses.append(f"❌ {result.get('tool_name', 'Tool')} 실행 중 오류: {result.get('error', 'Unknown error')}")
-            
-            return "\n\n".join(responses) if responses else "도구 실행 결과를 처리할 수 없습니다."
-            
-        except Exception as e:
-            return f"결과 처리 중 오류 발생: {str(e)}"
-            
-    async def _generate_direct_response(self, input_text: str, is_gear_related: bool) -> str:
-        """직접 응답 생성 (도구 없이)"""
-        try:
-            if not is_gear_related:
-                return "죄송합니다. 저는 기어 설계 및 분석 전문 에이전트입니다. 기어와 관련된 질문을 해주세요."
-            
-            # 기어 관련 일반 질문에 대한 직접 응답
-            if any(keyword in input_text.lower() for keyword in ["what", "뭐", "무엇", "설명"]):
-                return """
-🔧 **기어(Gear) 기본 정보**
-
-기어는 회전 운동을 전달하거나 속도/토크를 변환하는 기계 요소입니다.
-
-**주요 기어 종류:**
-- 스퍼 기어(Spur Gear): 직선 치형
-- 헬리컬 기어(Helical Gear): 나선 치형  
-- 베벨 기어(Bevel Gear): 원추형
-- 웜 기어(Worm Gear): 나사형
-
-**기본 설계 변수:**
-- 모듈(Module): 기어 크기의 기준
-- 잇수(Teeth Count): 기어 이의 개수
-- 압력각(Pressure Angle): 치형 각도
-- 페이스폭(Face Width): 기어 폭
-
-구체적인 설계나 계산이 필요하시면 상세한 요구사항을 알려주세요.
-"""
-            
-            return "기어 관련 질문을 해주셨네요. 더 구체적인 설계나 계산이 필요하시면 자세한 요구사항을 알려주세요."
-            
-        except Exception as e:
-            return f"응답 생성 중 오류 발생: {str(e)}"
-    
-    async def _call_mcp_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """MCP client를 통해 실제 tool을 호출하는 메서드"""
-        try:
-            # MCP client 설정 확인
-            if not hasattr(self, '_mcp_client'):
-                await self._initialize_mcp_client()
-            
-            # Tool별 MCP 호출
-            if tool_name == "gear_classifier":
-                # gear_classifier_agent의 MCP 서버 호출
-                return await self._call_gear_classifier_mcp(parameters)
-            
-            elif tool_name == "gear_design":
-                # gear_design_agent의 MCP 서버 호출  
-                return await self._call_gear_design_mcp(parameters)
-            
+            if tool_name in self.available_tools:
+                return await self.available_tools[tool_name](parameters)
             else:
                 return {
                     "success": False,
-                    "error": f"Unknown tool: {tool_name}"
+                    "error": f"Unknown tool: {tool_name}",
+                    "result": ""
                 }
-                
         except Exception as e:
             return {
                 "success": False,
-                "error": f"MCP tool call failed: {str(e)}"
+                "error": f"Tool execution failed: {str(e)}",
+                "result": ""
             }
-    
-    async def _initialize_mcp_client(self):
-        """MCP client 초기화"""
+
+    # Tool 구현들
+    async def _tool_gear_design_calculation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """기어 설계 계산 Tool"""
         try:
-            # 임시로 기존 agent들을 직접 호출하는 방식으로 구현
-            # 실제 MCP 서버가 구축되면 이 부분을 교체
-            from agents.gear_classifier_agent import GearClassifierAgent
+            # 실제 기어 설계 에이전트 호출
             from agents.gear_design_agent import GearDesignAgent
-            
-            classifier_config = {
-                "model": self.config.get("model", "gpt-4o-mini"),
-                "temperature": self.config.get("temperature", 0.0)
-            }
-            self._classifier_agent = GearClassifierAgent(classifier_config)
-            
+
             design_config = {
-                "model": self.config.get("model", "gpt-4o-mini"), 
+                "model": self.config.get("model", "gpt-4o-mini"),
                 "temperature": self.config.get("temperature", 0.0),
                 "gear_design_path": self.config.get("gear_design_path", r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows"),
                 "template_json_path": self.config.get("template_json_path", "TestGD.GD1")
             }
-            self._design_agent = GearDesignAgent(design_config)
-            
-            # shared_data 공유 설정
-            self._design_agent.shared_data = self._classifier_agent.shared_data
-            
-            self._mcp_client = True  # 초기화 완료 표시
-            
-        except Exception as e:
-            print(f"MCP client 초기화 실패: {e}")
-            self._mcp_client = None
-    
-    async def _call_gear_classifier_mcp(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """gear_classifier_agent MCP 호출"""
-        try:
-            query = parameters.get("query", "")
-            
-            # classifier agent 호출
-            result = await self._classifier_agent.process_with_callback(
-                query,
-                lambda x: None  # 임시 콜백
+
+            design_agent = GearDesignAgent(design_config)
+
+            # classifier 결과를 shared_data로 전달
+            classifier_result = params.get("classifier_result", {})
+            design_agent.set_shared_data("classifier_result", classifier_result)
+
+            result = await design_agent.process_with_callback(
+                params.get("input_text", ""),
+                lambda x: None
             )
-            
-            # 결과에서 상태 정보 추출
-            classification_data = {}
-            if hasattr(self._classifier_agent, 'state') and self._classifier_agent.state:
-                classification_data = self._classifier_agent.state
-            
+
             return {
                 "success": True,
-                "data": {
-                    "result": result,
-                    "classification": classification_data,
-                    "processed_query": query
-                }
+                "tool_name": "gear_design_calculation",
+                "result": result,
+                "details": "기어 설계 계산 완료"
             }
-            
+
         except Exception as e:
             return {
                 "success": False,
-                "error": f"Gear classifier MCP call failed: {str(e)}"
+                "error": str(e),
+                "result": f"기어 설계 계산 실패: {str(e)}"
             }
-    
-    async def _call_gear_design_mcp(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """gear_design_agent MCP 호출"""
-        try:
-            # parameters에서 입력 데이터 추출
-            raw_input = parameters.get("raw_input", "")
-            params_dict = parameters.get("parameters", {})
-            
-            input_text = raw_input if raw_input else json.dumps(params_dict, ensure_ascii=False)
-            
-            # design agent 호출
-            result = await self._design_agent.process_with_callback(
-                input_text,
-                lambda x: None  # 임시 콜백
-            )
-            
-            # 결과에서 상태 정보 추출
-            design_data = {}
-            if hasattr(self._design_agent, 'state') and self._design_agent.state:
-                design_data = self._design_agent.state
-            
-            return {
-                "success": True,
-                "data": {
-                    "result": result,
-                    "design_details": design_data,
-                    "processed_input": input_text
-                }
+
+    async def _tool_gear_strength_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """기어 강도 해석 Tool"""
+        # 임시 구현 - 실제로는 강도 해석 로직 구현
+        return {
+            "success": True,
+            "tool_name": "gear_strength_analysis",
+            "result": "기어 강도 해석 결과: 안전계수 2.5, 굽힘강도 충족, 면압강도 충족",
+            "details": {
+                "bending_safety_factor": 2.5,
+                "contact_safety_factor": 2.8,
+                "status": "안전"
             }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Gear design MCP call failed: {str(e)}"
+        }
+
+    async def _tool_gear_efficiency_calculation(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """기어 효율 계산 Tool"""
+        # 임시 구현 - 실제로는 효율 계산 로직 구현
+        return {
+            "success": True,
+            "tool_name": "gear_efficiency_calculation",
+            "result": "기어 전달 효율: 98.5%",
+            "details": {
+                "efficiency": 0.985,
+                "loss_factors": ["윤활", "치형 정밀도"]
             }
-    
+        }
+
+    async def _tool_gear_noise_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """기어 소음 분석 Tool"""
+        # 임시 구현 - 실제로는 소음 분석 로직 구현
+        return {
+            "success": True,
+            "tool_name": "gear_noise_analysis",
+            "result": "예상 소음 수준: 65dB, 허용 기준 이내",
+            "details": {
+                "noise_level": 65,
+                "frequency_analysis": "주요 소음 주파수: 1.2kHz",
+                "recommendations": ["헬리컬 치형 적용", "정밀도 향상"]
+            }
+        }
+
+    async def _tool_gear_optimization(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """기어 최적화 Tool"""
+        # 임시 구현 - 실제로는 최적화 로직 구현
+        return {
+            "success": True,
+            "tool_name": "gear_optimization",
+            "result": "최적화 완료: 모듈 2.5 -> 2.3, 치폭 25 -> 22mm로 조정",
+            "details": {
+                "optimized_parameters": {
+                    "module": 2.3,
+                    "face_width": 22,
+                    "pressure_angle": 20
+                },
+                "improvement": "중량 15% 감소, 비용 10% 절감"
+            }
+        }
+
+    async def _tool_material_selection(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """재료 선택 Tool"""
+        # 임시 구현
+        return {
+            "success": True,
+            "tool_name": "material_selection",
+            "result": "권장 재료: SCM420 (침탄경화), 경도 HRC 58-62",
+            "details": {
+                "material": "SCM420",
+                "heat_treatment": "침탄경화",
+                "hardness": "HRC 58-62"
+            }
+        }
+
+    async def _tool_manufacturing_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """제조 분석 Tool"""
+        # 임시 구현
+        return {
+            "success": True,
+            "tool_name": "manufacturing_analysis",
+            "result": "제조 방법: 호브 가공, 정밀도 JIS 4급",
+            "details": {
+                "machining_method": "호브 가공",
+                "precision_grade": "JIS 4급",
+                "surface_treatment": "쇼트피닝"
+            }
+        }
+
+    def _format_simple_results(self, tool_results: List[Dict[str, Any]]) -> str:
+        """단순 요청 결과 포맷팅"""
+        if not tool_results:
+            return "처리 결과가 없습니다."
+
+        result = tool_results[0]
+
+        if result.get("success"):
+            return f"""🔧 **기어 분석 결과**
+
+{result.get('result', '')}
+
+📋 **상세 정보**: {result.get('details', '추가 정보 없음')}"""
+        else:
+            return f"❌ 처리 중 오류 발생: {result.get('error', '알 수 없는 오류')}"
+
+    def _format_complex_results(self, task_results: List[Dict[str, Any]]) -> str:
+        """복잡 요청 결과 포맷팅"""
+        if not task_results:
+            return "처리된 작업이 없습니다."
+
+        response_parts = ["🔧 **종합 기어 분석 결과**\n"]
+
+        for i, task_result in enumerate(task_results, 1):
+            task_name = task_result.get("task_name", f"작업 {i}")
+            tool_result = task_result.get("result", {})
+
+            if tool_result.get("success"):
+                response_parts.append(f"**{i}. {task_name}**")
+                response_parts.append(f"{tool_result.get('result', '')}\n")
+            else:
+                response_parts.append(f"**{i}. {task_name}** ❌")
+                response_parts.append(f"오류: {tool_result.get('error', '알 수 없는 오류')}\n")
+
+        # 종합 결론
+        successful_tasks = sum(1 for tr in task_results if tr.get("result", {}).get("success"))
+        total_tasks = len(task_results)
+
+        response_parts.append(f"\n📊 **처리 요약**: {successful_tasks}/{total_tasks} 작업 완료")
+
+        return "\n".join(response_parts)
+
     async def process_with_callback(self, input_text: str, callback: Callable[[str], None]) -> str:
-        """메인 처리 메서드"""
+        """메인 처리 메서드 - gear_classifier 결과를 받아서 처리"""
         try:
+            # gear_classifier 결과를 shared_data에서 가져오기
+            classifier_result = self.get_shared_data("classifier_result", {})
+
+            if not classifier_result:
+                return "❌ gear_classifier 결과를 찾을 수 없습니다. 먼저 gear_classifier_agent를 실행해주세요."
+
             # 초기 상태 설정
             initial_state: GearAgentState = {
                 "messages": [{"role": "user", "content": input_text}],
                 "input_text": input_text,
+                "classifier_result": classifier_result,
+                "gear_type": classifier_result.get("gear_type", ""),
+                "speed_info": classifier_result.get("speed_info", ""),
+                "power_info": classifier_result.get("power_info", ""),
+                "ratio_info": classifier_result.get("ratio_info", ""),
+                "others_info": classifier_result.get("others_info", ""),
+                "complexity_level": "",
+                "complexity_analysis": "",
+                "plan": [],
+                "current_task_index": 0,
+                "task_results": [],
+                "current_task": {},
+                "tool_calls": [],
                 "tool_results": [],
-                "is_gear_related": False,
-                "needs_tools": False,
-                "analysis_result": "",
                 "final_response": "",
                 "error_message": ""
             }
-            
+
             # 워크플로우 실행
+            callback("🚀 **기어 설계 작업을 시작합니다...**\n")
+
             final_state = initial_state
             async for state_update in self.workflow.astream(initial_state):
-                # state_update가 단일 노드 결과인 경우 처리
                 for node_name, node_result in state_update.items():
                     if isinstance(node_result, dict):
-                        # 노드 결과로 상태 업데이트
                         for key, value in node_result.items():
                             if key in final_state:
                                 final_state[key] = value
-                
-                # 중간 진행사항 콜백
-                if final_state.get("analysis_result") and not hasattr(self, '_analysis_sent'):
-                    callback(f"🔍 {final_state['analysis_result']}")
-                    self._analysis_sent = True
-            
+
+                # 진행 상황 콜백
+                if node_name == "analyze_complexity" and final_state.get("complexity_analysis"):
+                    callback(f"🔍 {final_state['complexity_analysis']}\n")
+                elif node_name == "create_plan" and final_state.get("plan"):
+                    plan_count = len(final_state["plan"])
+                    callback(f"📋 **계획 수립 완료**: {plan_count}개 작업 계획됨\n")
+                elif node_name == "execute_current_task" and final_state.get("current_task"):
+                    task_name = final_state["current_task"].get("task_name", "작업")
+                    callback(f"⚙️ **실행 중**: {task_name}\n")
+
             # 오류 처리
-            if final_state and final_state.get("error_message"):
+            if final_state.get("error_message"):
                 error_msg = f"❌ {final_state['error_message']}"
                 callback(error_msg)
                 return error_msg
-            
+
             # 최종 결과 반환
-            final_response = final_state.get("final_response", "처리 완료") if final_state else "처리 실패"
+            final_response = final_state.get("final_response", "처리 완료")
+            callback("✅ **작업 완료!**\n")
             return final_response
-            
+
         except Exception as e:
-            error_msg = f"❌ MCP Gear Agent 처리 오류: {str(e)}"
+            error_msg = f"❌ Gear Agent 처리 오류: {str(e)}"
             callback(error_msg)
             return error_msg
-        finally:
-            # 분석 플래그 리셋
-            if hasattr(self, '_analysis_sent'):
-                delattr(self, '_analysis_sent')

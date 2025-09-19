@@ -136,7 +136,7 @@ if agent_config:
             api_key = os.getenv("ANTHROPIC_API_KEY") 
             st.sidebar.write("🔑 Anthropic:", "✅ 설정됨" if api_key else "❌ 미설정")
         elif selected_provider == "google":
-            api_key = os.getenv("GEMINI_API_KEY")
+            api_key = os.getenv("GOOGLE_API_KEY")
             st.sidebar.write("🔑 Google:", "✅ 설정됨" if api_key else "❌ 미설정")
             
     
