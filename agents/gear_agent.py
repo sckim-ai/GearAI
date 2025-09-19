@@ -173,14 +173,30 @@ class GearAgent(BaseAgent):
     def get_graph_image(self):
         """LangGraph에서 그래프 이미지를 생성하여 반환"""
         try:
-            # LangGraph의 get_graph(xray=True).draw_mermaid_png() 사용
-            png_data = self.graph.get_graph(xray=True).draw_mermaid_png()
+            # Pyppeteer 방식으로 로컬 브라우저에서 렌더링 시도
+            from langchain_core.runnables.graph_mermaid import MermaidDrawMethod
 
-            # PNG 데이터를 PIL Image로 변환
-            image = Image.open(BytesIO(png_data))
-            return image
+            try:
+                png_data = self.graph.get_graph(xray=True).draw_mermaid_png(
+                    draw_method=MermaidDrawMethod.PYPPETEER
+                )
+                # PNG 데이터를 PIL Image로 변환
+                image = Image.open(BytesIO(png_data))
+                return image
+            except Exception as pyppeteer_error:
+                print(f"Pyppeteer 방식 실패: {pyppeteer_error}")
+
+                # 기본 API 방식으로 fallback 시도
+                try:
+                    png_data = self.graph.get_graph(xray=True).draw_mermaid_png()
+                    image = Image.open(BytesIO(png_data))
+                    return image
+                except Exception as api_error:
+                    print(f"API 방식도 실패: {api_error}")
+                    return None
+
         except Exception as e:
-            print(f"그래프 이미지 생성 오류: {e}")
+            print(f"그래프 이미지 생성 전체 오류: {e}")
             return None
 
     def get_mermaid_graph(self):
