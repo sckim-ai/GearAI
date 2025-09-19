@@ -572,7 +572,7 @@ others_info: 정보 없음
             
             # 기어 설계 에이전트 초기화
             gear_design_config = {
-                "model": self.model,
+                "model": self.model_name,
                 "temperature": self.temperature,
                 "gear_design_path": r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows",
                 "template_json_path": r"D:\SW\Streamlit\TestGD.GD1"
