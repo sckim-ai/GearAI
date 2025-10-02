@@ -51,12 +51,29 @@ class DotNetInitializer:
         
         # CLR 및 어셈블리 로드
         import clr
+        from System.Reflection import Assembly
+    
+        # 의존성 DLL 먼저 로드
+        dependency_dlls = [
+            "System.Configuration.ConfigurationManager.dll",
+            # 필요시 다른 DLL 추가
+        ]
+        
+        for dll_name in dependency_dlls:
+            dll_path = self.base_path / dll_name
+            if dll_path.exists():
+                try:
+                    Assembly.LoadFrom(str(dll_path))
+                    print(f"✓ {dll_name} 로드됨")
+                except Exception as e:
+                    print(f"✗ {dll_name} 로드 실패: {e}")
+
         clr.AddReference(str(self.dll_path))
         
         # 스레드 설정
         self._setup_threading()
         
-        return True
+        return True        
         
     def _setup_threading(self):
         """스레딩 환경 설정"""

@@ -1,0 +1,1398 @@
+import os
+import sys
+from pathlib import Path
+import datetime
+import json
+import asyncio
+import uuid
+import threading
+import time
+import subprocess
+from typing import Dict, Optional
+
+# 현재 디렉토리를 Python path에 추가
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils import llm_call, remove_code_block_llm  # LLM 호출 함수 임포트
+
+from mcp.server.fastmcp import FastMCP
+mcp = FastMCP("GearDesign_IPC_agent")
+
+# GearDesign.exe 경로 설정
+gear_design_exe_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\GearDesign.exe"
+
+
+class GearDesignIPC:
+    """GearDesign과 프로세스 간 통신(IPC)을 담당하는 클래스"""
+
+    def __init__(self, exe_path: str):
+        """
+        Args:
+            exe_path: GearDesign.exe 실행 파일 경로
+        """
+        self.exe_path = Path(exe_path)
+        self.process: Optional[subprocess.Popen] = None
+
+    def start(self) -> bool:
+        """GearDesign 프로세스를 IPC 모드로 시작"""
+
+        if not self.exe_path.exists():
+            print(f"오류: 실행 파일을 찾을 수 없습니다: {self.exe_path}")
+            return False
+
+        try:
+            self.process = subprocess.Popen(
+                [str(self.exe_path.absolute()), "--ipc-mode"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',  # UTF-8 인코딩 명시
+                errors='replace',   # 디코딩 오류 시 대체 문자 사용
+                bufsize=1,
+                cwd=str(self.exe_path.parent.absolute())
+            )
+            print(f"프로세스 시작 (PID: {self.process.pid})")
+
+            # stderr 읽기 (디버그 메시지 확인)
+            time.sleep(1)
+
+            # 프로세스 상태 확인
+            if self.process.poll() is not None:
+                stderr_output = self.process.stderr.read()
+                stdout_output = self.process.stdout.read()
+                print(f"프로세스 종료됨")
+                print(f"STDERR: {stderr_output}")
+                print(f"STDOUT: {stdout_output}")
+                return False
+
+            print("IPC 모드 대기 중...")
+            return True
+
+        except Exception as e:
+            print(f"프로세스 시작 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _send_command(self, command: Dict[str, any]) -> Dict[str, any]:
+        """명령을 전송하고 응답 받기"""
+        if not self.process or self.process.poll() is not None:
+            raise RuntimeError("GearDesign 프로세스가 실행 중이지 않습니다")
+
+        # 명령 전송
+        command_str = json.dumps(command) + "\n"
+        self.process.stdin.write(command_str)
+        self.process.stdin.flush()
+
+        # 응답 받기
+        response_line = self.process.stdout.readline()
+        if not response_line:
+            raise RuntimeError("프로세스로부터 응답이 없습니다")
+
+        return json.loads(response_line)
+
+    def load_and_validate_config(self, config_data: Dict[str, any]) -> Dict[str, any]:
+        """설정 데이터 로드"""
+        command = {
+            "action": "load_and_validate_config",
+            "config": config_data
+        }
+        return self._send_command(command)
+
+    def calc_geometry(self) -> Dict[str, any]:
+        """기어 치형 기하학적 계산"""
+        command = {
+            "action": "calc_geometry",
+        }
+        return self._send_command(command)
+
+    def calc_loadcase(self, geometry_data: Dict[str, any]) -> Dict[str, any]:
+        """기어 하중 계산"""
+        command = {
+            "action": "calc_loadcase",
+            "geometry_data": geometry_data
+        }
+        return self._send_command(command)
+
+    def calculate(self) -> Dict[str, any]:
+        """기어 치형 기하학적 계산 및 하중 계산 통합 수행"""
+        command = {"action": "calculate"}
+        return self._send_command(command)
+
+    def get_messages(self) -> Dict[str, any]:
+        """계산 메시지 가져오기"""
+        command = {"action": "get_messages"}
+        return self._send_command(command)
+
+    def save_2D_image(self, path: str) -> Dict[str, any]:
+        """기어 2D 이미지 저장"""
+        command = {
+            "action": "save_2D_image",
+            "path": path
+        }
+        return self._send_command(command)
+
+    def save_3d_modeling(self, path: str) -> Dict[str, any]:
+        """3D 모델링 저장"""
+        command = {
+            "action": "save_3d_modeling",
+            "path": path
+        }
+        return self._send_command(command)
+
+    def save_3d_image(self, path: str, width: int = 800, height: int = 600) -> Dict[str, any]:
+        """3D 이미지 저장"""
+        command = {
+            "action": "save_3d_image",
+            "path": path,
+            "width": width,
+            "height": height
+        }
+        return self._send_command(command)
+
+    def save_report(self, path: str, config_data: Dict[str, any]) -> Dict[str, any]:
+        """보고서 저장"""
+        command = {
+            "action": "save_report",
+            "path": path,
+            "config": config_data
+        }
+        
+        return self._send_command(command)
+
+    def get_all_results_summary(self, config_data: Dict[str, any]) -> Dict[str, any]:
+        """모든 계산 결과 요약 조회"""
+        command = {
+            "action": "get_all_results_summary",
+            "results": config_data
+        }
+        return self._send_command(command)
+
+    def get_default_config(self) -> Dict[str, any]:
+        """기본 설정 데이터 가져오기"""
+        command = {"action": "get_default_config"}
+        return self._send_command(command)
+
+    def stop(self):
+        """프로세스 종료"""
+        if self.process:
+            try:
+                command = {"action": "exit"}
+                command_str = json.dumps(command) + "\n"
+                self.process.stdin.write(command_str)
+                self.process.stdin.flush()
+                self.process.wait(timeout=5)
+            except:
+                self.process.terminate()
+                self.process.wait(timeout=2)
+            print("GearDesign IPC 프로세스 종료됨")
+
+    def __enter__(self):
+        """컨텍스트 매니저 진입"""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """컨텍스트 매니저 종료"""
+        self.stop()
+
+
+# 세션 데이터 클래스
+class SessionData:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.is_initialized = False
+        self.default_data = None
+        self.changed_data = None
+        self.gd_results = None  # 전체 계산 결과 (Python dict)
+        self.ipc_client: Optional[GearDesignIPC] = None
+        self.created_at = datetime.datetime.now()
+        self.last_accessed = datetime.datetime.now()
+
+        # 세션별 출력 폴더 경로
+        self.output_dir = os.path.join(os.path.dirname(__file__), "outputs", session_id)
+        self.images_dir = os.path.join(self.output_dir, "images")
+        self.reports_dir = os.path.join(self.output_dir, "reports")
+        self.files = []  # 생성된 파일 목록 추적
+
+    def update_access_time(self):
+        self.last_accessed = datetime.datetime.now()
+
+    def create_output_directories(self):
+        """세션별 출력 디렉토리 생성"""
+        try:
+            os.makedirs(self.images_dir, exist_ok=True)
+            os.makedirs(self.reports_dir, exist_ok=True)
+            return True
+        except Exception as e:
+            print(f"출력 디렉토리 생성 실패: {str(e)}")
+            return False
+
+    def add_file(self, file_path: str, file_type: str):
+        """생성된 파일을 추적 목록에 추가"""
+        self.files.append({
+            "path": file_path,
+            "type": file_type,
+            "created_at": datetime.datetime.now().isoformat()
+        })
+
+    def cleanup_files(self):
+        """세션 종료 시 생성된 파일들 정리"""
+        import shutil
+        try:
+            if os.path.exists(self.output_dir):
+                shutil.rmtree(self.output_dir)
+                print(f"세션 {self.session_id} 파일들이 정리되었습니다")
+        except Exception as e:
+            print(f"파일 정리 중 오류: {str(e)}")
+
+    def cleanup_ipc(self):
+        """IPC 클라이언트 정리"""
+        if self.ipc_client:
+            try:
+                self.ipc_client.stop()
+                print(f"세션 {self.session_id} IPC 프로세스 종료됨")
+            except Exception as e:
+                print(f"IPC 프로세스 종료 중 오류: {str(e)}")
+
+
+# 전역 세션 관리자
+session_manager: Dict[str, SessionData] = {}
+SESSION_TIMEOUT = 3600  # 1시간
+
+
+# 세션 관리 함수들
+def get_session(session_id: str) -> SessionData:
+    """기존 세션 데이터를 가져옴 (존재하지 않으면 오류)"""
+    if session_id not in session_manager:
+        raise ValueError(f"세션 '{session_id}'를 찾을 수 없습니다. initialize()을 먼저 호출하세요.")
+
+    session = session_manager[session_id]
+    session.update_access_time()
+    return session
+
+def create_new_session(session_id: str) -> SessionData:
+    """새로운 세션을 생성"""
+    if session_id in session_manager:
+        raise ValueError(f"세션 '{session_id}'가 이미 존재합니다.")
+
+    session = SessionData(session_id)
+    session_manager[session_id] = session
+    return session
+
+def cleanup_expired_sessions():
+    """만료된 세션 정리"""
+    current_time = datetime.datetime.now()
+    expired_sessions = []
+
+    for session_id, session in session_manager.items():
+        if (current_time - session.last_accessed).seconds > SESSION_TIMEOUT:
+            expired_sessions.append((session_id, session))
+
+    for session_id, session in expired_sessions:
+        # IPC 프로세스 정리
+        session.cleanup_ipc()
+
+        # 파일들 정리
+        session.cleanup_files()
+
+        # 세션 삭제
+        del session_manager[session_id]
+        print(f"세션 만료로 정리됨: {session_id}")
+
+def get_session_info() -> dict:
+    """현재 활성 세션 정보 반환"""
+    return {
+        "active_sessions": len(session_manager),
+        "sessions": [
+            {
+                "session_id": session.session_id,
+                "created_at": session.created_at.isoformat(),
+                "last_accessed": session.last_accessed.isoformat(),
+                "is_initialized": session.is_initialized
+            }
+            for session in session_manager.values()
+        ]
+    }
+
+
+@mcp.tool()
+def initialize() -> dict:
+    """
+    기어 설계를 위한 도구 및 데이터를 초기화합니다.
+
+    이 함수는 새로운 세션을 자동으로 생성하고 IPC를 통해 GearDesign 프로세스를 시작합니다.
+    초기화가 완료되면 반환된 session_id를 사용하여 다른 기어 관련 함수들을 호출할 수 있습니다.
+
+    Returns:
+        dict: 초기화 결과
+            - 성공 시: {"success": True, "message": "초기화 완료", "session_id": "새로생성된세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지"}
+
+    Note:
+        - 매번 새로운 세션을 생성하므로 독립적인 작업 공간을 제공합니다
+        - 반환된 session_id를 다른 모든 함수 호출에 사용해야 합니다
+        - 이 함수는 기어 설계 작업을 시작하는 첫 번째 함수입니다
+    """
+    # 새로운 세션 자동 생성
+    new_session_id = str(uuid.uuid4())
+
+    try:
+        session = create_new_session(new_session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": new_session_id
+        }
+
+    try:
+        # 세션별 IPC 클라이언트 생성 및 시작
+        session.ipc_client = GearDesignIPC(gear_design_exe_path)
+
+        if not session.ipc_client.start():
+            return {
+                "success": False,
+                "error": "GearDesign IPC 프로세스 시작 실패",
+                "session_id": new_session_id
+            }
+
+        # 기본 설정 데이터 로드
+        # .NET에 get_default_config action이 없는 경우를 대비해 빈 dict로 초기화
+        try:
+            response = session.ipc_client.get_default_config()
+            if response.get("success", False):
+                session.default_data = response.get("config", {})
+            else:
+                # action이 구현되지 않은 경우 빈 dict 사용
+                print(f"경고: get_default_config 실패, 빈 설정으로 시작: {response.get('error', 'Unknown')}")
+                session.default_data = {}
+        except Exception as e:
+            print(f"경고: get_default_config 호출 실패, 빈 설정으로 시작: {e}")
+            session.default_data = {}
+
+        session.changed_data = session.default_data.copy() if session.default_data else {}
+
+        # 세션별 출력 디렉토리 생성
+        if not session.create_output_directories():
+            return {
+                "success": False,
+                "error": "출력 디렉토리 생성 실패",
+                "session_id": new_session_id
+            }
+
+        session.is_initialized = True
+
+        return {
+            "success": True,
+            "message": f"새 세션({new_session_id[:8]})이 생성되고 초기화되었습니다",
+            "session_id": new_session_id,
+            "output_directory": session.output_dir,
+            "status": "initialized"
+        }
+
+    except Exception as e:
+        # 오류 발생 시 IPC 프로세스 정리
+        if session.ipc_client:
+            session.ipc_client.stop()
+
+        return {
+            "success": False,
+            "error": f"초기화 중 오류 발생: {str(e)}",
+            "session_id": new_session_id
+        }
+
+
+@mcp.tool()
+def modify_gear_data(user_message: str, session_id: str) -> dict:
+    """
+    사용자 메시지를 기반으로 기어 데이터를 수정합니다.
+
+    이 함수는 LLM을 사용하여 자연어 요청을 JSON 데이터 변경사항으로 변환하고,
+    기존 기어 데이터에 적용한 후 검증합니다.
+
+    Args:
+        user_message (str): 기어 데이터 변경을 요청하는 자연어 메시지
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 처리 결과
+            - 성공 시: 변경된 데이터의 JSON 구조와 세션 정보
+            - 실패 시: {"error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 매크로 기어 제원 변경 시 CDMethod가 자동으로 1로 설정됩니다
+        - 기어비는 기어 타입에 따라 잇수비로 결정됩니다. 이에 대한 상세 내용은 아래와 같습니다.
+            1) Gear pair: z2 / z1,
+            2) Three gear: z3 / z1,
+            3) Planetary: z3 / z1 (링기어 잇수 / 선기어 잇수),
+            4) Double pinion planetary: z3 / z1 (링기어 잇수 / 선기어 잇수)
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    # LLM 프롬프트 구성
+    system_prompt = (
+        "너는 기어 설계 데이터의 JSON을 수정하는 AI야.\n"
+        "아래의 사용자 요청에 따라 현재 JSON 데이터의 값을 적절히 변경해야 해.\n"
+        "현재 JSON 데이터의 메타데이터는 Key 값 앞에 $가 붙어있으니 반드시 참고해서 데이터를 올바르게 변경해.\n"
+        "반환 시 변경해야할 정확한 JSON KEY 값과 Value만 반환해.\n"
+        "매크로 기어 제원 (잇수, 모듈, 헬리컬각, 압력각, 전위계수 등)이 바뀌어 기어 사이의 중심거리가 변경되어야 하는 경우는 CDMethod를 1로 변경하여 중심거리를 자동계산하도록 해야 함\n"
+        "반환하는 데이터 형태는 반드시 JSON의 표준 중첩구조를 따라야 해."
+    )
+
+    prompt = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"사용자 요청: {user_message}\n현재 데이터: {json.dumps(session.default_data, ensure_ascii=False)}"}
+    ]
+
+    try:
+        # LLM 호출하여 변경데이터 추출
+        response = llm_call(prompt=prompt, model="gpt-4o-mini")
+        modified_data = remove_code_block_llm(response)
+        modified_data = json.loads(modified_data)
+
+        # 기존 데이터에 변경사항 적용
+        recursive_update(session.changed_data, modified_data)
+
+        # 데이터 검증 및 로드
+        ipc_response = session.ipc_client.load_and_validate_config(session.changed_data)
+
+        if ipc_response.get("success", False):
+            return {
+                "success": True,
+                "message": "데이터 수정 및 검증 완료",
+                "modified_data": modified_data,
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"데이터 검증 실패: {ipc_response.get('error', 'Unknown error')}",
+                "modified_data": modified_data,
+                "session_id": session.session_id
+            }
+
+    except json.JSONDecodeError as e:
+        return {
+            "error": f"JSON 파싱 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+    except Exception as e:
+        return {
+            "error": f"처리 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+# 재귀적으로 dict를 업데이트하는 함수
+def recursive_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+            recursive_update(d[k], v)
+        else:
+            d[k] = v
+    return
+
+@mcp.tool()
+def calc_geometry(session_id: str) -> dict:
+    """
+    기어 치형의 기하학적 계산을 수행합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 치형 계산 결과를 포함하는 딕셔너리
+            - "Geometry": 치형 계산 결과 데이터
+            - "$*": 메타데이터 (키 이름이 $로 시작)
+            - "session_id": 세션 ID
+            - "error": 초기화되지 않은 경우 오류 메시지
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 기하학적 계산만 수행하며, 하중 계산은 calc_load_case()로 별도 수행
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    try:
+        # IPC를 통해 기하학적 계산만 수행
+        response = session.ipc_client.calc_geometry()
+
+        if not response.get("success", False):
+            return {
+                "success": False,
+                "error": f"기하학적 계산 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+        # 기하학적 계산 결과 저장
+        geometry_results = response.get("results", {})
+        session.gd_results = geometry_results
+
+        # 반환값 생성
+        return {
+            "success": True,
+            "message": "치형 계산이 완료되었습니다.",
+            "session_id": session.session_id
+        }            
+
+    except Exception as e:
+        return {
+            "error": f"기하학적 계산 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_geometry_results(session_id: str) -> dict:
+    """
+    기어 치형의 기하학적 계산 결과를 전달합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 기하학적 계산 결과
+            - "Geometry": 기하학적 계산 결과 데이터
+            - "session_id": 세션 ID
+            - "error": 오류 메시지 (실패 시)
+
+    Note:
+        - 사전에 초기화와 기하학적 계산이 완료되어야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    # 초기화 상태 확인
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    # 기하학적 계산 결과 확인
+    if session.gd_results is None:
+        return {
+            "error": "기하학적 계산이 먼저 수행되어야 합니다. calc_geometry() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    # 결과 반환
+    if isinstance(session.gd_results, dict) and "Geometry" in session.gd_results:
+        geometry_data = session.gd_results["Geometry"]
+
+        # Geometry가 dict인 경우
+        if isinstance(geometry_data, dict):
+            output = geometry_data.copy()
+            output["session_id"] = session.session_id
+            return output
+        # Geometry가 list나 다른 타입인 경우
+        else:
+            return {
+                "Geometry": geometry_data,
+                "session_id": session.session_id
+            }
+    else:
+        return {
+            "error": "유효하지 않은 기하학적 계산 결과입니다.",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def calc_load_case(session_id: str) -> dict:
+    """
+    기어 치형의 하중 계산을 수행하고 계산 메시지를 반환합니다.
+
+    기하학적 계산 결과를 바탕으로 기어의 하중 분석을 수행하고
+    안전률, 응력 등을 계산한 후 계산 과정에서 발생한 메시지를 반환합니다.
+    계산 결과 데이터는 세션에 저장됩니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 하중 계산 메시지
+            - "success": True (성공 시)
+            - "message": "하중 계산이 완료되었습니다"
+            - 계산 과정에서 발생한 메시지들 (경고, 정보 등)
+            - "session_id": 세션 ID
+            - "error": 오류 발생 시 오류 메시지
+
+    Note:
+        - 사전에 초기화와 기하학적 계산이 완료되어야 합니다
+        - 계산 결과 데이터는 세션에 저장되어 get_gear_report() 등에서 사용됩니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    # 초기화 상태 확인
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    # 기하학적 계산 결과 확인
+    if session.gd_results is None:
+        return {
+            "error": "기하학적 계산이 먼저 수행되어야 합니다. calc_geometry() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    try:
+        # IPC를 통해 하중 계산 수행
+        response = session.ipc_client.calc_loadcase(session.gd_results)
+
+        if not response.get("success", False):
+            return {
+                "success": False,
+                "error": f"하중 계산 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+        # 하중 계산 결과 저장
+        loadcase_results = response.get("results", {})
+
+        # 전체 결과 업데이트
+        session.gd_results = loadcase_results
+
+
+        messages = {
+            "success": True,
+            "message": "하중 계산이 완료되었습니다.",
+            "session_id": session.session_id
+        }
+
+        return messages
+
+    except Exception as e:
+        return {
+            "error": f"하중 계산 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_messages(session_id: str) -> dict:
+    """
+    계산 결과에 대한 실행 메시지를 반환합니다.
+    기어 계산 과정에서 발생한 경고, 오류, 정보 메시지들을 가져옵니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 실행 메시지 정보
+            - 성공 시: 메시지 데이터를 포함하는 딕셔너리
+            - 실패 시: {"error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 계산이 완료된 후에 호출해야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    try:
+        response = session.ipc_client.get_messages()
+
+        if not response.get("success", False):
+            return {
+                "error": f"메시지 조회 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+        return {
+            "success": True,
+            "messages": response.get("messages", []),
+            "session_id": session.session_id
+        }
+
+    except Exception as e:
+        return {
+            "error": f"메시지 조회 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_2D_image(session_id: str) -> dict:
+    """
+    기어 이미지를 생성하고 파일로 저장합니다.
+
+    현재 설계된 기어의 2D 이미지를 PNG 형식으로 생성하여 저장합니다.
+    파일명은 타임스탬프를 포함하여 자동으로 생성됩니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 이미지 생성 결과
+            - 성공 시: {"success": True, "path": "파일경로", "filename": "파일명", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화와 기하학적 계산이 완료되어야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.gd_results is None:
+        return {
+            "success": False,
+            "error": "계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_image_{timestamp}.png"
+        output_file = os.path.join(session.images_dir, filename)
+
+        response = session.ipc_client.save_2D_image(output_file)
+
+        if response.get("success", False):
+            # 파일이 실제로 생성되었는지 확인
+            if os.path.exists(output_file):
+                # 생성된 파일을 세션에 추가
+                session.add_file(output_file, "image")
+
+                return {
+                    "success": True,
+                    "path": output_file,
+                    "filename": filename,
+                    "size": os.path.getsize(output_file),
+                    "session_id": session.session_id,
+                    "relative_path": f"outputs/{session.session_id}/images/{filename}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "이미지 파일이 생성되지 않았습니다",
+                    "session_id": session.session_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"이미지 추출 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"이미지 생성 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_3d_image(session_id: str, width: int = 800, height: int = 600) -> dict:
+    """
+    기어 3D 이미지를 생성하고 파일로 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+        width (int): 이미지 폭 (기본값: 800)
+        height (int): 이미지 높이 (기본값: 600)
+
+    Returns:
+        dict: 3D 이미지 생성 결과
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.gd_results is None:
+        return {
+            "success": False,
+            "error": "계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_3d_image_{timestamp}.png"
+        output_file = os.path.join(session.images_dir, filename)
+
+        response = session.ipc_client.save_3d_image(output_file, width, height)
+
+        if response.get("success", False):
+            if os.path.exists(output_file):
+                session.add_file(output_file, "3d_image")
+
+                return {
+                    "success": True,
+                    "path": output_file,
+                    "filename": filename,
+                    "size": os.path.getsize(output_file),
+                    "session_id": session.session_id,
+                    "relative_path": f"outputs/{session.session_id}/images/{filename}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "3D 이미지 파일이 생성되지 않았습니다",
+                    "session_id": session.session_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"3D 이미지 추출 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"3D 이미지 생성 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_3d_modeling(session_id: str) -> dict:
+    """
+    기어 3D 모델링 파일(STEP)을 생성하고 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 3D 모델링 생성 결과
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.gd_results is None:
+        return {
+            "success": False,
+            "error": "계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_3d_model_{timestamp}.step"
+        output_file = os.path.join(session.output_dir, filename)
+
+        response = session.ipc_client.save_3d_modeling(output_file)
+
+        if response.get("success", False):
+            if os.path.exists(output_file):
+                session.add_file(output_file, "3d_model")
+
+                return {
+                    "success": True,
+                    "path": output_file,
+                    "filename": filename,
+                    "size": os.path.getsize(output_file),
+                    "session_id": session.session_id,
+                    "relative_path": f"outputs/{session.session_id}/{filename}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "3D 모델링 파일이 생성되지 않았습니다",
+                    "session_id": session.session_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"3D 모델링 추출 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"3D 모델링 생성 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_allresults_summary(session_id: str) -> dict:
+    """
+    모든 계산 결과의 요약 정보를 반환합니다.
+
+    현재 세션에 저장된 기하학적 계산 및 하중 계산 결과를 바탕으로
+    요약된 결과 정보를 추출하여 반환합니다. 반환된 결과는 json 형식의 키에 markdown 형식으로 값이 저장됩니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 요약 정보
+            - 성공 시: 요약된 결과 데이터와 세션 정보
+            - 실패 시: {"error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화와 계산이 완료되어야 합니다
+        - JSON KEY의 메타데이터는 $로 시작합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.gd_results is None:
+        return {
+            "error": "계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+    
+    if "LC" not in session.gd_results:
+        return {
+            "success": False,
+            "error": "하중 계산이 먼저 수행되어야 합니다. calc_load_case()를 호출하세요",
+            "session_id": session.session_id
+        }
+
+    try:
+        # .NET에 get_all_results_summary action이 구현되지 않은 경우
+        # 세션의 gd_results에서 직접 요약 정보 추출
+        try:
+            response = session.ipc_client.get_all_results_summary(session.gd_results)
+
+            if response.get("success", False):               
+                summary["summary"] = response.get("summary", {})
+                summary["session_id"] = session.session_id
+                return summary
+            else:
+                # action이 구현되지 않은 경우 세션 데이터에서 직접 추출
+                print(f"경고: get_all_results_summary 실패, 세션 데이터에서 추출: {response.get('error', 'Unknown')}")
+                raise Exception("Fallback to session data")
+
+        except KeyError as e:
+            return {
+                "error": f"필수 데이터 누락: {str(e)}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "error": f"요약 정보 추출 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def get_gear_report(session_id: str) -> dict:
+    """
+    기어 설계 보고서를 PDF 형식으로 생성합니다.
+
+    기하학적 계산 및 하중 계산 결과를 바탕으로 상세한 기어 설계 보고서를
+    PDF 형식으로 생성하여 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 보고서 생성 결과
+            - 성공 시: {"success": True, "path": "파일경로", "filename": "파일명", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화와 계산이 모두 완료되어야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.gd_results is None:
+        return {
+            "success": False,
+            "error": "계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+
+    if "LC" not in session.gd_results:
+        return {
+            "success": False,
+            "error": "하중 계산이 먼저 수행되어야 합니다. calc_load_case()를 호출하세요",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_report_{timestamp}.pdf"
+        output_file = os.path.join(session.reports_dir, filename)
+
+        response = session.ipc_client.save_report(output_file, session.gd_results)
+
+        if response.get("success", False):
+            if os.path.exists(output_file):
+                session.add_file(output_file, "report")
+
+                return {
+                    "success": True,
+                    "path": output_file,
+                    "filename": filename,
+                    "size": os.path.getsize(output_file),
+                    "session_id": session.session_id,
+                    "relative_path": f"outputs/{session.session_id}/reports/{filename}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "보고서 파일이 생성되지 않았습니다",
+                    "session_id": session.session_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"기어 보고서 추출 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"보고서 생성 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def save_GearDesignData(session_id: str) -> dict:
+    """
+    현재 기어 설계 데이터를 JSON 파일로 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 저장 결과
+            - 성공 시: {"success": True, "path": "파일경로", "filename": "파일명", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 저장된 파일은 세션의 출력 디렉토리에 위치합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"gear_design_data_{timestamp}.json"
+        output_file = os.path.join(session.output_dir, filename)
+
+        # 현재 변경된 데이터를 JSON 파일로 저장
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(session.changed_data, f, ensure_ascii=False, indent=4)
+
+        # 생성된 파일을 세션에 추가
+        session.add_file(output_file, "data")
+
+        return {
+            "success": True,
+            "path": output_file,
+            "filename": filename,
+            "size": os.path.getsize(output_file),
+            "session_id": session.session_id,
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"파일 저장 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+@mcp.tool()
+def load_GearDesignData(file_path: str, session_id: str) -> dict:
+    """
+    JSON 파일에서 기어 설계 데이터를 불러와 현재 세션에 적용합니다.
+
+    Args:
+        file_path (str): 불러올 JSON 파일의 경로
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 불러오기 결과
+            - 성공 시: {"success": True, "message": "데이터가 성공적으로 로드되었습니다", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 파일 경로는 서버에서 접근 가능한 위치여야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if not os.path.isfile(file_path):
+        return {
+            "success": False,
+            "error": f"파일을 찾을 수 없음: {file_path}",
+            "session_id": session.session_id
+        }
+
+    try:
+        # JSON 파일에서 데이터 로드
+        with open(file_path, 'r', encoding='utf-8') as f:
+            loaded_data = json.load(f)
+
+        # 데이터 검증 및 로드
+        response = session.ipc_client.load_config(loaded_data)
+
+        if response.get("success", False):
+            session.changed_data = loaded_data  # 세션 데이터 업데이트
+            return {
+                "success": True,
+                "message": "데이터가 성공적으로 로드되었습니다",
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"데이터 검증 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "error": f"JSON 파싱 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+
+
+# 세션 관리 관련 MCP 툴 추가
+@mcp.tool()
+def get_active_sessions() -> dict:
+    """
+    현재 활성 세션들의 정보를 반환합니다.
+
+    Returns:
+        dict: 세션 정보
+            - active_sessions: 활성 세션 수
+            - sessions: 각 세션의 상세 정보 리스트
+    """
+    return get_session_info()
+
+@mcp.tool()
+def get_session_files(session_id: str) -> dict:
+    """
+    세션에서 생성된 파일 목록을 반환합니다.
+
+    Args:
+        session_id (str): 세션 ID
+
+    Returns:
+        dict: 파일 목록 정보
+    """
+    try:
+        session = get_session(session_id)
+        return {
+            "success": True,
+            "session_id": session_id,
+            "files": session.files,
+            "file_count": len(session.files)
+        }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+@mcp.tool()
+def delete_session(session_id: str) -> dict:
+    """
+    특정 세션을 강제로 삭제합니다.
+
+    세션과 함께 생성된 모든 파일들도 삭제됩니다.
+
+    Args:
+        session_id (str): 삭제할 세션 ID
+
+    Returns:
+        dict: 삭제 결과
+    """
+    if session_id in session_manager:
+        session = session_manager[session_id]
+
+        # IPC 프로세스 정리
+        session.cleanup_ipc()
+
+        # 파일들 정리
+        session.cleanup_files()
+
+        # 세션 삭제
+        del session_manager[session_id]
+
+        return {
+            "success": True,
+            "message": f"세션 {session_id}와 관련 파일들이 삭제되었습니다"
+        }
+    else:
+        return {
+            "success": False,
+            "error": f"세션 {session_id}를 찾을 수 없습니다"
+        }
+
+
+# 주기적 세션 정리를 위한 백그라운드 스레드
+def periodic_cleanup():
+    """주기적으로 만료된 세션을 정리하는 함수"""
+    while True:
+        time.sleep(300)  # 5분마다 실행
+        try:
+            cleanup_expired_sessions()
+        except Exception as e:
+            print(f"세션 정리 중 오류 발생: {str(e)}")
+
+# 백그라운드 정리 스레드 시작
+cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+cleanup_thread.start()
+
+if __name__ == "__main__":
+    print("Starting MCP server (IPC mode)...")
+    print(f"GearDesign.exe 경로: {gear_design_exe_path}")
+    print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
+    print("백그라운드 세션 정리 스레드 시작됨")
+
+    result = initialize()
+    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
+    calc_result = calc_load_case(result["session_id"])
+    # geo_result2 = get_geometry_results(result["session_id"])
+    # message = get_messages(result["session_id"])
+    # get_2D_image(result["session_id"])
+    # get_3d_image(result["session_id"])
+    # get_3d_modeling(result["session_id"])
+    # report = get_gear_report(result["session_id"])
+    # summary = get_allresults_summary(result["session_id"])
+    # save_data = save_GearDesignData(result["session_id"])
+
+    print(f"결과: {calc_result}")
+    # print(f"메시지: {summary}")
+    # asyncio.run(mcp.run())

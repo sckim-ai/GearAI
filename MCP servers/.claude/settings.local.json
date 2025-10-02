@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Read(//d/SW/Streamlit/**)"
+      "Read(//d/SW/Streamlit/**)",
+      "Bash(python:*)",
+      "Bash(uv add:*)",
+      "Bash(uv venv:*)"
     ],
     "deny": [],
     "ask": []
