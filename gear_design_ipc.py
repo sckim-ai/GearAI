@@ -77,7 +77,7 @@ class GearDesignIPC:
     def load_config(self, config_data: Dict[str, Any]) -> bool:
         """설정 데이터 로드"""
         command = {
-            "action": "load_config",
+            "action": "load_and_validate_config",
             "config": config_data
         }
         response = self._send_command(command)

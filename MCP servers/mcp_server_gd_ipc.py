@@ -90,6 +90,8 @@ class GearDesignIPC:
         if not response_line:
             raise RuntimeError("프로세스로부터 응답이 없습니다")
 
+        # print(f"받은 원본: '{response_line}'")
+
         return json.loads(response_line)
 
     def load_and_validate_config(self, config_data: Dict[str, any]) -> Dict[str, any]:
@@ -214,6 +216,7 @@ class SessionData:
         self.output_dir = os.path.join(os.path.dirname(__file__), "outputs", session_id)
         self.images_dir = os.path.join(self.output_dir, "images")
         self.reports_dir = os.path.join(self.output_dir, "reports")
+        self.modelings_dir = os.path.join(self.output_dir, "modelings")
         self.files = []  # 생성된 파일 목록 추적
 
     def update_access_time(self):
@@ -224,6 +227,7 @@ class SessionData:
         try:
             os.makedirs(self.images_dir, exist_ok=True)
             os.makedirs(self.reports_dir, exist_ok=True)
+            os.makedirs(self.modelings_dir, exist_ok=True)
             return True
         except Exception as e:
             print(f"출력 디렉토리 생성 실패: {str(e)}")
@@ -403,6 +407,125 @@ def initialize() -> dict:
             "session_id": new_session_id
         }
 
+@mcp.tool()
+def load_GearDesign_data(file_path: str, session_id: str) -> dict:
+    """
+    사용자가 업로드한 JSON 파일로부터 기어 설계 데이터를 초기화합니다.
+
+    이 함수는 사용자가 업로드한 JSON 파일을 읽어 검증하고 세션에 로드합니다.
+    파일이 존재하지 않거나 데이터가 유효하지 않으면 오류 메시지를 반환합니다.
+
+    Args:
+        file_path (str): 사용자가 업로드한 JSON 파일의 절대 또는 상대 경로
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
+
+    Returns:
+        dict: 처리 결과
+            - 성공 시: {"success": True, "message": "데이터 로드 및 검증 완료", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - JSON 파일은 UTF-8 인코딩이어야 합니다
+        - 파일 내용은 JSON 호환 딕셔너리여야 합니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    # 파일 존재 여부 확인
+    if not os.path.exists(file_path):
+        return {
+            "success": False,
+            "error": f"파일을 찾을 수 없습니다: {file_path}",
+            "session_id": session.session_id
+        }
+
+    # # 파일 확장자 확인
+    # if not file_path.lower().endswith('.json'):
+    #     return {
+    #         "success": False,
+    #         "error": "JSON 파일만 지원됩니다",
+    #         "session_id": session.session_id
+    #     }
+
+    # JSON 파일 읽기
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            user_data_dict = json.load(f)
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "error": f"JSON 파싱 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+    except UnicodeDecodeError:
+        return {
+            "success": False,
+            "error": "파일 인코딩 오류 (UTF-8 인코딩을 사용하세요)",
+            "session_id": session.session_id
+        }
+    except PermissionError:
+        return {
+            "success": False,
+            "error": f"파일 접근 권한이 없습니다: {file_path}",
+            "session_id": session.session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"파일 읽기 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+
+    # 데이터 타입 확인
+    if not isinstance(user_data_dict, dict):
+        return {
+            "success": False,
+            "error": "JSON 파일 내용은 객체(딕셔너리)여야 합니다",
+            "session_id": session.session_id
+        }
+
+    # IPC를 통해 데이터 검증 및 로드
+    try:
+        ipc_response = session.ipc_client.load_and_validate_config(user_data_dict)
+        
+        if ipc_response.get("success", False):
+            # 기존 데이터를 사용자 데이터로 변환
+            session.changed_data = user_data_dict
+            
+            return {
+                "success": True,
+                "message": "사용자 데이터 로드 및 검증 완료",
+                "loaded_file": os.path.basename(file_path),
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"데이터 검증 실패: {ipc_response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"처리 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
 
 @mcp.tool()
 def modify_gear_data(user_message: str, session_id: str) -> dict:
@@ -445,18 +568,54 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
         }
 
     # LLM 프롬프트 구성
-    system_prompt = (
-        "너는 기어 설계 데이터의 JSON을 수정하는 AI야.\n"
-        "아래의 사용자 요청에 따라 현재 JSON 데이터의 값을 적절히 변경해야 해.\n"
-        "현재 JSON 데이터의 메타데이터는 Key 값 앞에 $가 붙어있으니 반드시 참고해서 데이터를 올바르게 변경해.\n"
-        "반환 시 변경해야할 정확한 JSON KEY 값과 Value만 반환해.\n"
-        "매크로 기어 제원 (잇수, 모듈, 헬리컬각, 압력각, 전위계수 등)이 바뀌어 기어 사이의 중심거리가 변경되어야 하는 경우는 CDMethod를 1로 변경하여 중심거리를 자동계산하도록 해야 함\n"
-        "반환하는 데이터 형태는 반드시 JSON의 표준 중첩구조를 따라야 해."
-    )
+    system_prompt = """
+# 역할
+당신은 기어 설계 JSON 데이터 수정 전문가입니다.
+
+# 목적
+사용자의 자연어 요청을 분석하여 기어 설계 JSON 데이터의 필요한 값만 정확히 변경합니다.
+
+# 입력 데이터 구조 이해
+1. **메타데이터**: Key가 '$'로 시작 (예: "$Normal Module", "$z1")
+   - 메타데이터는 해당 값의 의미/단위를 설명합니다
+   
+2. **실제 데이터**: '$' 없는 일반 Key
+   - 이 값들만 수정 대상입니다
+
+# 수정 규칙
+
+## 1. 변경 대상 식별
+- 사용자 요청을 분석하여 변경해야 할 정확한 Key를 찾습니다
+- 메타데이터($로 시작)를 참고하되, 절대 메타데이터를 변경하지 않습니다
+
+## 2. 중심거리 자동계산 트리거
+다음 매크로 기어 제원이 변경되면 **반드시 "CDMethod": 1** 추가 (단, 사용자가 명시적으로 중심거리를 지정한 경우 제외):
+- 잇수 (z1, z2, z3, z4)
+- 모듈 (Normal Module, Axial Module)
+- 헬리컬각 (Helix Angle)
+- 압력각 (Pressure Angle)
+- 전위계수 (x1, x2, x3, x4)
+
+## 3. 출력 형식
+- **표준 JSON 형식** (중첩 구조 포함)
+- **변경된 항목만** 포함
+- Key 이름은 원본과 정확히 일치
+- Value는 적절한 데이터 타입 (숫자는 number, 문자는 string)
+
+# 출력 예시
+```json
+{
+  "Normal Module": 3.0,
+  "z1": 20,
+  "z2": 60,
+  "CDMethod": 1
+}
+```
+"""
 
     prompt = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"사용자 요청: {user_message}\n현재 데이터: {json.dumps(session.default_data, ensure_ascii=False)}"}
+        {"role": "user", "content": f"사용자 요청: {user_message}\n현재 데이터: {json.dumps(session.changed_data, ensure_ascii=False)}"}
     ]
 
     try:
@@ -509,7 +668,7 @@ def recursive_update(d, u):
 @mcp.tool()
 def calc_geometry(session_id: str) -> dict:
     """
-    기어 치형의 기하학적 계산을 수행합니다.
+    기어 치형의 기하학적 계산을 수행합니다. (이전 수행 결과 message는 삭제됩니다.)
 
     Args:
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
@@ -571,7 +730,7 @@ def calc_geometry(session_id: str) -> dict:
 @mcp.tool()
 def get_geometry_results(session_id: str) -> dict:
     """
-    기어 치형의 기하학적 계산 결과를 전달합니다.
+    기어 치형의 기하학적 계산 결과를 전달합니다. (calc_geometry() 이후 호출)
 
     Args:
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
@@ -688,14 +847,14 @@ def calc_load_case(session_id: str) -> dict:
 
         # 하중 계산 결과 저장
         loadcase_results = response.get("results", {})
+        messages = session.ipc_client.get_messages()
 
         # 전체 결과 업데이트
         session.gd_results = loadcase_results
 
-
         messages = {
             "success": True,
-            "message": "하중 계산이 완료되었습니다.",
+            "message": response.get("messages", []),
             "session_id": session.session_id
         }
 
@@ -765,7 +924,7 @@ def get_messages(session_id: str) -> dict:
 @mcp.tool()
 def get_2D_image(session_id: str) -> dict:
     """
-    기어 이미지를 생성하고 파일로 저장합니다.
+    기어 치물림 2D 이미지를 생성하고 파일로 저장합니다.
 
     현재 설계된 기어의 2D 이미지를 PNG 형식으로 생성하여 저장합니다.
     파일명은 타임스탬프를 포함하여 자동으로 생성됩니다.
@@ -956,7 +1115,7 @@ def get_3d_modeling(session_id: str) -> dict:
     try:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"gear_3d_model_{timestamp}.step"
-        output_file = os.path.join(session.output_dir, filename)
+        output_file = os.path.join(session.modelings_dir, filename)
 
         response = session.ipc_client.save_3d_modeling(output_file)
 
@@ -1041,15 +1200,12 @@ def get_allresults_summary(session_id: str) -> dict:
         }
 
     try:
-        # .NET에 get_all_results_summary action이 구현되지 않은 경우
-        # 세션의 gd_results에서 직접 요약 정보 추출
         try:
             response = session.ipc_client.get_all_results_summary(session.gd_results)
-
+            
             if response.get("success", False):               
-                summary["summary"] = response.get("summary", {})
-                summary["session_id"] = session.session_id
-                return summary
+                response["session_id"] = session.session_id
+                return response
             else:
                 # action이 구현되지 않은 경우 세션 데이터에서 직접 추출
                 print(f"경고: get_all_results_summary 실패, 세션 데이터에서 추출: {response.get('error', 'Unknown')}")
@@ -1262,7 +1418,7 @@ def load_GearDesignData(file_path: str, session_id: str) -> dict:
             loaded_data = json.load(f)
 
         # 데이터 검증 및 로드
-        response = session.ipc_client.load_config(loaded_data)
+        response = session.ipc_client.load_and_validate_config(loaded_data)
 
         if response.get("success", False):
             session.changed_data = loaded_data  # 세션 데이터 업데이트
@@ -1382,17 +1538,21 @@ if __name__ == "__main__":
     print("백그라운드 세션 정리 스레드 시작됨")
 
     result = initialize()
-    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
-    calc_result = calc_load_case(result["session_id"])
+    # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
+    # print(f"modify_gear_data 응답: {responce}")
+    load = load_GearDesignData(r"D:\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
+    print(f"load_GearDesignData 응답: {load}")
+    # geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
+    # calc_result = calc_load_case(result["session_id"])
     # geo_result2 = get_geometry_results(result["session_id"])
     # message = get_messages(result["session_id"])
-    # get_2D_image(result["session_id"])
-    # get_3d_image(result["session_id"])
-    # get_3d_modeling(result["session_id"])
+    # image2d = get_2D_image(result["session_id"])
+    # image3d = get_3d_image(result["session_id"])
+    # model3d = get_3d_modeling(result["session_id"])
     # report = get_gear_report(result["session_id"])
     # summary = get_allresults_summary(result["session_id"])
     # save_data = save_GearDesignData(result["session_id"])
 
-    print(f"결과: {calc_result}")
-    # print(f"메시지: {summary}")
-    # asyncio.run(mcp.run())
+    # print(f"결과: {save_data}")
+
+    asyncio.run(mcp.run())

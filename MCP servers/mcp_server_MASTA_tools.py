@@ -23,6 +23,8 @@ load_dotenv()
 
 mcp = FastMCP("MASTA_Tools")
 
+masta_path: str = r"C:\Program Files\SMT\MASTA 14.1.1"
+
 # 세션 데이터 클래스
 class SessionData:
     def __init__(self, session_id: str):
@@ -137,7 +139,7 @@ def get_session_info() -> dict:
 
 # MCP 툴 함수들
 @mcp.tool()
-def masta_initialize(masta_path: str = r"C:\Program Files\SMT\MASTA 14.1.1") -> dict:
+def masta_initialize() -> dict:
     """
     MASTA 환경을 초기화합니다.
 
