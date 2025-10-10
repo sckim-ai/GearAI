@@ -25,13 +25,16 @@ gear_design_exe_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\Ge
 class GearDesignIPC:
     """GearDesign과 프로세스 간 통신(IPC)을 담당하는 클래스"""
 
-    def __init__(self, exe_path: str):
+    def __init__(self, exe_path: str, progress_callback=None):
         """
         Args:
             exe_path: GearDesign.exe 실행 파일 경로
+            progress_callback: 진행 상황 콜백 함수 (선택)
+                               함수 시그니처: callback(message: str, percentage: int)
         """
         self.exe_path = Path(exe_path)
         self.process: Optional[subprocess.Popen] = None
+        self.progress_callback = progress_callback
 
     def start(self) -> bool:
         """GearDesign 프로세스를 IPC 모드로 시작"""
@@ -76,7 +79,7 @@ class GearDesignIPC:
             return False
 
     def _send_command(self, command: Dict[str, any]) -> Dict[str, any]:
-        """명령을 전송하고 응답 받기"""
+        """명령을 전송하고 응답 받기 (진행 상황 지원)"""
         if not self.process or self.process.poll() is not None:
             raise RuntimeError("GearDesign 프로세스가 실행 중이지 않습니다")
 
@@ -85,14 +88,45 @@ class GearDesignIPC:
         self.process.stdin.write(command_str)
         self.process.stdin.flush()
 
-        # 응답 받기
-        response_line = self.process.stdout.readline()
-        if not response_line:
-            raise RuntimeError("프로세스로부터 응답이 없습니다")
+        # 응답 받기 (여러 줄 가능 - progress 메시지 처리)
+        while True:
+            response_line = self.process.stdout.readline()
+            if not response_line:
+                raise RuntimeError("프로세스로부터 응답이 없습니다")
 
-        # print(f"받은 원본: '{response_line}'")
+            try:
+                response = json.loads(response_line)
+            except json.JSONDecodeError as e:
+                print(f"JSON 파싱 오류: {response_line}")
+                raise RuntimeError(f"잘못된 JSON 응답: {e}")
 
-        return json.loads(response_line)
+            # 메시지 타입 확인
+            msg_type = response.get("type", "result")
+
+            if msg_type == "progress":
+                # 진행 상황 메시지 처리
+                message = response.get('message', '')
+                percentage = response.get('percentage', 0)
+
+                if self.progress_callback:
+                    # 사용자 정의 콜백 함수 호출
+                    try:
+                        self.progress_callback(message=message, percentage=percentage)
+                    except Exception as e:
+                        print(f"콜백 함수 실행 오류: {e}")
+                else:
+                    # 기본 출력
+                    print(f"[진행 {percentage}%] {message}")
+
+                continue  # 다음 줄 읽기
+
+            elif msg_type == "result":
+                # 최종 결과 반환
+                return response
+
+            else:
+                # 알 수 없는 타입 또는 type 필드 없음 (하위 호환성)
+                return response
 
     def load_and_validate_config(self, config_data: Dict[str, any]) -> Dict[str, any]:
         """설정 데이터 로드"""
@@ -1673,7 +1707,17 @@ if __name__ == "__main__":
     print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
     print("백그라운드 세션 정리 스레드 시작됨")
 
+    # 진행 상황 콜백 함수 정의
+    def on_progress(message, percentage):
+        print(f"  📊 진행: [{percentage:3d}%] {message}")
+
     result = initialize()
+
+    # 진행 상황 콜백 등록
+    if result.get("success"):
+        session = get_session(result["session_id"])
+        session.ipc_client.progress_callback = on_progress
+
     # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
     # print(f"modify_gear_data 응답: {responce}")
     # load = load_GearDesignData(r"D:\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
@@ -1687,7 +1731,9 @@ if __name__ == "__main__":
     # report = get_gear_report(result["session_id"])
     # summary = get_allresults_summary(result["session_id"])
     # save_data = save_GearDesignData(result["session_id"])
+
+    print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
     simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
-    print(f"결과: {simplesizing}")
+    print(f"\n결과: {simplesizing}")
 
     # asyncio.run(mcp.run())
