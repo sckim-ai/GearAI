@@ -1422,6 +1422,7 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
 
         # 4. 기존 데이터에 변경사항 적용
         recursive_update(simplesizing_input, modified_data)
+        print(f"Final simplesizing input after update: {simplesizing_input}")
         response = session.ipc_client.simple_sizing_gearpair(simplesizing_input)
 
         if response.get("success", False):
