@@ -176,6 +176,21 @@ class GearDesignIPC:
         command = {"action": "get_default_config"}
         return self._send_command(command)
 
+    def simple_sizing_gearpair_get_input(self) -> Dict[str, any]:
+        """SimpleSizing - Gear Pair 계산 수행을 위한 입력값 추출"""
+        command = {
+            "action": "simple_sizing_gearpair_get_input",
+        }
+        return self._send_command(command)
+
+    def simple_sizing_gearpair(self, modify_data: Dict[str, any]) -> Dict[str, any]:
+        """SimpleSizing - Gear Pair 계산 수행"""
+        command = {
+            "action": "simple_sizing_gearpair",
+            "modify_data": modify_data
+        }
+        return self._send_command(command)
+
     def stop(self):
         """프로세스 종료"""
         if self.process:
@@ -208,6 +223,8 @@ class SessionData:
         self.default_data = None
         self.changed_data = None
         self.gd_results = None  # 전체 계산 결과 (Python dict)
+        self.simplesizing_input = None  # SimpleSizing 입력 데이터
+        self.simplesizing_results = None  # SimpleSizing 결과 데이터
         self.ipc_client: Optional[GearDesignIPC] = None
         self.created_at = datetime.datetime.now()
         self.last_accessed = datetime.datetime.now()
@@ -620,7 +637,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
 
     try:
         # LLM 호출하여 변경데이터 추출
-        response = llm_call(prompt=prompt, model="gpt-4o-mini")
+        response = llm_call(prompt=prompt, model="gpt-5-mini")
         modified_data = remove_code_block_llm(response)
         modified_data = json.loads(modified_data)
 
@@ -1311,6 +1328,124 @@ def get_gear_report(session_id: str) -> dict:
             "session_id": session.session_id
         }
 
+@mcp.tool()
+def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
+    """
+    간단한 기어쌍 사이징을 수행합니다.
+
+    현재 세션의 기어 데이터를 바탕으로 사용자 요구에 따라 간단한 기어쌍 사이징을 수행하고,
+    결과를 세션에 저장합니다.
+    사용자 메세지는 이전 대화를 기반으로 자연어로 주요사항을 요약해서 입력합니다. 
+
+    Args:
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+
+    Returns:
+        dict: 사이징 결과
+            - 성공 시: {"success": True, "message": "사이징이 완료되었습니다", "session_id": "세션ID"}
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 초기화가 완료되어야 합니다
+        - 이 함수는 간단한 사이징만 수행하며, 상세한 설계 검증은 포함하지 않습니다
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    # 1. 초기화 상태 확인
+    if not session.is_initialized:
+        return {
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }    
+
+    try:
+        # 2. 사이징 입력 데이터 생성
+        sizinginput = session.ipc_client.simple_sizing_gearpair_get_input()
+
+        if not sizinginput.get("success", False):
+            return {
+                "success": False,
+                "error": f"사이징 입력 데이터 생성 실패: {sizinginput.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+        
+        simplesizing_input = sizinginput.get("inputs", {})
+        print(f"Initial simplesizing input: {simplesizing_input}")
+        # 3. 사용자 메시지를 기반으로 입력 데이터 수정
+        ## 기존 데이터와 사용자 메시지를 LLM에 전달하여 변경된 데이터 추출
+        system_prompt = """
+# 역할
+당신은 기어쌍의 simple sizing을 위한 설계 JSON 데이터 수정 전문가입니다.
+# 목적
+사용자의 자연어 요청을 분석하여 기어 설계 JSON 데이터의 필요한 값만 정확히 변경합니다.
+# 입력 데이터 구조 이해
+1. **메타데이터**: Key가 '$'로 시작 (예: "$Normal Module", "$z1")
+   - 메타데이터는 해당 값의 의미/단위를 설명합니다
+2. **실제 데이터**: '$' 없는 일반 Key
+   - 이 값들만 수정 대상입니다
+# 수정 규칙
+## 1. 변경 대상 식별
+- 사용자 요청을 분석하여 변경해야 할 정확한 Key를 찾습니다
+- 메타데이터($로 시작)를 참고하되, 절대 메타데이터를 변경하지 않습니다
+## 2. 출력 형식
+- **표준 JSON 형식** (중첩 구조 포함)
+- **변경된 항목만** 포함
+- Key 이름은 원본과 정확히 일치
+- Value는 적절한 데이터 타입 (숫자는 number, 문자는 string)
+# 출력 예시
+```json
+{
+    "target_GR": 3.0, 
+    "face_width": 20,
+    "helix_angle": 10,
+    "maxcases": 1000
+}
+```
+        """
+        prompt = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"사용자 요청: {user_message}\nsimple_sizing 입력 데이터: {json.dumps(simplesizing_input, ensure_ascii=False)}"}
+        ]
+
+        ## LLM 호출하여 변경데이터 추출
+        llm_response = llm_call(prompt=prompt, model="gpt-5-mini")
+        modified_data = remove_code_block_llm(llm_response)
+        modified_data = json.loads(modified_data)
+        
+        print(f"Modified data from LLM: {modified_data}")
+
+        # 4. 기존 데이터에 변경사항 적용
+        recursive_update(simplesizing_input, modified_data)
+        response = session.ipc_client.simple_sizing_gearpair(simplesizing_input)
+
+        if response.get("success", False):
+            # 사이징 결과를 세션 데이터에 반영
+            session.simplesizing_results = response.get("filtered_results", {})
+
+            return {
+                "success": True,
+                "message": "사이징이 완료되었습니다",
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"사이징 실패: {response.get('error', 'Unknown error')}",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"사이징 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
 
 @mcp.tool()
 def save_GearDesignData(session_id: str) -> dict:
@@ -1540,8 +1675,7 @@ if __name__ == "__main__":
     result = initialize()
     # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
     # print(f"modify_gear_data 응답: {responce}")
-    load = load_GearDesignData(r"D:\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
-    print(f"load_GearDesignData 응답: {load}")
+    # load = load_GearDesignData(r"D:\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
     # geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
     # calc_result = calc_load_case(result["session_id"])
     # geo_result2 = get_geometry_results(result["session_id"])
@@ -1552,7 +1686,7 @@ if __name__ == "__main__":
     # report = get_gear_report(result["session_id"])
     # summary = get_allresults_summary(result["session_id"])
     # save_data = save_GearDesignData(result["session_id"])
+    simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
+    print(f"결과: {simplesizing}")
 
-    # print(f"결과: {save_data}")
-
-    asyncio.run(mcp.run())
+    # asyncio.run(mcp.run())

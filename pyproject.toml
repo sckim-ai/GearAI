@@ -3,7 +3,7 @@ name = "streamlit-ai-agent"
 version = "0.1.0"
 description = "Streamlit AI agent application with MCP and Deep Research modules"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "streamlit>=1.28.0",
     "openai>=1.3.0",
