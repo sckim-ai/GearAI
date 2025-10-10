@@ -57,6 +57,10 @@ class GearDesignIPC:
             )
             print(f"프로세스 시작 (PID: {self.process.pid})")
 
+            # ⭐ stderr 모니터링 스레드 시작
+            stderr_thread = threading.Thread(target=self._monitor_stderr, daemon=True)
+            stderr_thread.start()
+
             # stderr 읽기 (디버그 메시지 확인)
             time.sleep(1)
 
@@ -77,6 +81,16 @@ class GearDesignIPC:
             import traceback
             traceback.print_exc()
             return False
+
+    def _monitor_stderr(self):
+        """stderr를 별도 스레드에서 모니터링하여 디버그 메시지 출력"""
+        try:
+            while self.process and self.process.poll() is None:
+                line = self.process.stderr.readline()
+                if line:
+                    print(f"[.NET DEBUG] {line.rstrip()}")
+        except Exception as e:
+            print(f"[ERROR] stderr 모니터링 오류: {e}")
 
     def _send_command(self, command: Dict[str, any]) -> Dict[str, any]:
         """명령을 전송하고 응답 받기 (진행 상황 지원)"""
