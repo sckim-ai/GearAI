@@ -78,7 +78,7 @@ class GearDesignIPC:
             traceback.print_exc()
             return False
 
-    def _send_command(self, command: Dict[str, any]) -> Dict[str, any]:
+    def _send_command(self, command: Dict[str, any], timeout: int = 300) -> Dict[str, any]:
         """명령을 전송하고 응답 받기 (진행 상황 지원)"""
         if not self.process or self.process.poll() is not None:
             raise RuntimeError("GearDesign 프로세스가 실행 중이지 않습니다")
@@ -88,16 +88,47 @@ class GearDesignIPC:
         self.process.stdin.write(command_str)
         self.process.stdin.flush()
 
+        import select
+        import time
+        start_time = time.time()
+
         # 응답 받기 (여러 줄 가능 - progress 메시지 처리)
         while True:
-            response_line = self.process.stdout.readline()
+            # 타임아웃 체크
+            elapsed = time.time() - start_time
+            if elapsed > timeout:
+                raise RuntimeError(f"명령 실행 타임아웃 ({timeout}초 초과)")
+
+            # 0.1초 대기 후 읽기 가능 여부 확인 (Windows용)
+            if sys.platform == 'win32':
+                # Windows에서는 select가 파일에서 작동하지 않으므로 readline 직접 사용
+                response_line = self.process.stdout.readline()
+            else:
+                # Unix/Linux에서는 select 사용
+                ready = select.select([self.process.stdout], [], [], 0.1)
+                if not ready[0]:
+                    continue
+                response_line = self.process.stdout.readline()
+
             if not response_line:
+                # stderr 확인
+                stderr_line = self.process.stderr.readline()
+                if stderr_line:
+                    print(f"[STDERR] {stderr_line.strip()}")
+                    continue
+
                 raise RuntimeError("프로세스로부터 응답이 없습니다")
 
             try:
                 response = json.loads(response_line)
             except json.JSONDecodeError as e:
                 print(f"JSON 파싱 오류: {response_line}")
+                # stderr 확인
+                while True:
+                    stderr_line = self.process.stderr.readline()
+                    if not stderr_line:
+                        break
+                    print(f"[STDERR] {stderr_line.strip()}")
                 raise RuntimeError(f"잘못된 JSON 응답: {e}")
 
             # 메시지 타입 확인
