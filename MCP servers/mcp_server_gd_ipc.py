@@ -44,11 +44,14 @@ class GearDesignIPC:
             return False
 
         try:
+            # ⭐ stderr를 파일로 리다이렉트 (버퍼 블로킹 방지)
+            stderr_file = open("ipc_debug.log", "w", encoding='utf-8', buffering=1)
+
             self.process = subprocess.Popen(
                 [str(self.exe_path.absolute()), "--ipc-mode"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=stderr_file,  # ⭐ 파일로 리다이렉트
                 text=True,
                 encoding='utf-8',  # UTF-8 인코딩 명시
                 errors='replace',   # 디코딩 오류 시 대체 문자 사용
@@ -56,21 +59,19 @@ class GearDesignIPC:
                 cwd=str(self.exe_path.parent.absolute())
             )
             print(f"프로세스 시작 (PID: {self.process.pid})")
-
-            # ⭐ stderr 모니터링 스레드 시작
-            stderr_thread = threading.Thread(target=self._monitor_stderr, daemon=True)
-            stderr_thread.start()
+            print(f"디버그 로그: ipc_debug.log 파일에 기록됨")
 
             # stderr 읽기 (디버그 메시지 확인)
             time.sleep(1)
 
             # 프로세스 상태 확인
             if self.process.poll() is not None:
-                stderr_output = self.process.stderr.read()
-                stdout_output = self.process.stdout.read()
                 print(f"프로세스 종료됨")
+                # 로그 파일 읽기
+                stderr_file.close()
+                with open("ipc_debug.log", "r", encoding='utf-8') as f:
+                    stderr_output = f.read()
                 print(f"STDERR: {stderr_output}")
-                print(f"STDOUT: {stdout_output}")
                 return False
 
             print("IPC 모드 대기 중...")
@@ -81,16 +82,6 @@ class GearDesignIPC:
             import traceback
             traceback.print_exc()
             return False
-
-    def _monitor_stderr(self):
-        """stderr를 별도 스레드에서 모니터링하여 디버그 메시지 출력"""
-        try:
-            while self.process and self.process.poll() is None:
-                line = self.process.stderr.readline()
-                if line:
-                    print(f"[.NET DEBUG] {line.rstrip()}")
-        except Exception as e:
-            print(f"[ERROR] stderr 모니터링 오류: {e}")
 
     def _send_command(self, command: Dict[str, any]) -> Dict[str, any]:
         """명령을 전송하고 응답 받기 (진행 상황 지원)"""
