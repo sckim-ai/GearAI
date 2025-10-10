@@ -280,14 +280,17 @@ namespace GearDesign
                                 Console.Error.WriteLine("[DEBUG] Calculate 호출 전");
                                 Console.Error.Flush();
 
-                                // ⭐ 5개 파라미터 버전 사용 - useParallel=true로 변경하여 Task.Run 데드락 회피
-                                var results = await SimpleSizing.Calculate(
-                                    _input,
-                                    true,              // withRating
-                                    true,              // useParallel = true ⭐⭐⭐ (ProcessRowsSequential 대신 병렬 처리 경로 사용)
-                                    progressAction,    // progress callback
-                                    cts.Token          // cancellation token
-                                ).ConfigureAwait(false); // ⭐ ConfigureAwait 추가
+                                // ⭐ Task.Run으로 감싸서 SynchronizationContext 제거 (데드락 방지)
+                                var results = await Task.Run(async () =>
+                                {
+                                    return await SimpleSizing.Calculate(
+                                        _input,
+                                        true,              // withRating
+                                        true,              // useParallel = true
+                                        progressAction,    // progress callback
+                                        cts.Token          // cancellation token
+                                    );
+                                }, cts.Token);
 
                                 Console.Error.WriteLine("[DEBUG] Calculate 완료! 반환값 확인 시작");
                                 Console.Error.WriteLine($"[DEBUG] results != null: {results != null}");
