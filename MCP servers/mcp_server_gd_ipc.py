@@ -9,6 +9,7 @@ import threading
 import time
 import subprocess
 from typing import Dict, Optional
+import pandas as pd
 
 # 현재 디렉토리를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("GearDesign_IPC_agent")
 
 # GearDesign.exe 경로 설정
-gear_design_exe_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\GearDesign.exe"
+gear_design_exe_path = r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\GearDesign.exe"
 
 
 class GearDesignIPC:
@@ -73,7 +74,6 @@ class GearDesignIPC:
                 print(f"STDOUT: {stdout_output}")
                 return False
 
-            print("IPC 모드 대기 중...")
             return True
 
         except Exception as e:
@@ -650,7 +650,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
 # 수정 규칙
 
 ## 1. 변경 대상 식별
-- 사용자 요청을 분석하여 변경해야 할 정확한 Key를 찾습니다
+- 사용자 요청을 분석하여 변경해야 할 정확한 Key와 경로를 찾습니다
 - 메타데이터($로 시작)를 참고하되, 절대 메타데이터를 변경하지 않습니다
 
 ## 2. 중심거리 자동계산 트리거
@@ -664,16 +664,18 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
 ## 3. 출력 형식
 - **표준 JSON 형식** (중첩 구조 포함)
 - **변경된 항목만** 포함
-- Key 이름은 원본과 정확히 일치
+- 상위 경로를 포함한 Key 이름은 원본과 정확히 일치
 - Value는 적절한 데이터 타입 (숫자는 number, 문자는 string)
 
 # 출력 예시
 ```json
 {
-  "Normal Module": 3.0,
-  "z1": 20,
-  "z2": 60,
-  "CDMethod": 1
+  "Basic Data": {
+    "Normal Module": 3.0,
+    "z1": 20,
+    "z2": 60,
+    "CDMethod": 1
+  }  
 }
 ```
 """
@@ -689,17 +691,59 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
         modified_data = remove_code_block_llm(response)
         modified_data = json.loads(modified_data)
 
-        # 기존 데이터에 변경사항 적용
-        recursive_update(session.changed_data, modified_data)
+        # 기존 데이터에 변경사항 적용 및 추적
+        update_result = recursive_update(session.changed_data, modified_data)
+
+        # 변경 내역 요약
+        change_summary = []
+        if update_result["updated"]:
+            change_summary.append(f"✅ 변경됨: {len(update_result['updated'])}개")
+            for path, old, new in update_result["updated"]:
+                change_summary.append(f"  - {path}: {old} → {new}")
+
+        if update_result["not_found"]:
+            change_summary.append(f"⚠️ 경로 불일치 (새로 추가됨): {len(update_result['not_found'])}개")
+            for path, val in update_result["not_found"]:
+                change_summary.append(f"  - {path}: {val} (경로가 기존 데이터에 존재하지 않아 새로 추가됨)")
+
+        if update_result["unchanged"]:
+            change_summary.append(f"ℹ️ 변경 없음 (동일한 값): {len(update_result['unchanged'])}개")
+            for path, val in update_result["unchanged"]:
+                change_summary.append(f"  - {path}: {val}")
+
+        # print("\n".join(change_summary))
+
+        # ⭐ 변경 성공 여부 판정: 경로 불일치만 실패로 처리
+        has_not_found = len(update_result["not_found"]) > 0
+
+        if has_not_found:
+            # 경로 불일치가 있으면 실패
+            return {
+                "success": False,
+                "message": f"경로 불일치: LLM이 반환한 {len(update_result['not_found'])}개 항목이 기존 데이터 구조에 존재하지 않습니다",
+                "modified_data": modified_data,
+                "change_summary": "\n".join(change_summary),
+                "update_details": update_result,
+                "session_id": session.session_id
+            }
 
         # 데이터 검증 및 로드
         ipc_response = session.ipc_client.load_and_validate_config(session.changed_data)
 
         if ipc_response.get("success", False):
+            # 메시지 결정
+            has_updates = len(update_result["updated"]) > 0
+            if has_updates:
+                message = f"데이터 수정 및 검증 완료 ({len(update_result['updated'])}개 항목 변경됨)"
+            else:
+                message = "요청한 값이 이미 설정되어 있습니다 (변경 없음)"
+
             return {
                 "success": True,
-                "message": "데이터 수정 및 검증 완료",
+                "message": message,
                 "modified_data": modified_data,
+                "change_summary": "\n".join(change_summary),
+                "update_details": update_result,
                 "session_id": session.session_id
             }
         else:
@@ -707,6 +751,8 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
                 "success": False,
                 "message": f"데이터 검증 실패: {ipc_response.get('error', 'Unknown error')}",
                 "modified_data": modified_data,
+                "change_summary": "\n".join(change_summary),
+                "update_details": update_result,
                 "session_id": session.session_id
             }
 
@@ -721,14 +767,52 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
             "session_id": session.session_id
         }
 
-# 재귀적으로 dict를 업데이트하는 함수
-def recursive_update(d, u):
+# 재귀적으로 dict를 업데이트하는 함수 (변경 추적 포함)
+def recursive_update(d, u, path=""):
+    """
+    재귀적으로 dict를 업데이트하고 변경 내역을 추적합니다.
+
+    Args:
+        d: 업데이트할 대상 dict
+        u: 업데이트 내용 dict
+        path: 현재 경로 (추적용)
+
+    Returns:
+        dict: 변경 내역
+            - updated: [(경로, 이전값, 새값), ...]
+            - not_found: [(경로, 시도한값), ...]
+            - unchanged: [(경로, 값), ...]
+    """
+    result = {
+        "updated": [],      # 성공적으로 업데이트된 경로
+        "not_found": [],    # 경로를 찾지 못한 키
+        "unchanged": []     # 값이 같아서 변경하지 않은 경로
+    }
+
     for k, v in u.items():
+        current_path = f"{path}.{k}" if path else k
+
         if isinstance(v, dict) and k in d and isinstance(d[k], dict):
-            recursive_update(d[k], v)
+            # 중첩된 dict인 경우 재귀 호출
+            sub_result = recursive_update(d[k], v, current_path)
+            # 하위 결과 병합
+            result["updated"].extend(sub_result["updated"])
+            result["not_found"].extend(sub_result["not_found"])
+            result["unchanged"].extend(sub_result["unchanged"])
+        elif k in d:
+            # 키가 존재하는 경우
+            old_value = d[k]
+            if old_value == v:
+                result["unchanged"].append((current_path, v))
+            else:
+                d[k] = v
+                result["updated"].append((current_path, old_value, v))
         else:
+            # 키가 존재하지 않는 경우 (새로 추가)
             d[k] = v
-    return
+            result["not_found"].append((current_path, v))
+
+    return result
 
 @mcp.tool()
 def calc_geometry(session_id: str) -> dict:
@@ -912,7 +996,6 @@ def calc_load_case(session_id: str) -> dict:
 
         # 하중 계산 결과 저장
         loadcase_results = response.get("results", {})
-        messages = session.ipc_client.get_messages()
 
         # 전체 결과 업데이트
         session.gd_results = loadcase_results
@@ -1465,22 +1548,77 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
         llm_response = llm_call(prompt=prompt, model="gpt-5-mini")
         modified_data = remove_code_block_llm(llm_response)
         modified_data = json.loads(modified_data)
-        
+
         print(f"Modified data from LLM: {modified_data}")
 
-        # 4. 기존 데이터에 변경사항 적용
-        recursive_update(simplesizing_input, modified_data)
-        print(f"Final simplesizing input after update: {simplesizing_input}")
+        # 4. 기존 데이터에 변경사항 적용 및 추적
+        update_result = recursive_update(simplesizing_input, modified_data)
+
+        # 변경 내역 출력
+        change_summary = []
+        if update_result["updated"]:
+            change_summary.append(f"✅ SimpleSizing 입력 변경됨: {len(update_result['updated'])}개")
+            for path, old, new in update_result["updated"]:
+                change_summary.append(f"  - {path}: {old} → {new}")
+
+        if update_result["not_found"]:
+            change_summary.append(f"⚠️ 경로 불일치 (새로 추가됨): {len(update_result['not_found'])}개")
+            for path, val in update_result["not_found"]:
+                change_summary.append(f"  - {path}: {val}")
+
+        if update_result["unchanged"]:
+            change_summary.append(f"ℹ️ 변경 없음: {len(update_result['unchanged'])}개")
+
+        # print("\n".join(change_summary))
+
+        # ⭐ 변경 성공 여부 판정: 경로 불일치만 실패로 처리
+        has_not_found = len(update_result["not_found"]) > 0
+
+        if has_not_found:
+            # 경로 불일치가 있으면 실패
+            return {
+                "success": False,
+                "error": f"경로 불일치: LLM이 반환한 {len(update_result['not_found'])}개 항목이 SimpleSizing 입력 구조에 존재하지 않습니다",
+                "change_summary": "\n".join(change_summary),
+                "update_details": update_result,
+                "session_id": session.session_id
+            }
+
         response = session.ipc_client.simple_sizing_gearpair(simplesizing_input)
 
         if response.get("success", False):
-            # 사이징 결과를 세션 데이터에 반영
-            session.simplesizing_results = response.get("filtered_results", {})
+            # 사이징 결과를 pandas DataFrame으로 변환하여 저장
+            filtered_results_data = response.get("filtered_results", {})
+
+            try:
+                # .NET DataTable → pandas DataFrame 변환
+                if filtered_results_data and isinstance(filtered_results_data, list):
+                    session.simplesizing_results = pd.DataFrame(filtered_results_data)
+                elif filtered_results_data and isinstance(filtered_results_data, dict):
+                    # dict 형태인 경우 (단일 레코드 또는 특정 구조)
+                    session.simplesizing_results = pd.DataFrame([filtered_results_data])
+                else:
+                    session.simplesizing_results = pd.DataFrame()  # 빈 DataFrame
+
+                print(f"DataFrame 변환 완료: {len(session.simplesizing_results)} rows × {len(session.simplesizing_results.columns)} columns")
+            except Exception as e:
+                print(f"경고: DataFrame 변환 실패, dict로 저장: {e}")
+                session.simplesizing_results = filtered_results_data
+
+            # 메시지 결정
+            has_updates = len(update_result["updated"]) > 0
+            if has_updates:
+                message = f"사이징이 완료되었습니다 ({len(update_result['updated'])}개 항목 변경됨)"
+            else:
+                message = "요청한 값이 이미 설정되어 있습니다 (변경 없음)"
 
             return {
                 "success": True,
-                "message": "사이징이 완료되었습니다",
-                "session_id": session.session_id
+                "message": message,
+                "session_id": session.session_id,
+                "result_rows": len(session.simplesizing_results) if isinstance(session.simplesizing_results, pd.DataFrame) else None,
+                "change_summary": "\n".join(change_summary),
+                "update_details": update_result
             }
         else:
             return {
@@ -1493,6 +1631,85 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
         return {
             "success": False,
             "error": f"사이징 중 오류 발생: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def get_simplesizing_results(session_id: str, return_all: bool = False, top_n: int = 100) -> dict:
+    """
+    SimpleSizing 계산 결과를 DataFrame 형태로 반환합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        return_all (bool, optional): True이면 모든 결과 반환, False이면 top_n개만 반환 (기본값: False)
+        top_n (int, optional): return_all이 False일 때 반환할 결과 개수 (기본값: 100)
+
+    Returns:
+        dict: SimpleSizing 결과
+            - success: 성공 여부
+            - results: DataFrame을 dict로 변환한 결과
+            - shape: (rows, columns)
+            - total_rows: 전체 결과 행 수
+            - returned_rows: 실제 반환된 행 수
+            - session_id: 세션 ID
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음",
+            "session_id": session.session_id
+        }
+
+    if session.simplesizing_results is None:
+        return {
+            "success": False,
+            "error": "SimpleSizing 계산이 먼저 수행되어야 합니다",
+            "session_id": session.session_id
+        }
+
+    try:
+        if isinstance(session.simplesizing_results, pd.DataFrame):
+            df = session.simplesizing_results
+            total_rows = len(df)
+
+            # return_all이 False이면 상위 top_n개만 선택
+            if not return_all and top_n > 0:
+                df = df.head(top_n)
+
+            # DataFrame을 dict로 변환 (records 형태)
+            results_dict = df.to_dict('records')
+
+            return {
+                "success": True,
+                "results": results_dict,
+                "shape": {"rows": len(df), "columns": len(df.columns)},
+                "total_rows": total_rows,
+                "returned_rows": len(df),
+                "columns": list(df.columns),
+                "session_id": session.session_id
+            }
+        else:
+            # DataFrame이 아닌 경우 (dict로 저장된 경우)
+            return {
+                "success": True,
+                "results": session.simplesizing_results,
+                "session_id": session.session_id,
+                "note": "결과가 DataFrame이 아닌 dict 형태로 저장되어 있습니다"
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"결과 조회 중 오류: {str(e)}",
             "session_id": session.session_id
         }
 
@@ -1732,22 +1949,22 @@ if __name__ == "__main__":
         session = get_session(result["session_id"])
         session.ipc_client.progress_callback = on_progress
 
-    # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
-    # print(f"modify_gear_data 응답: {responce}")
-    # load = load_GearDesignData(r"D:\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
-    # geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
-    # calc_result = calc_load_case(result["session_id"])
-    # geo_result2 = get_geometry_results(result["session_id"])
-    # message = get_messages(result["session_id"])
-    # image2d = get_2D_image(result["session_id"])
-    # image3d = get_3d_image(result["session_id"])
-    # model3d = get_3d_modeling(result["session_id"])
-    # report = get_gear_report(result["session_id"])
-    # summary = get_allresults_summary(result["session_id"])
-    # save_data = save_GearDesignData(result["session_id"])
+    responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
+    # load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
+    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
+    calc_result = calc_load_case(result["session_id"])
+    geo_result2 = get_geometry_results(result["session_id"])
+    message = get_messages(result["session_id"])
+    image2d = get_2D_image(result["session_id"])
+    image3d = get_3d_image(result["session_id"])
+    model3d = get_3d_modeling(result["session_id"])
+    report = get_gear_report(result["session_id"])
+    summary = get_allresults_summary(result["session_id"])
+    save_data = save_GearDesignData(result["session_id"])
 
-    print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
-    simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
-    print(f"\n결과: {simplesizing}")
+    # print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
+    # simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
+    # sizingresults = get_simplesizing_results(result["session_id"], False)
+    # print(f"\n결과: {sizingresults}")
 
     # asyncio.run(mcp.run())
