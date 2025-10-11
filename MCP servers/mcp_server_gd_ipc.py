@@ -1303,22 +1303,39 @@ def get_3d_modeling(session_id: str) -> dict:
 @mcp.tool()
 def get_allresults_summary(session_id: str) -> dict:
     """
-    모든 계산 결과의 요약 정보를 반환합니다.
+    기어 설계의 모든 계산 결과를 요약하여 반환합니다.
 
-    현재 세션에 저장된 기하학적 계산 및 하중 계산 결과를 바탕으로
-    요약된 결과 정보를 추출하여 반환합니다. 반환된 결과는 json 형식의 키에 markdown 형식으로 값이 저장됩니다.
+    기하학적 계산과 하중 계산의 결과를 종합하여 핵심 정보를 JSON 형태로 제공합니다.
+    반환된 요약 정보는 LLM이 직접 읽고 사용자에게 표 형태로 표시할 수 있습니다.
 
     Args:
-        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수).
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
 
     Returns:
-        dict: 요약 정보
-            - 성공 시: 요약된 결과 데이터와 세션 정보
-            - 실패 시: {"error": "오류 메시지", "session_id": "세션ID"}
+        dict: 계산 결과 요약
+            {
+                "success": True,
+                "summary": {
+                    "$테이블명1": "테이블1에 대한 설명 또는 메타정보",
+                    "테이블명1": {
+                        "항목명1": 값1,
+                        "항목명2": 값2,
+                        ...
+                    },
+                    "$테이블명2": "테이블2 설명",
+                    "테이블명2": {...},
+                    ...
+                },
+                "session_id": "세션ID"
+            }
+
+            - $ 접두사가 있는 키: 해당 테이블에 대한 메타데이터 (테이블과 같은 레벨)
+            - $ 없는 키: 실제 계산 데이터 테이블
 
     Note:
-        - 사전에 초기화와 계산이 완료되어야 합니다
-        - JSON KEY의 메타데이터는 $로 시작합니다
+        - **필수 전제조건**: initialize() → calc_geometry() → calc_load_case() 순서대로 실행
+        - calc_load_case() 없이 호출하면 오류 발생
+        - 반환되는 테이블 구조는 기어 타입에 따라 다를 수 있음
     """
     try:
         session = get_session(session_id)
@@ -1350,8 +1367,9 @@ def get_allresults_summary(session_id: str) -> dict:
     try:
         try:
             response = session.ipc_client.get_all_results_summary(session.gd_results)
-            
-            if response.get("success", False):               
+
+            if response.get("success", False):
+                # 원본 데이터 그대로 반환 (LLM이 직접 읽고 처리)
                 response["session_id"] = session.session_id
                 return response
             else:
@@ -1549,8 +1567,6 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
         modified_data = remove_code_block_llm(llm_response)
         modified_data = json.loads(modified_data)
 
-        print(f"Modified data from LLM: {modified_data}")
-
         # 4. 기존 데이터에 변경사항 적용 및 추적
         update_result = recursive_update(simplesizing_input, modified_data)
 
@@ -1568,8 +1584,6 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
 
         if update_result["unchanged"]:
             change_summary.append(f"ℹ️ 변경 없음: {len(update_result['unchanged'])}개")
-
-        # print("\n".join(change_summary))
 
         # ⭐ 변경 성공 여부 판정: 경로 불일치만 실패로 처리
         has_not_found = len(update_result["not_found"]) > 0
@@ -1600,9 +1614,7 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
                 else:
                     session.simplesizing_results = pd.DataFrame()  # 빈 DataFrame
 
-                print(f"DataFrame 변환 완료: {len(session.simplesizing_results)} rows × {len(session.simplesizing_results.columns)} columns")
             except Exception as e:
-                print(f"경고: DataFrame 변환 실패, dict로 저장: {e}")
                 session.simplesizing_results = filtered_results_data
 
             # 메시지 결정
@@ -1933,38 +1945,38 @@ cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
 cleanup_thread.start()
 
 if __name__ == "__main__":
-    print("Starting MCP server (IPC mode)...")
-    print(f"GearDesign.exe 경로: {gear_design_exe_path}")
-    print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
-    print("백그라운드 세션 정리 스레드 시작됨")
+    # print("Starting MCP server (IPC mode)...")
+    # print(f"GearDesign.exe 경로: {gear_design_exe_path}")
+    # print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
+    # print("백그라운드 세션 정리 스레드 시작됨")
 
-    # 진행 상황 콜백 함수 정의
-    def on_progress(message, percentage):
-        print(f"  📊 진행: [{percentage:3d}%] {message}")
+    # # 진행 상황 콜백 함수 정의
+    # def on_progress(message, percentage):
+    #     print(f"  📊 진행: [{percentage:3d}%] {message}")
 
-    result = initialize()
+    # result = initialize()
 
-    # 진행 상황 콜백 등록
-    if result.get("success"):
-        session = get_session(result["session_id"])
-        session.ipc_client.progress_callback = on_progress
+    # # 진행 상황 콜백 등록
+    # if result.get("success"):
+    #     session = get_session(result["session_id"])
+    #     session.ipc_client.progress_callback = on_progress
 
-    responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
+    # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
     # load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
-    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
-    calc_result = calc_load_case(result["session_id"])
-    geo_result2 = get_geometry_results(result["session_id"])
-    message = get_messages(result["session_id"])
-    image2d = get_2D_image(result["session_id"])
-    image3d = get_3d_image(result["session_id"])
-    model3d = get_3d_modeling(result["session_id"])
-    report = get_gear_report(result["session_id"])
-    summary = get_allresults_summary(result["session_id"])
-    save_data = save_GearDesignData(result["session_id"])
+    # geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
+    # calc_result = calc_load_case(result["session_id"])
+    # geo_result2 = get_geometry_results(result["session_id"])
+    # message = get_messages(result["session_id"])
+    # image2d = get_2D_image(result["session_id"])
+    # image3d = get_3d_image(result["session_id"])
+    # model3d = get_3d_modeling(result["session_id"])
+    # report = get_gear_report(result["session_id"])
+    # summary = get_allresults_summary(result["session_id"])
+    # save_data = save_GearDesignData(result["session_id"])
 
     # print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
     # simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
     # sizingresults = get_simplesizing_results(result["session_id"], False)
-    # print(f"\n결과: {sizingresults}")
+    # print(f"\n결과: {simplesizing}")
 
-    # asyncio.run(mcp.run())
+    asyncio.run(mcp.run())
