@@ -1318,9 +1318,13 @@ def get_allresults_summary(session_id: str) -> dict:
                 "summary": {
                     "$테이블명1": "테이블1에 대한 설명 또는 메타정보",
                     "테이블명1": {
-                        "항목명1": 값1,
-                        "항목명2": 값2,
-                        ...
+                        "columns": ["컬럼명1", "컬럼명2", ...],
+                        "rowHeaders": ["행헤더1", "행헤더2", ...],
+                        "rows": [
+                            ["값1", "값2", ...],
+                            ["값1", "값2", ...],
+                            ...
+                        ]
                     },
                     "$테이블명2": "테이블2 설명",
                     "테이블명2": {...},
@@ -1330,7 +1334,8 @@ def get_allresults_summary(session_id: str) -> dict:
             }
 
             - $ 접두사가 있는 키: 해당 테이블에 대한 메타데이터 (테이블과 같은 레벨)
-            - $ 없는 키: 실제 계산 데이터 테이블
+            - $ 없는 키: 실제 계산 데이터 테이블 (columns, rowHeaders, rows 구조)
+            - rows: 2차원 배열 형태 (각 행은 columns 순서와 일치하는 값들의 배열)
 
     Note:
         - **필수 전제조건**: initialize() → calc_geometry() → calc_load_case() 순서대로 실행
