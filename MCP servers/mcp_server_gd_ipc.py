@@ -1306,7 +1306,7 @@ def get_allresults_summary(session_id: str) -> dict:
     기어 설계의 모든 계산 결과를 요약하여 반환합니다.
 
     기하학적 계산과 하중 계산의 결과를 종합하여 핵심 정보를 JSON 형태로 제공합니다.
-    반환된 요약 정보는 LLM이 직접 읽고 사용자에게 표 형태로 표시할 수 있습니다.
+    반환된 요약 정보는 LLM이 직접 읽고 사용자에게 계산 결과에 대해 항상 표 형태로 표시해야 합니다.
 
     Args:
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
