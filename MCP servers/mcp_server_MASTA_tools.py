@@ -67,45 +67,32 @@ class MASTAIPC:
 
             # MASTA 초기화 코드 생성
             init_code = f"""
-import math
-import sys
-
-# 결과 메시지 수집을 위한 리스트
-_init_messages = []
-
 # MASTA 모듈 임포트 시도
-try:
-    import Utility
-    import mastapy
-    from mastapy import init
-    from mastapy.system_model import Design
-    _init_messages.append("✓ MASTA 모듈 임포트 성공")
-except ImportError as e:
-    _init_messages.append(f"✗ MASTA 모듈 임포트 실패: {{e}}")
-    _init_messages.append("  MASTA가 설치되어 있는지 확인하세요.")
-    raise
+import mastapy as mp
+import math
 
-# MASTA 초기화
-try:
-    init(r"{safe_path}")
-    _init_messages.append(f"✓ MASTA 초기화 성공: {safe_path}")
-except Exception as e:
-    _init_messages.append(f"✗ MASTA 초기화 실패: {{e}}")
-    raise
+mp.init(r'C:\Program Files\SMT\MASTA 14.1.1')
+print("✓ MASTA 초기화 완료")
 
 # 단위 환산 상수 정의
+
 MM = 1e-3
 RAD = math.pi/180
 RPM = 2*math.pi/60
-_init_messages.append("✓ 단위 환산 상수 정의 완료 (MM, RAD, RPM)")
+print("✓ 단위 환산 상수 정의 완료 (MM, RAD, RPM)")
 
-# 결과 출력
-for msg in _init_messages:
-    print(msg)
 """
 
             # 코드 실행
             result = self.python_repl.run(init_code)
+
+            # 실행 결과 확인 (오류 메시지가 포함되어 있는지 체크)
+            if result and any(keyword in result.lower() for keyword in ['error', 'exception', 'traceback', 'failed', '✗']):
+                error_msg = f"MASTA 초기화 중 오류 발생:\n{result}"
+                print(error_msg)
+                return False, error_msg
+
+            # 성공 시에만 initialized 플래그 설정
             self.is_initialized = True
 
             success_msg = f"MASTA IPC 초기화 완료\n{result if result else '(결과 메시지 없음)'}"
@@ -120,13 +107,22 @@ for msg in _init_messages:
             return False, error_msg
 
     def execute_code(self, code: str) -> str:
-        """Python 코드 실행"""
+        """Python 코드 실행
+
+        Returns:
+            str: 실행 결과 (성공 시 "Successfully executed!" 포함, 실패 시 "Failed to execute" 포함)
+        """
         if not self.is_initialized:
             raise RuntimeError("MASTA IPC가 초기화되지 않았습니다")
 
         try:
             result = self.python_repl.run(code)
-            return f"Successfully executed!\n\nStdout: {result}"
+
+            # 실행 결과에 오류가 포함되어 있는지 확인
+            if result and any(keyword in result.lower() for keyword in ['error', 'exception', 'traceback', 'failed']):
+                return f"Failed to execute. Error detected in output:\n{result}"
+
+            return f"Successfully executed!\n\nStdout: {result if result else '(no output)'}"
         except Exception as e:
             return f"Failed to execute. Error: {repr(e)}"
 
