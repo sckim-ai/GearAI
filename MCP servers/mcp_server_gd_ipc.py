@@ -20,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("GearDesign_IPC_agent")
 
 # GearDesign.exe 경로 설정
-gear_design_exe_path = r"C:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\GearDesign.exe"
+gear_design_exe_path = r"D:\SW\GearDesign\GearDesign\bin\Debug\net8.0-windows\GearDesign.exe"
 
 
 class GearDesignIPC:

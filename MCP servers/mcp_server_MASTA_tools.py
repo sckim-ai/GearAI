@@ -8,6 +8,7 @@ import asyncio
 import uuid
 import threading
 import time
+import subprocess
 from typing import Dict, Optional, Union, List
 import math
 
@@ -23,7 +24,113 @@ load_dotenv()
 
 mcp = FastMCP("MASTA_Tools")
 
+# MASTA 설정
 masta_path: str = r"C:\Program Files\SMT\MASTA 14.1.1"
+# MASTA Python API를 사용하는 경우 프로세스 경로 (선택사항)
+masta_exe_path: Optional[str] = None  # MASTA가 별도 실행 파일을 제공하는 경우 설정
+
+
+class MASTAIPC:
+    """MASTA와 프로세스 간 통신(IPC)을 담당하는 클래스
+
+    Note: MASTA는 Python API를 직접 제공하므로 subprocess 대신
+    PythonREPL을 사용하여 Python 코드를 직접 실행합니다.
+    향후 MASTA가 별도 IPC 프로세스를 지원하는 경우 이 클래스를 확장할 수 있습니다.
+    """
+
+    def __init__(self, masta_path: str, progress_callback=None):
+        """
+        Args:
+            masta_path: MASTA 설치 경로
+            progress_callback: 진행 상황 콜백 함수 (선택)
+                               함수 시그니처: callback(message: str, percentage: int)
+        """
+        self.masta_path = Path(masta_path)
+        self.python_repl = PythonREPL()
+        self.progress_callback = progress_callback
+        self.is_initialized = False
+
+    def start(self) -> bool:
+        """MASTA 환경 초기화"""
+        if not self.masta_path.exists():
+            print(f"오류: MASTA 설치 경로를 찾을 수 없습니다: {self.masta_path}")
+            return False
+
+        try:
+            # MASTA 경로를 안전하게 처리
+            safe_path = str(self.masta_path).replace('\\', '\\\\')
+
+            # MASTA 초기화 코드 생성
+            init_code = f"""
+import math
+import sys
+
+# MASTA 모듈 임포트 시도
+try:
+    import Utility
+    import mastapy
+    from mastapy import init
+    from mastapy.system_model import Design
+    print("MASTA 모듈 임포트 성공")
+except ImportError as e:
+    print(f"MASTA 모듈 임포트 실패: {{e}}")
+    print("MASTA가 설치되어 있는지 확인하세요.")
+    raise
+
+# MASTA 초기화
+try:
+    init(r"{safe_path}")
+    print(f"MASTA 초기화 성공: {safe_path}")
+except Exception as e:
+    print(f"MASTA 초기화 실패: {{e}}")
+    raise
+
+# 단위 환산 상수 정의
+MM = 1e-3
+RAD = math.pi/180
+RPM = 2*math.pi/60
+
+print("단위 환산 상수 정의 완료 (MM, RAD, RPM)")
+"""
+
+            # 코드 실행
+            result = self.python_repl.run(init_code)
+            self.is_initialized = True
+            print(f"MASTA IPC 초기화 완료\n{result}")
+            return True
+
+        except Exception as e:
+            print(f"MASTA 초기화 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def execute_code(self, code: str) -> str:
+        """Python 코드 실행"""
+        if not self.is_initialized:
+            raise RuntimeError("MASTA IPC가 초기화되지 않았습니다")
+
+        try:
+            result = self.python_repl.run(code)
+            return f"Successfully executed!\n\nStdout: {result}"
+        except Exception as e:
+            return f"Failed to execute. Error: {repr(e)}"
+
+    def stop(self):
+        """리소스 정리 (필요시)"""
+        if self.is_initialized:
+            print("MASTA IPC 세션 종료")
+            # 필요한 정리 작업 수행
+            self.is_initialized = False
+
+    def __enter__(self):
+        """컨텍스트 매니저 진입"""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """컨텍스트 매니저 종료"""
+        self.stop()
 
 # 세션 데이터 클래스
 class SessionData:
@@ -32,7 +139,7 @@ class SessionData:
         self.is_initialized = False
         self.design_name = "my_design"
         self.assembly_name = "assembly"
-        self.python_repl = PythonREPL()
+        self.ipc_client: Optional[MASTAIPC] = None  # IPC 클라이언트 통합
         self.created_at = datetime.datetime.now()
         self.last_accessed = datetime.datetime.now()
 
@@ -45,6 +152,7 @@ class SessionData:
         self.output_dir = os.path.join(os.path.dirname(__file__), "outputs", session_id)
         self.images_dir = os.path.join(self.output_dir, "images")
         self.reports_dir = os.path.join(self.output_dir, "reports")
+        self.modelings_dir = os.path.join(self.output_dir, "modelings")
         self.files = []
 
     def update_access_time(self):
@@ -55,6 +163,7 @@ class SessionData:
         try:
             os.makedirs(self.images_dir, exist_ok=True)
             os.makedirs(self.reports_dir, exist_ok=True)
+            os.makedirs(self.modelings_dir, exist_ok=True)
             return True
         except Exception as e:
             print(f"출력 디렉토리 생성 실패: {str(e)}")
@@ -78,11 +187,22 @@ class SessionData:
         except Exception as e:
             print(f"파일 정리 중 오류: {str(e)}")
 
+    def cleanup_ipc(self):
+        """IPC 클라이언트 정리"""
+        if self.ipc_client:
+            try:
+                self.ipc_client.stop()
+                print(f"세션 {self.session_id} IPC 클라이언트 종료됨")
+            except Exception as e:
+                print(f"IPC 클라이언트 종료 중 오류: {str(e)}")
+
     def execute_python_code(self, code: str) -> str:
-        """Python 코드 실행"""
+        """Python 코드 실행 (IPC 클라이언트를 통해)"""
+        if not self.ipc_client:
+            return "Failed to execute. Error: IPC client not initialized"
+
         try:
-            result = self.python_repl.run(code)
-            return f"Successfully executed!\n\nStdout: {result}"
+            return self.ipc_client.execute_code(code)
         except Exception as e:
             return f"Failed to execute. Error: {repr(e)}"
 
@@ -118,7 +238,13 @@ def cleanup_expired_sessions():
             expired_sessions.append((session_id, session))
 
     for session_id, session in expired_sessions:
+        # IPC 클라이언트 정리
+        session.cleanup_ipc()
+
+        # 파일들 정리
         session.cleanup_files()
+
+        # 세션 삭제
         del session_manager[session_id]
         print(f"세션 만료로 정리됨: {session_id}")
 
@@ -144,81 +270,86 @@ def masta_initialize() -> dict:
     MASTA 환경을 초기화합니다.
 
     이 함수는 새로운 세션을 생성하고 MASTA Python API를 초기화합니다.
-
-    Args:
-        masta_path (str): MASTA 설치 경로
+    초기화가 완료되면 반환된 session_id를 사용하여 다른 MASTA 관련 함수들을 호출할 수 있습니다.
 
     Returns:
         dict: 초기화 결과
             - success: 성공 여부 (bool)
             - session_id: 생성된 세션 ID (str)
             - message: 결과 메시지 (str)
-            - execution_result: Python 코드 실행 결과 (str)
+            - design_name: Design 객체 이름 (str)
+            - assembly_name: Assembly 객체 이름 (str)
+            - output_directory: 출력 디렉토리 경로 (str)
+
+    Note:
+        - 매번 새로운 세션을 생성하므로 독립적인 작업 공간을 제공합니다
+        - 반환된 session_id를 다른 모든 함수 호출에 사용해야 합니다
+        - 이 함수는 MASTA 작업을 시작하는 첫 번째 함수입니다
     """
+    # 새로운 세션 자동 생성
     new_session_id = str(uuid.uuid4())
 
     try:
         session = create_new_session(new_session_id)
-        session.create_output_directories()
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": new_session_id
+        }
 
-        # 경로를 안전하게 처리
-        safe_path = masta_path.replace('\\', '\\\\')
+    try:
+        # 세션별 IPC 클라이언트 생성 및 시작
+        session.ipc_client = MASTAIPC(masta_path)
 
-        # MASTA 초기화 코드 생성
-        init_code = f"""
-# MASTA 초기화
-import math
-import sys
+        if not session.ipc_client.start():
+            return {
+                "success": False,
+                "error": "MASTA IPC 클라이언트 시작 실패",
+                "session_id": new_session_id
+            }
 
-# MASTA 모듈 임포트 시도
-try:
-    import Utility
-    import mastapy
-    from mastapy import init
-    from mastapy.system_model import Design    
-    print("MASTA 모듈 임포트 성공")
-except ImportError as e:
-    print(f"MASTA 모듈 임포트 실패: {{e}}")
-    print("MASTA가 설치되어 있는지 확인하세요.")
+        # 세션별 출력 디렉토리 생성
+        if not session.create_output_directories():
+            return {
+                "success": False,
+                "error": "출력 디렉토리 생성 실패",
+                "session_id": new_session_id
+            }
 
-# MASTA 초기화
-try:
-    init(r"{safe_path}")
-    print(f"MASTA 초기화 성공: {safe_path}")
-except Exception as e:
-    print(f"MASTA 초기화 실패: {{e}}")
-
+        # Design 및 Assembly 객체 생성 코드
+        design_code = f"""
 # 새로운 Design 작성
 {session.design_name} = Design()
 {session.assembly_name} = {session.design_name}.root_assembly
 
-# 단위 환산 상수 정의
-MM = 1e-3
-RAD = math.pi/180
-RPM = 2*math.pi/60
-
 print(f"Design 객체 생성 완료: {session.design_name}")
 print(f"Assembly 객체 생성 완료: {session.assembly_name}")
-print("단위 환산 상수 정의 완료 (MM, RAD, RPM)")
 """
 
         # 코드 실행
-        execution_result = session.execute_python_code(init_code)
+        execution_result = session.execute_python_code(design_code)
         session.is_initialized = True
 
         return {
             "success": True,
             "session_id": new_session_id,
-            "message": f"MASTA 초기화 완료. 세션 ID: {new_session_id[:8]}",
+            "message": f"새 세션({new_session_id[:8]})이 생성되고 초기화되었습니다",
             "execution_result": execution_result,
             "design_name": session.design_name,
-            "assembly_name": session.assembly_name
+            "assembly_name": session.assembly_name,
+            "output_directory": session.output_dir,
+            "status": "initialized"
         }
 
     except Exception as e:
+        # 오류 발생 시 IPC 클라이언트 정리
+        if session.ipc_client:
+            session.ipc_client.stop()
+
         return {
             "success": False,
-            "error": f"초기화 중 오류: {str(e)}",
+            "error": f"초기화 중 오류 발생: {str(e)}",
             "session_id": new_session_id
         }
 
@@ -237,8 +368,8 @@ def create_shaft(
     축을 생성하고 배치합니다.
 
     Args:
-        session_id (str): 세션 ID
-        shaft_name (str): 축 이름
+        session_id (str): 세션 ID (masta_initialize()로 생성된 ID 필수)
+        shaft_name (str): 축 이름 (Python 변수명 규칙 준수)
         length (float): 축 길이 (mm)
         outer_diameter (float): 축 외경 (mm)
         bore_diameter (float): 축 내경 (mm, 기본값: 0.0)
@@ -248,16 +379,34 @@ def create_shaft(
 
     Returns:
         dict: 축 생성 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - shaft_name: 생성된 축 이름 (str)
+            - shaft_info: 축 정보 (dict)
+            - execution_result: 실행 결과 (str)
+            - total_shafts: 세션 내 전체 축 개수 (int)
+
+    Note:
+        - 사전에 masta_initialize()가 완료되어야 합니다
+        - shaft_name은 유효한 Python 변수명이어야 합니다
     """
     try:
         session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
 
-        if not session.is_initialized:
-            return {
-                "success": False,
-                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
-            }
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+            "session_id": session_id
+        }
 
+    try:
         # 축 생성 코드
         shaft_code = f"""
 # 축 생성: {shaft_name}
@@ -282,6 +431,14 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
         # 코드 실행
         execution_result = session.execute_python_code(shaft_code)
 
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result:
+            return {
+                "success": False,
+                "error": f"축 생성 실패: {execution_result}",
+                "session_id": session_id
+            }
+
         # 세션에 축 정보 저장
         shaft_info = {
             "name": shaft_name,
@@ -301,12 +458,6 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
             "total_shafts": len(session.shafts)
         }
 
-    except ValueError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "session_id": session_id
-        }
     except Exception as e:
         return {
             "success": False,
@@ -353,13 +504,21 @@ def create_gear_pair(
     """
     try:
         session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
 
-        if not session.is_initialized:
-            return {
-                "success": False,
-                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
-            }
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+            "session_id": session_id
+        }
 
+    try:
         # 기어 쌍 생성 코드
         gear_code = f"""
 # 기어 쌍 생성: {gear_pair_name}
@@ -404,6 +563,14 @@ print(f"  - 기어비: {wheel_teeth/pinion_teeth:.2f}")
 
         # 코드 실행
         execution_result = session.execute_python_code(gear_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result:
+            return {
+                "success": False,
+                "error": f"기어 쌍 생성 실패: {execution_result}",
+                "session_id": session_id
+            }
 
         # 세션에 기어 정보 저장
         gear_info = {
@@ -751,19 +918,76 @@ def execute_custom_code(session_id: str, code: str) -> dict:
 # 세션 관리 툴들
 @mcp.tool()
 def get_active_sessions() -> dict:
-    """현재 활성 세션들의 정보를 반환합니다."""
+    """
+    현재 활성 세션들의 정보를 반환합니다.
+
+    Returns:
+        dict: 세션 정보
+            - active_sessions: 활성 세션 수 (int)
+            - sessions: 각 세션의 상세 정보 리스트 (list)
+    """
     return get_session_info()
 
 @mcp.tool()
-def cleanup_session(session_id: str) -> dict:
-    """특정 세션을 정리합니다."""
-    if session_id in session_manager:
-        session = session_manager[session_id]
-        session.cleanup_files()
-        del session_manager[session_id]
+def get_session_files(session_id: str) -> dict:
+    """
+    세션에서 생성된 파일 목록을 반환합니다.
+
+    Args:
+        session_id (str): 세션 ID
+
+    Returns:
+        dict: 파일 목록 정보
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - files: 파일 정보 리스트 (list)
+            - file_count: 파일 개수 (int)
+    """
+    try:
+        session = get_session(session_id)
         return {
             "success": True,
-            "message": f"세션 {session_id}가 정리되었습니다"
+            "session_id": session_id,
+            "files": session.files,
+            "file_count": len(session.files)
+        }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+@mcp.tool()
+def cleanup_session(session_id: str) -> dict:
+    """
+    특정 세션을 정리합니다.
+
+    세션과 함께 생성된 모든 파일들과 IPC 클라이언트도 정리됩니다.
+
+    Args:
+        session_id (str): 정리할 세션 ID
+
+    Returns:
+        dict: 정리 결과
+            - success: 성공 여부 (bool)
+            - message: 결과 메시지 (str)
+    """
+    if session_id in session_manager:
+        session = session_manager[session_id]
+
+        # IPC 클라이언트 정리
+        session.cleanup_ipc()
+
+        # 파일들 정리
+        session.cleanup_files()
+
+        # 세션 삭제
+        del session_manager[session_id]
+
+        return {
+            "success": True,
+            "message": f"세션 {session_id}와 관련 파일들이 정리되었습니다"
         }
     else:
         return {
