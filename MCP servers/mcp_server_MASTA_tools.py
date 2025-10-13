@@ -50,11 +50,16 @@ class MASTAIPC:
         self.progress_callback = progress_callback
         self.is_initialized = False
 
-    def start(self) -> bool:
-        """MASTA 환경 초기화"""
+    def start(self) -> tuple[bool, str]:
+        """MASTA 환경 초기화
+
+        Returns:
+            tuple[bool, str]: (성공 여부, 실행 결과 메시지)
+        """
         if not self.masta_path.exists():
-            print(f"오류: MASTA 설치 경로를 찾을 수 없습니다: {self.masta_path}")
-            return False
+            error_msg = f"오류: MASTA 설치 경로를 찾을 수 없습니다: {self.masta_path}"
+            print(error_msg)
+            return False, error_msg
 
         try:
             # MASTA 경로를 안전하게 처리
@@ -65,45 +70,54 @@ class MASTAIPC:
 import math
 import sys
 
+# 결과 메시지 수집을 위한 리스트
+_init_messages = []
+
 # MASTA 모듈 임포트 시도
 try:
     import Utility
     import mastapy
     from mastapy import init
     from mastapy.system_model import Design
-    print("MASTA 모듈 임포트 성공")
+    _init_messages.append("✓ MASTA 모듈 임포트 성공")
 except ImportError as e:
-    print(f"MASTA 모듈 임포트 실패: {{e}}")
-    print("MASTA가 설치되어 있는지 확인하세요.")
+    _init_messages.append(f"✗ MASTA 모듈 임포트 실패: {{e}}")
+    _init_messages.append("  MASTA가 설치되어 있는지 확인하세요.")
     raise
 
 # MASTA 초기화
 try:
     init(r"{safe_path}")
-    print(f"MASTA 초기화 성공: {safe_path}")
+    _init_messages.append(f"✓ MASTA 초기화 성공: {safe_path}")
 except Exception as e:
-    print(f"MASTA 초기화 실패: {{e}}")
+    _init_messages.append(f"✗ MASTA 초기화 실패: {{e}}")
     raise
 
 # 단위 환산 상수 정의
 MM = 1e-3
 RAD = math.pi/180
 RPM = 2*math.pi/60
+_init_messages.append("✓ 단위 환산 상수 정의 완료 (MM, RAD, RPM)")
 
-print("단위 환산 상수 정의 완료 (MM, RAD, RPM)")
+# 결과 출력
+for msg in _init_messages:
+    print(msg)
 """
 
             # 코드 실행
             result = self.python_repl.run(init_code)
             self.is_initialized = True
-            print(f"MASTA IPC 초기화 완료\n{result}")
-            return True
+
+            success_msg = f"MASTA IPC 초기화 완료\n{result if result else '(결과 메시지 없음)'}"
+            print(success_msg)
+            return True, result if result else "초기화 완료"
 
         except Exception as e:
-            print(f"MASTA 초기화 실패: {e}")
+            error_msg = f"MASTA 초기화 실패: {e}"
+            print(error_msg)
             import traceback
             traceback.print_exc()
-            return False
+            return False, error_msg
 
     def execute_code(self, code: str) -> str:
         """Python 코드 실행"""
@@ -302,10 +316,11 @@ def masta_initialize() -> dict:
         # 세션별 IPC 클라이언트 생성 및 시작
         session.ipc_client = MASTAIPC(masta_path)
 
-        if not session.ipc_client.start():
+        start_success, start_message = session.ipc_client.start()
+        if not start_success:
             return {
                 "success": False,
-                "error": "MASTA IPC 클라이언트 시작 실패",
+                "error": f"MASTA IPC 클라이언트 시작 실패: {start_message}",
                 "session_id": new_session_id
             }
 
@@ -331,11 +346,20 @@ print(f"Assembly 객체 생성 완료: {session.assembly_name}")
         execution_result = session.execute_python_code(design_code)
         session.is_initialized = True
 
+        # 초기화 메시지 결합
+        full_init_message = f"""
+=== MASTA 초기화 결과 ===
+{start_message}
+
+=== Design 객체 생성 결과 ===
+{execution_result}
+"""
+
         return {
             "success": True,
             "session_id": new_session_id,
             "message": f"새 세션({new_session_id[:8]})이 생성되고 초기화되었습니다",
-            "execution_result": execution_result,
+            "execution_result": full_init_message.strip(),
             "design_name": session.design_name,
             "assembly_name": session.assembly_name,
             "output_directory": session.output_dir,
