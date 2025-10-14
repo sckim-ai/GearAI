@@ -1353,22 +1353,10 @@ def save_masta_file(session_id: str, file_name: str = None) -> dict:
         save_code = f"""
 # MASTA 파일 저장
 try:
-    # Design 객체의 save 메서드 시도
-    if hasattr({session.design_name}, 'save'):
-        {session.design_name}.save(r'{safe_file_path}')
-        print(f"MASTA 파일 저장 완료 (save 메서드): {file_path}")
-    elif hasattr({session.design_name}, 'save_as'):
-        {session.design_name}.save_as(r'{safe_file_path}')
-        print(f"MASTA 파일 저장 완료 (save_as 메서드): {file_path}")
-    elif hasattr({session.design_name}, 'save_to'):
-        {session.design_name}.save_to(r'{safe_file_path}')
-        print(f"MASTA 파일 저장 완료 (save_to 메서드): {file_path}")
-    else:
-        # 사용 가능한 저장 관련 메서드 확인
-        save_methods = [m for m in dir({session.design_name}) if 'save' in m.lower()]
-        print(f"오류: 저장 메서드를 찾을 수 없습니다")
-        print(f"사용 가능한 save 관련 메서드: {{save_methods}}")
-        raise AttributeError(f"Design 객체에 저장 메서드가 없습니다. 가능한 메서드: {{save_methods}}")
+    # Design.save(file_name: str, save_results: bool) -> Status
+    status = {session.design_name}.save(r'{safe_file_path}', False)
+    print(f"MASTA 파일 저장 완료: {file_path}")
+    print(f"저장 상태: {{status}}")
 except Exception as e:
     print(f"MASTA 파일 저장 실패: {{e}}")
     import traceback
