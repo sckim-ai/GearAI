@@ -11,6 +11,7 @@ import time
 import subprocess
 from typing import Dict, Optional, Union, List
 import math
+import base64
 
 # 현재 디렉토리를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent))
@@ -1909,6 +1910,189 @@ except Exception as e:
         return {
             "success": False,
             "error": f"컴포넌트 전체 삭제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def show_snapshot(image_path: str) -> dict:
+    """
+    이미지 파일을 읽어서 base64로 인코딩하여 반환합니다.
+    Claude Desktop에서 이미지를 표시할 수 있도록 합니다.
+
+    Args:
+        image_path (str): 이미지 파일 경로 (절대 경로)
+
+    Returns:
+        dict: 이미지 정보
+            - success: 성공 여부 (bool)
+            - image_path: 이미지 파일 경로 (str)
+            - image_base64: base64 인코딩된 이미지 데이터 (str)
+            - image_format: 이미지 포맷 (str, 예: "png", "jpg")
+            - file_size: 파일 크기 (bytes)
+            - message: 결과 메시지 (str)
+
+    Note:
+        - 반환된 image_base64를 사용하여 HTML img 태그로 표시 가능:
+          <img src="data:image/png;base64,{image_base64}">
+        - Claude Desktop의 artifact에서 이미지를 표시할 수 있습니다
+    """
+    try:
+        # 파일 존재 확인
+        if not os.path.exists(image_path):
+            return {
+                "success": False,
+                "error": f"이미지 파일을 찾을 수 없습니다: {image_path}"
+            }
+
+        # 파일 확장자 확인
+        file_ext = os.path.splitext(image_path)[1].lower()
+        image_format_map = {
+            '.png': 'png',
+            '.jpg': 'jpeg',
+            '.jpeg': 'jpeg',
+            '.gif': 'gif',
+            '.bmp': 'bmp',
+            '.webp': 'webp'
+        }
+
+        image_format = image_format_map.get(file_ext, 'png')
+
+        # 이미지 파일 읽기 및 base64 인코딩
+        with open(image_path, 'rb') as image_file:
+            image_data = image_file.read()
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            file_size = len(image_data)
+
+        return {
+            "success": True,
+            "image_path": image_path,
+            "image_base64": image_base64,
+            "image_format": image_format,
+            "file_size": file_size,
+            "message": f"이미지를 성공적으로 로드했습니다 ({file_size:,} bytes)",
+            "html_tag": f'<img src="data:image/{image_format};base64,{image_base64}" alt="MASTA Model Snapshot" style="max-width: 100%; height: auto;">'
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"이미지 로드 중 오류: {str(e)}",
+            "image_path": image_path
+        }
+
+
+@mcp.tool()
+def get_latest_snapshot(session_id: str) -> dict:
+    """
+    세션의 가장 최근 스냅샷 이미지를 가져옵니다.
+
+    Args:
+        session_id (str): 세션 ID
+
+    Returns:
+        dict: 최신 스냅샷 정보
+            - success: 성공 여부 (bool)
+            - image_path: 최신 이미지 파일 경로 (str)
+            - image_base64: base64 인코딩된 이미지 데이터 (str)
+            - image_format: 이미지 포맷 (str)
+            - created_at: 생성 시간 (str)
+            - message: 결과 메시지 (str)
+    """
+    try:
+        session = get_session(session_id)
+
+        # 이미지 파일만 필터링
+        image_files = [f for f in session.files if f.get("type") == "image"]
+
+        if not image_files:
+            return {
+                "success": False,
+                "error": "저장된 스냅샷이 없습니다.",
+                "session_id": session_id
+            }
+
+        # 가장 최근 파일 찾기
+        latest_file = max(image_files, key=lambda x: x.get("created_at", ""))
+        image_path = latest_file["path"]
+
+        # 이미지 로드
+        snapshot_result = show_snapshot(image_path)
+
+        if snapshot_result["success"]:
+            snapshot_result["created_at"] = latest_file.get("created_at")
+            snapshot_result["session_id"] = session_id
+
+        return snapshot_result
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"최신 스냅샷 조회 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def list_snapshots(session_id: str) -> dict:
+    """
+    세션의 모든 스냅샷 목록을 반환합니다.
+
+    Args:
+        session_id (str): 세션 ID
+
+    Returns:
+        dict: 스냅샷 목록
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - snapshots: 스냅샷 목록 (list)
+            - total_count: 전체 스냅샷 개수 (int)
+    """
+    try:
+        session = get_session(session_id)
+
+        # 이미지 파일만 필터링
+        image_files = [f for f in session.files if f.get("type") == "image"]
+
+        # 파일명에서 작업 정보 추출
+        snapshots = []
+        for img_file in image_files:
+            file_path = img_file["path"]
+            file_name = os.path.basename(file_path)
+
+            snapshots.append({
+                "path": file_path,
+                "name": file_name,
+                "created_at": img_file.get("created_at"),
+                "size": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            })
+
+        # 시간순 정렬 (최신순)
+        snapshots.sort(key=lambda x: x["created_at"], reverse=True)
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "snapshots": snapshots,
+            "total_count": len(snapshots)
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"스냅샷 목록 조회 중 오류: {str(e)}",
             "session_id": session_id
         }
 
