@@ -1271,6 +1271,240 @@ print(f"  - Designation: {bearing_designation}")
             "session_id": session_id
         }
 
+
+@mcp.tool()
+def update_bearing_specs(
+    session_id: str,
+    bearing_name: str,
+    designation: str = None
+) -> dict:
+    """
+    베어링의 제원(형번)을 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        bearing_name (str): 베어링 이름
+        designation (str): 새로운 베어링 형번 (예: "6204", None이면 변경하지 않음)
+
+    Returns:
+        dict: 변경 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - bearing_name: 베어링 이름 (str)
+            - updated_specs: 변경된 제원 정보 (dict)
+            - execution_result: 실행 결과 (str)
+            - snapshot: 스냅샷 저장 결과 (dict)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 베어링 정보 찾기
+        bearing_info = None
+        for bearing in session.bearings:
+            if bearing.get("name") == bearing_name:
+                bearing_info = bearing
+                break
+
+        if not bearing_info:
+            return {
+                "success": False,
+                "error": f"베어링 '{bearing_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        bearing_variable = bearing_info.get("variable")
+
+        # 변경할 내용이 없으면 오류 반환
+        if designation is None:
+            return {
+                "success": False,
+                "error": "변경할 제원을 하나 이상 지정해야 합니다.",
+                "session_id": session_id
+            }
+
+        # 베어링 제원 변경 코드 생성
+        update_code = f"""
+# 베어링 제원 변경: {bearing_name}
+try:
+    if '{bearing_variable}' in locals() or '{bearing_variable}' in globals():
+        bearing = {bearing_variable}
+
+        # 베어링 형번 변경
+        bearing_catalog = BearingCatalog()
+        new_designation = "{designation}"
+        new_bearing_design = bearing_catalog.get_bearing_design(new_designation)
+        bearing.bearing_design = new_bearing_design
+
+        print(f"베어링 '{{bearing.editable_name}}' 제원 변경 완료")
+        print(f"  - 새로운 형번: {designation}")
+    else:
+        print(f"오류: 베어링 '{bearing_variable}'를 찾을 수 없습니다")
+except Exception as e:
+    print(f"베어링 제원 변경 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(update_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"베어링 제원 변경 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 세션 추적 목록 업데이트
+        if bearing_info:
+            bearing_info["designation"] = designation
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"update_bearing_{bearing_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "bearing_name": bearing_name,
+            "updated_specs": {
+                "designation": designation
+            },
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"베어링 제원 변경 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def move_bearing(
+    session_id: str,
+    bearing_name: str,
+    position: float
+) -> dict:
+    """
+    베어링의 축 상 위치를 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        bearing_name (str): 베어링 이름
+        position (float): 새로운 축 상 위치 (mm)
+
+    Returns:
+        dict: 변경 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - bearing_name: 베어링 이름 (str)
+            - new_position: 새로운 위치 (float)
+            - execution_result: 실행 결과 (str)
+            - snapshot: 스냅샷 저장 결과 (dict)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 베어링 정보 찾기
+        bearing_info = None
+        for bearing in session.bearings:
+            if bearing.get("name") == bearing_name:
+                bearing_info = bearing
+                break
+
+        if not bearing_info:
+            return {
+                "success": False,
+                "error": f"베어링 '{bearing_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        bearing_variable = bearing_info.get("variable")
+
+        # 베어링 위치 변경 코드 생성
+        move_code = f"""
+# 베어링 위치 변경: {bearing_name}
+try:
+    if '{bearing_variable}' in locals() or '{bearing_variable}' in globals():
+        bearing = {bearing_variable}
+
+        # 축 상 위치 변경
+        bearing.axial_position = {position}*MM
+
+        print(f"베어링 '{{bearing.editable_name}}' 위치 변경 완료")
+        print(f"  - 새로운 위치: {position} mm")
+    else:
+        print(f"오류: 베어링 '{bearing_variable}'를 찾을 수 없습니다")
+except Exception as e:
+    print(f"베어링 위치 변경 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(move_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"베어링 위치 변경 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 세션 추적 목록 업데이트
+        if bearing_info:
+            bearing_info["position"] = position
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"move_bearing_{bearing_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "bearing_name": bearing_name,
+            "new_position": position,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"베어링 위치 변경 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
 @mcp.tool()
 def show_model(session_id: str, save_image: bool = True) -> dict:
     """
