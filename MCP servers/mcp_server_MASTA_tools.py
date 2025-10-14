@@ -1246,6 +1246,224 @@ def find_bearing_by_diameter(inner_diameter: float) -> dict:
 
 
 @mcp.tool()
+def delete_component(
+    session_id: str,
+    component_name: str
+) -> dict:
+    """
+    지정된 컴포넌트(축, 기어, 베어링 등)를 삭제합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        component_name (str): 삭제할 컴포넌트 변수 이름
+
+    Returns:
+        dict: 삭제 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - component_name: 삭제된 컴포넌트 이름 (str)
+            - execution_result: 실행 결과 (str)
+
+    Note:
+        - 삭제할 컴포넌트는 반드시 존재해야 합니다
+        - 삭제 후 해당 컴포넌트 변수는 사용할 수 없습니다
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 컴포넌트 삭제 코드
+        delete_code = f"""
+# 컴포넌트 삭제: {component_name}
+try:
+    # 컴포넌트가 존재하는지 확인
+    if '{component_name}' not in locals() and '{component_name}' not in globals():
+        print(f"오류: 컴포넌트 '{component_name}'를 찾을 수 없습니다")
+    else:
+        # Design에서 컴포넌트 삭제
+        component_to_delete = {component_name}
+
+        # MASTA API의 delete 메서드 호출
+        if hasattr(component_to_delete, 'delete'):
+            component_to_delete.delete()
+            print(f"컴포넌트 '{component_name}' 삭제 완료 (delete 메서드 사용)")
+        elif hasattr({session.design_name}, 'delete_entity'):
+            {session.design_name}.delete_entity(component_to_delete)
+            print(f"컴포넌트 '{component_name}' 삭제 완료 (delete_entity 사용)")
+        elif hasattr({session.assembly_name}, 'remove_component'):
+            {session.assembly_name}.remove_component(component_to_delete)
+            print(f"컴포넌트 '{component_name}' 삭제 완료 (remove_component 사용)")
+        else:
+            print(f"경고: 적절한 삭제 메서드를 찾을 수 없습니다")
+
+        # 변수 삭제
+        del {component_name}
+        print(f"변수 '{component_name}' 삭제 완료")
+
+except NameError:
+    print(f"오류: 컴포넌트 '{component_name}'가 정의되지 않았습니다")
+except Exception as e:
+    print(f"삭제 중 오류 발생: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(delete_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"컴포넌트 삭제 실패: {execution_result}",
+                "session_id": session_id,
+                "component_name": component_name
+            }
+
+        # 세션 추적 목록에서도 제거
+        session.shafts = [s for s in session.shafts if s.get("name") != component_name]
+        session.gears = [g for g in session.gears if g.get("name") != component_name]
+        session.bearings = [b for b in session.bearings if b.get("name") != component_name]
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "component_name": component_name,
+            "execution_result": execution_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"컴포넌트 삭제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def clear_all_components(session_id: str) -> dict:
+    """
+    세션의 모든 컴포넌트를 삭제하고 깨끗한 상태로 초기화합니다.
+
+    Args:
+        session_id (str): 세션 ID
+
+    Returns:
+        dict: 초기화 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - deleted_components: 삭제된 컴포넌트 수 (dict)
+            - execution_result: 실행 결과 (str)
+
+    Note:
+        - Design과 Assembly 객체는 유지되고 내부 컴포넌트만 삭제됩니다
+        - 이 작업은 되돌릴 수 없습니다
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        deleted_count = {
+            "shafts": len(session.shafts),
+            "gears": len(session.gears),
+            "bearings": len(session.bearings)
+        }
+
+        # 모든 컴포넌트 삭제 코드
+        clear_code = f"""
+# 모든 컴포넌트 삭제
+deleted_items = []
+
+try:
+    # Assembly의 모든 컴포넌트 가져오기
+    if hasattr({session.assembly_name}, 'components'):
+        components = list({session.assembly_name}.components)
+        print(f"발견된 컴포넌트 수: {{len(components)}}")
+
+        for component in components:
+            try:
+                component_name = component.name if hasattr(component, 'name') else str(component)
+
+                # 컴포넌트 삭제 시도
+                if hasattr(component, 'delete'):
+                    component.delete()
+                    deleted_items.append(component_name)
+                elif hasattr({session.assembly_name}, 'remove_component'):
+                    {session.assembly_name}.remove_component(component)
+                    deleted_items.append(component_name)
+
+            except Exception as e:
+                print(f"컴포넌트 삭제 실패 ({{component_name}}): {{e}}")
+
+    # 추가로 특정 컴포넌트 타입별로 삭제 시도
+    if hasattr({session.assembly_name}, 'shafts'):
+        shafts = list({session.assembly_name}.shafts)
+        for shaft in shafts:
+            try:
+                if hasattr(shaft, 'delete'):
+                    shaft.delete()
+                    deleted_items.append(f"shaft_{{shaft.name if hasattr(shaft, 'name') else 'unknown'}}")
+            except:
+                pass
+
+    print(f"\\n총 {{len(deleted_items)}}개 컴포넌트 삭제 완료")
+    print("삭제된 컴포넌트:", deleted_items)
+
+except Exception as e:
+    print(f"전체 삭제 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(clear_code)
+
+        # 세션 추적 목록 초기화
+        session.shafts.clear()
+        session.gears.clear()
+        session.bearings.clear()
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "deleted_components": deleted_count,
+            "execution_result": execution_result,
+            "message": f"총 {sum(deleted_count.values())}개 컴포넌트 삭제 완료"
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"컴포넌트 전체 삭제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
 def cleanup_session(session_id: str) -> dict:
     """
     특정 세션을 정리합니다.
