@@ -951,7 +951,8 @@ def update_gear_specs(
     pinion_teeth: int = None,
     wheel_teeth: int = None,
     pinion_face_width: float = None,
-    wheel_face_width: float = None
+    wheel_face_width: float = None,
+    pinion_profile_shift: float = None
 ) -> dict:
     """
     기어 쌍의 제원을 변경합니다.
@@ -967,6 +968,7 @@ def update_gear_specs(
         wheel_teeth (int): 휠 잇수 (None이면 변경하지 않음)
         pinion_face_width (float): 피니언 치폭 (mm, None이면 변경하지 않음)
         wheel_face_width (float): 휠 치폭 (mm, None이면 변경하지 않음)
+        pinion_profile_shift (float): 피니언 전위계수 (nominal, None이면 변경하지 않음)
 
     Returns:
         dict: 변경 결과
@@ -1008,6 +1010,8 @@ try:
             update_code += f"\n        pinion.face_width = {pinion_face_width} * MM"
         if wheel_face_width is not None:
             update_code += f"\n        wheel.face_width = {wheel_face_width} * MM"
+        if pinion_profile_shift is not None:
+            update_code += f"\n        pinion.nominal_profile_shift_coefficient = {pinion_profile_shift}"
 
         update_code += f"""
 
@@ -1020,6 +1024,7 @@ try:
         {"print(f'  - 휠 잇수: " + str(wheel_teeth) + "')" if wheel_teeth else ""}
         {"print(f'  - 피니언 치폭: " + str(pinion_face_width) + " mm')" if pinion_face_width else ""}
         {"print(f'  - 휠 치폭: " + str(wheel_face_width) + " mm')" if wheel_face_width else ""}
+        {"print(f'  - 피니언 전위계수: " + str(pinion_profile_shift) + "')" if pinion_profile_shift else ""}
     else:
         print(f"오류: 기어 쌍 '{gear_pair_name}'를 찾을 수 없습니다")
 except Exception as e:
@@ -1049,6 +1054,8 @@ except Exception as e:
                     gear_info["pinion_face_width"] = pinion_face_width
                 if wheel_face_width is not None:
                     gear_info["wheel_face_width"] = wheel_face_width
+                if pinion_profile_shift is not None:
+                    gear_info["pinion_profile_shift"] = pinion_profile_shift
                 break
 
         return {
@@ -1063,7 +1070,8 @@ except Exception as e:
                 "pinion_teeth": pinion_teeth,
                 "wheel_teeth": wheel_teeth,
                 "pinion_face_width": pinion_face_width,
-                "wheel_face_width": wheel_face_width
+                "wheel_face_width": wheel_face_width,
+                "pinion_profile_shift": pinion_profile_shift
             },
             "execution_result": execution_result
         }
@@ -1903,7 +1911,8 @@ if __name__ == "__main__":
         pinion_teeth=22,
         wheel_teeth=44,
         pinion_face_width=25.0,
-        wheel_face_width=25.0
+        wheel_face_width=25.0,
+        pinion_profile_shift=0.3
     )
     print(f"✓ 기어 제원 변경 완료")
     print(f"결과: {update_gear_result}")
