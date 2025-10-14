@@ -2144,11 +2144,11 @@ if __name__ == "__main__":
     print(f"→ 최종 컴포넌트 수: {final_status['component_count']}")
     print(f"결과: {final_status}")
 
-    # 15. 세션 정리
-    print("\n[5-2] 세션 정리")
-    cleanup_result = cleanup_session(session_id)
-    print(f"✓ 세션 정리 완료: {cleanup_result['success']}")
-    print(f"결과: {cleanup_result}")
+    # # 15. 세션 정리
+    # print("\n[5-2] 세션 정리")
+    # cleanup_result = cleanup_session(session_id)
+    # print(f"✓ 세션 정리 완료: {cleanup_result['success']}")
+    # print(f"결과: {cleanup_result}")
 
     print("\n" + "=" * 80)
     print("전체 테스트 완료!")

@@ -1950,34 +1950,34 @@ cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
 cleanup_thread.start()
 
 if __name__ == "__main__":
-    # print("Starting MCP server (IPC mode)...")
-    # print(f"GearDesign.exe 경로: {gear_design_exe_path}")
-    # print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
-    # print("백그라운드 세션 정리 스레드 시작됨")
+    print("Starting MCP server (IPC mode)...")
+    print(f"GearDesign.exe 경로: {gear_design_exe_path}")
+    print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
+    print("백그라운드 세션 정리 스레드 시작됨")
 
-    # # 진행 상황 콜백 함수 정의
-    # def on_progress(message, percentage):
-    #     print(f"  📊 진행: [{percentage:3d}%] {message}")
+    # 진행 상황 콜백 함수 정의
+    def on_progress(message, percentage):
+        print(f"  📊 진행: [{percentage:3d}%] {message}")
 
-    # result = initialize()
+    result = initialize()
 
-    # # 진행 상황 콜백 등록
-    # if result.get("success"):
-    #     session = get_session(result["session_id"])
-    #     session.ipc_client.progress_callback = on_progress
+    # 진행 상황 콜백 등록
+    if result.get("success"):
+        session = get_session(result["session_id"])
+        session.ipc_client.progress_callback = on_progress
 
-    # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
-    # load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
-    # geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
-    # calc_result = calc_load_case(result["session_id"])
-    # geo_result2 = get_geometry_results(result["session_id"])
-    # message = get_messages(result["session_id"])
-    # image2d = get_2D_image(result["session_id"])
-    # image3d = get_3d_image(result["session_id"])
-    # model3d = get_3d_modeling(result["session_id"])
-    # report = get_gear_report(result["session_id"])
-    # summary = get_allresults_summary(result["session_id"])
-    # save_data = save_GearDesignData(result["session_id"])
+    responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
+    load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
+    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
+    calc_result = calc_load_case(result["session_id"])
+    geo_result2 = get_geometry_results(result["session_id"])
+    message = get_messages(result["session_id"])
+    image2d = get_2D_image(result["session_id"])
+    image3d = get_3d_image(result["session_id"])
+    model3d = get_3d_modeling(result["session_id"])
+    report = get_gear_report(result["session_id"])
+    summary = get_allresults_summary(result["session_id"])
+    save_data = save_GearDesignData(result["session_id"])
 
     # print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
     # simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
