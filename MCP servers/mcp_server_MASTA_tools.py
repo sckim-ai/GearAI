@@ -2392,37 +2392,25 @@ if __name__ == "__main__":
     print(f"✓ 베어링 생성: {bearing_result['bearing_name']}")
     print(f"결과: {bearing_result}")
 
-    # 11. 베어링 제원 변경 (다른 designation으로 재생성)
+    # 11. 베어링 제원 변경 (update_bearing_specs 사용)
     print("\n[4-2] 베어링 제원 변경 (designation 변경)")
-    # 기존 베어링 삭제
-    delete_temp_result = delete_component(session_id, bearing_result['bearing_name'])
-    print(f"기존 베어링 삭제: {delete_temp_result}")
-    # 새 designation으로 재생성
-    bearing_updated = create_bearing(
+    bearing_update_result = update_bearing_specs(
         session_id=session_id,
-        bearing_name="test_bearing",
-        shaft_name=shaft1_result['shaft_variable'],
-        position=40,
-        bearing_designation="6208"  # 6206 -> 6208로 변경
+        bearing_name=bearing_result['bearing_name'],
+        designation="6208"  # 자동 선택된 형번 -> 6208로 변경
     )
     print(f"✓ 베어링 제원 변경 완료 (6208)")
-    print(f"결과: {bearing_updated}")
+    print(f"결과: {bearing_update_result}")
 
-    # 12. 베어링 위치 변경 (재장착)
+    # 12. 베어링 위치 변경 (move_bearing 사용)
     print("\n[4-3] 베어링 위치 변경")
-    # 기존 베어링 삭제
-    delete_temp_result2 = delete_component(session_id, bearing_updated['bearing_name'])
-    print(f"기존 베어링 삭제: {delete_temp_result2}")
-    # 새 위치에 재생성
-    bearing_moved = create_bearing(
+    bearing_move_result = move_bearing(
         session_id=session_id,
-        bearing_name="test_bearing",
-        shaft_name=shaft1_result['shaft_variable'],
-        position=60,  # 40 -> 60으로 이동
-        bearing_designation="6208"
+        bearing_name=bearing_result['bearing_name'],
+        position=60  # 40 -> 60으로 이동
     )
     print(f"✓ 베어링 위치 변경 완료")
-    print(f"결과: {bearing_moved}")
+    print(f"결과: {bearing_move_result}")
 
     # 12-1. 베어링 포함 모델 파일 저장 (지정 파일명)
     print("\n[4-3-1] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
@@ -2437,7 +2425,7 @@ if __name__ == "__main__":
     print("\n[4-4] 베어링 삭제")
     delete_bearing_result = delete_component(
         session_id=session_id,
-        component_name=bearing_moved['bearing_name']
+        component_name=bearing_result['bearing_name']
     )
     print(f"✓ 베어링 삭제 완료")
     print(f"결과: {delete_bearing_result}")
