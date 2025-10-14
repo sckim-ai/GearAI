@@ -118,5 +118,10 @@ The gear_agent implements a sophisticated multi-agent workflow:
 - Environment-based API key management
 
 ### 답변
-- 답변은 한글로 할 것.
+- 답변은 한글로 간결하게 할 것.
 - 줄바꿈은 "\r\n" 등으로 명확하게 정의할 것.
+
+### 코드
+- 코드는 중복되거나 너무 과하지 않고 간결하게 작성할 것.
+
+

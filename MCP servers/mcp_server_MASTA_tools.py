@@ -1515,9 +1515,64 @@ cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
 cleanup_thread.start()
 
 if __name__ == "__main__":
-    print("Starting MASTA Tools MCP server...")
-    print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
-    print("백그라운드 세션 정리 스레드 시작됨")
+    print("=" * 60)
+    print("MASTA Tools MCP Server - 테스트 모드")
+    print("=" * 60)
 
-    print(masta_initialize())
+    # 1. 초기화
+    print("\n[1단계] MASTA 초기화 중...")
+    init_result = masta_initialize()
+    print(f"초기화 결과: {init_result['success']}")
+
+    if not init_result['success']:
+        print(f"오류: {init_result.get('error')}")
+        exit(1)
+
+    session_id = init_result['session_id']
+    print(f"세션 ID: {session_id[:8]}...")
+
+    # 2. 축 생성
+    print("\n[2단계] 축 생성 중...")
+    shaft_result = create_shaft(
+        session_id=session_id,
+        shaft_name="test_shaft",
+        length=100,
+        outer_diameter=30,
+        bore_diameter=0,
+        position_x=0,
+        position_y=0,
+        position_z=0
+    )
+    print(f"축 생성 결과: {shaft_result['success']}")
+    if shaft_result['success']:
+        print(f"생성된 축: {shaft_result['shaft_name']}")
+
+    # 3. 세션 상태 확인
+    print("\n[3단계] 세션 상태 확인...")
+    status = get_session_status(session_id)
+    print(f"현재 컴포넌트 수: {status['component_count']}")
+
+    # 4. 축 삭제
+    print("\n[4단계] 축 삭제 중...")
+    delete_result = delete_component(
+        session_id=session_id,
+        component_name="test_shaft"
+    )
+    print(f"축 삭제 결과: {delete_result['success']}")
+
+    # 5. 삭제 후 세션 상태 확인
+    print("\n[5단계] 삭제 후 세션 상태 확인...")
+    status_after = get_session_status(session_id)
+    print(f"삭제 후 컴포넌트 수: {status_after['component_count']}")
+
+    # 6. 세션 정리
+    print("\n[6단계] 세션 정리 중...")
+    cleanup_result = cleanup_session(session_id)
+    print(f"세션 정리 완료: {cleanup_result['success']}")
+
+    print("\n" + "=" * 60)
+    print("테스트 완료!")
+    print("=" * 60)
+
+    # 서버 실행 (필요시 주석 해제)
     # mcp.run()
