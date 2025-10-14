@@ -361,6 +361,51 @@ def get_session_info() -> dict:
         ]
     }
 
+def _save_model_snapshot(session: SessionData, action_name: str) -> dict:
+    """
+    모델의 현재 상태를 이미지로 저장하는 내부 헬퍼 함수
+
+    Args:
+        session: SessionData 객체
+        action_name: 작업 이름 (예: "after_create_shaft", "after_update_gear")
+
+    Returns:
+        dict: 저장 결과 (success, image_path 등)
+    """
+    try:
+        # 이미지 저장 경로 생성
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        image_filename = f"{action_name}_{timestamp}.png"
+        image_path = os.path.join(session.images_dir, image_filename)
+
+        # 경로를 안전하게 처리 (백슬래시 이스케이프)
+        safe_image_path = image_path.replace('\\', '\\\\')
+
+        # 모델 시각화 코드 생성 및 실행
+        show_code = generate_plot_code(session.assembly_name, safe_image_path)
+        execution_result = session.execute_python_code(show_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result:
+            return {
+                "success": False,
+                "error": f"스냅샷 저장 실패: {execution_result}"
+            }
+
+        # 파일 추적 목록에 추가
+        session.add_file(image_path, "image")
+
+        return {
+            "success": True,
+            "image_path": image_path,
+            "action_name": action_name
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"스냅샷 저장 중 오류: {str(e)}"
+        }
+
 # MCP 툴 함수들
 @mcp.tool()
 def masta_initialize() -> dict:
@@ -566,6 +611,9 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
         }
         session.shafts.append(shaft_info)
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_create_shaft_{shaft_name}")
+
         return {
             "success": True,
             "session_id": session_id,
@@ -573,7 +621,8 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
             "shaft_variable": shaft_variable,
             "shaft_info": shaft_info,
             "execution_result": execution_result,
-            "total_shafts": len(session.shafts)
+            "total_shafts": len(session.shafts),
+            "snapshot": snapshot_result
         }
 
     except Exception as e:
@@ -638,6 +687,9 @@ except Exception as e:
 
         execution_result = session.execute_python_code(update_code)
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_update_shaft_{shaft_variable}")
+
         return {
             "success": True,
             "session_id": session_id,
@@ -647,7 +699,8 @@ except Exception as e:
                 "outer_diameter": outer_diameter,
                 "bore_diameter": bore_diameter
             },
-            "execution_result": execution_result
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
         }
 
     except Exception as e:
@@ -707,12 +760,16 @@ except Exception as e:
                 shaft_info["position"] = [position_x, position_y, position_z]
                 break
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_move_shaft_{shaft_variable}")
+
         return {
             "success": True,
             "session_id": session_id,
             "shaft_variable": shaft_variable,
             "new_position": [position_x, position_y, position_z],
-            "execution_result": execution_result
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
         }
 
     except Exception as e:
@@ -841,13 +898,17 @@ print(f"  - 기어비: {wheel_teeth/pinion_teeth:.2f}")
         }
         session.gears.append(gear_info)
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_create_gear_{gear_pair_name}")
+
         return {
             "success": True,
             "session_id": session_id,
             "gear_pair_name": gear_pair_name,
             "gear_info": gear_info,
             "execution_result": execution_result,
-            "total_gears": len(session.gears)
+            "total_gears": len(session.gears),
+            "snapshot": snapshot_result
         }
 
     except ValueError as e:
@@ -914,6 +975,9 @@ print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
         # 코드 실행
         execution_result = session.execute_python_code(mount_code)
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_mount_gear_{gear_pair_name}")
+
         return {
             "success": True,
             "session_id": session_id,
@@ -924,7 +988,8 @@ print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
                 "pinion_position": pinion_position,
                 "wheel_position": wheel_position
             },
-            "execution_result": execution_result
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
         }
 
     except ValueError as e:
@@ -1065,6 +1130,9 @@ except Exception as e:
                     gear_info["wheel_profile_shift"] = wheel_profile_shift
                 break
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_update_gear_{gear_pair_name}")
+
         return {
             "success": True,
             "session_id": session_id,
@@ -1081,7 +1149,8 @@ except Exception as e:
                 "pinion_profile_shift": pinion_profile_shift,
                 "wheel_profile_shift": wheel_profile_shift
             },
-            "execution_result": execution_result
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
         }
 
     except Exception as e:
@@ -1175,13 +1244,17 @@ print(f"  - Designation: {bearing_designation}")
         }
         session.bearings.append(bearing_info)
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_create_bearing_{bearing_name}")
+
         return {
             "success": True,
             "session_id": session_id,
             "bearing_name": bearing_name,
             "bearing_info": bearing_info,
             "execution_result": execution_result,
-            "total_bearings": len(session.bearings)
+            "total_bearings": len(session.bearings),
+            "snapshot": snapshot_result
         }
 
     except ValueError as e:
@@ -1704,11 +1777,15 @@ except Exception as e:
         session.gears = [g for g in session.gears if g.get("variable") != component_name and g.get("name") != component_name]
         session.bearings = [b for b in session.bearings if b.get("name") != component_name]
 
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"after_delete_{component_name}")
+
         return {
             "success": True,
             "session_id": session_id,
             "component_name": component_name,
-            "execution_result": execution_result
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
         }
 
     except ValueError as e:
