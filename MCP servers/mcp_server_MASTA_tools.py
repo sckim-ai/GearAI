@@ -1460,9 +1460,9 @@ except Exception as e:
                 "component_name": component_name
             }
 
-        # 세션 추적 목록에서도 제거
-        session.shafts = [s for s in session.shafts if s.get("name") != component_name]
-        session.gears = [g for g in session.gears if g.get("name") != component_name]
+        # 세션 추적 목록에서도 제거 (variable 기준)
+        session.shafts = [s for s in session.shafts if s.get("variable") != component_name]
+        session.gears = [g for g in session.gears if g.get("variable") != component_name and g.get("name") != component_name]
         session.bearings = [b for b in session.bearings if b.get("name") != component_name]
 
         return {
