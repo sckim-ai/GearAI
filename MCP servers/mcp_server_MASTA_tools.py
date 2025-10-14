@@ -941,6 +941,138 @@ print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
         }
 
 @mcp.tool()
+def update_gear_specs(
+    session_id: str,
+    gear_pair_name: str,
+    center_distance: float = None,
+    normal_module: float = None,
+    helix_angle: float = None,
+    pressure_angle: float = None,
+    pinion_teeth: int = None,
+    wheel_teeth: int = None,
+    pinion_face_width: float = None,
+    wheel_face_width: float = None
+) -> dict:
+    """
+    기어 쌍의 제원을 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        gear_pair_name (str): 기어 쌍 이름
+        center_distance (float): 중심거리 (mm, None이면 변경하지 않음)
+        normal_module (float): 모듈 (mm, None이면 변경하지 않음)
+        helix_angle (float): 헬리컬 각도 (도, None이면 변경하지 않음)
+        pressure_angle (float): 압력각 (도, None이면 변경하지 않음)
+        pinion_teeth (int): 피니언 잇수 (None이면 변경하지 않음)
+        wheel_teeth (int): 휠 잇수 (None이면 변경하지 않음)
+        pinion_face_width (float): 피니언 치폭 (mm, None이면 변경하지 않음)
+        wheel_face_width (float): 휠 치폭 (mm, None이면 변경하지 않음)
+
+    Returns:
+        dict: 변경 결과
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {"success": False, "error": "세션이 초기화되지 않았습니다.", "session_id": session_id}
+
+        update_code = f"""
+# 기어 제원 변경: {gear_pair_name}
+try:
+    if '{gear_pair_name}' in locals() or '{gear_pair_name}' in globals():
+        gear_pair = {gear_pair_name}
+
+        # 기어 쌍 기본 제원 변경
+        """
+
+        if normal_module is not None:
+            update_code += f"\n        gear_pair.active_gear_set_design.normal_module = {normal_module} * MM"
+        if helix_angle is not None:
+            update_code += f"\n        gear_pair.active_gear_set_design.helix_angle = {helix_angle} * RAD"
+        if pressure_angle is not None:
+            update_code += f"\n        gear_pair.active_gear_set_design.normal_pressure_angle_maintain_transverse_profile = {pressure_angle} * RAD"
+
+        update_code += f"""
+
+        # 피니언과 휠 참조
+        pinion = gear_pair.active_gear_set_design.cylindrical_gears[0]
+        wheel = gear_pair.active_gear_set_design.cylindrical_gears[1]
+        """
+
+        if pinion_teeth is not None:
+            update_code += f"\n        pinion.number_of_teeth = {pinion_teeth}"
+        if wheel_teeth is not None:
+            update_code += f"\n        wheel.number_of_teeth = {wheel_teeth}"
+        if pinion_face_width is not None:
+            update_code += f"\n        pinion.face_width = {pinion_face_width} * MM"
+        if wheel_face_width is not None:
+            update_code += f"\n        wheel.face_width = {wheel_face_width} * MM"
+
+        update_code += f"""
+
+        print(f"기어 쌍 '{{gear_pair.name}}' 제원 변경 완료")
+        {"print(f'  - 중심거리: " + str(center_distance) + " mm')" if center_distance else ""}
+        {"print(f'  - 모듈: " + str(normal_module) + " mm')" if normal_module else ""}
+        {"print(f'  - 헬리컬각: " + str(helix_angle) + "°')" if helix_angle else ""}
+        {"print(f'  - 압력각: " + str(pressure_angle) + "°')" if pressure_angle else ""}
+        {"print(f'  - 피니언 잇수: " + str(pinion_teeth) + "')" if pinion_teeth else ""}
+        {"print(f'  - 휠 잇수: " + str(wheel_teeth) + "')" if wheel_teeth else ""}
+        {"print(f'  - 피니언 치폭: " + str(pinion_face_width) + " mm')" if pinion_face_width else ""}
+        {"print(f'  - 휠 치폭: " + str(wheel_face_width) + " mm')" if wheel_face_width else ""}
+    else:
+        print(f"오류: 기어 쌍 '{gear_pair_name}'를 찾을 수 없습니다")
+except Exception as e:
+    print(f"제원 변경 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        execution_result = session.execute_python_code(update_code)
+
+        # 세션 추적 목록 업데이트
+        for gear_info in session.gears:
+            if gear_info.get("name") == gear_pair_name:
+                if center_distance is not None:
+                    gear_info["center_distance"] = center_distance
+                if normal_module is not None:
+                    gear_info["normal_module"] = normal_module
+                if helix_angle is not None:
+                    gear_info["helix_angle"] = helix_angle
+                if pressure_angle is not None:
+                    gear_info["pressure_angle"] = pressure_angle
+                if pinion_teeth is not None:
+                    gear_info["pinion_teeth"] = pinion_teeth
+                if wheel_teeth is not None:
+                    gear_info["wheel_teeth"] = wheel_teeth
+                if pinion_face_width is not None:
+                    gear_info["pinion_face_width"] = pinion_face_width
+                if wheel_face_width is not None:
+                    gear_info["wheel_face_width"] = wheel_face_width
+                break
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "gear_pair_name": gear_pair_name,
+            "updated_specs": {
+                "center_distance": center_distance,
+                "normal_module": normal_module,
+                "helix_angle": helix_angle,
+                "pressure_angle": pressure_angle,
+                "pinion_teeth": pinion_teeth,
+                "wheel_teeth": wheel_teeth,
+                "pinion_face_width": pinion_face_width,
+                "wheel_face_width": wheel_face_width
+            },
+            "execution_result": execution_result
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "session_id": session_id}
+
+
+@mcp.tool()
 def create_bearing(
     session_id: str,
     bearing_name: str,
@@ -1762,8 +1894,22 @@ if __name__ == "__main__":
     print(f"✓ 기어 쌍 생성: {gear_result['gear_pair_name']}")
     print(f"결과: {gear_result}")
 
-    # 7. 기어 장착 (제원 변경 대신 위치 지정)
-    print("\n[3-2] 기어 축에 장착")
+    # 7. 기어 제원 변경
+    print("\n[3-2] 기어 제원 변경")
+    update_gear_result = update_gear_specs(
+        session_id=session_id,
+        gear_pair_name=gear_result['gear_pair_name'],
+        normal_module=2.5,
+        pinion_teeth=22,
+        wheel_teeth=44,
+        pinion_face_width=25.0,
+        wheel_face_width=25.0
+    )
+    print(f"✓ 기어 제원 변경 완료")
+    print(f"결과: {update_gear_result}")
+
+    # 8. 기어 장착
+    print("\n[3-3] 기어 축에 장착")
     mount_gear_result = mount_gear_on_shaft(
         session_id=session_id,
         gear_pair_name=gear_result['gear_pair_name'],
@@ -1775,8 +1921,8 @@ if __name__ == "__main__":
     print(f"✓ 기어 장착 완료")
     print(f"결과: {mount_gear_result}")
 
-    # 8. 기어 위치 변경 (재장착)
-    print("\n[3-3] 기어 위치 변경 (재장착)")
+    # 9. 기어 위치 변경 (재장착)
+    print("\n[3-4] 기어 위치 변경 (재장착)")
     remount_gear_result = mount_gear_on_shaft(
         session_id=session_id,
         gear_pair_name=gear_result['gear_pair_name'],
@@ -1788,8 +1934,8 @@ if __name__ == "__main__":
     print(f"✓ 기어 위치 변경 완료")
     print(f"결과: {remount_gear_result}")
 
-    # 9. 기어 삭제
-    print("\n[3-4] 기어 삭제")
+    # 10. 기어 삭제
+    print("\n[3-5] 기어 삭제")
     delete_gear_result = delete_component(
         session_id=session_id,
         component_name=gear_result['gear_pair_name']
