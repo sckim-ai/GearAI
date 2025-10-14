@@ -1238,6 +1238,7 @@ print(f"  - Designation: {bearing_designation}")
         # 세션에 베어링 정보 저장
         bearing_info = {
             "name": bearing_name,
+            "variable": bearing_name,  # 베어링 변수명 추가
             "shaft_name": shaft_name,
             "position": position,
             "designation": bearing_designation,
