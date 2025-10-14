@@ -644,15 +644,20 @@ def update_shaft_specs(
     """
     축의 제원을 변경합니다.
 
+    IMPORTANT:
+        MASTA API 제약으로 인해 축의 많은 속성(length 포함)이 읽기 전용입니다.
+        축 제원을 변경하려면 delete_component()로 축을 삭제한 후
+        create_shaft()로 새로운 제원의 축을 재생성하는 것을 권장합니다.
+
     Args:
         session_id (str): 세션 ID
         shaft_variable (str): 축 변수명 (예: "shaft_1")
-        length (float): 축 길이 (mm, None이면 변경하지 않음)
-        outer_diameter (float): 축 외경 (mm, None이면 변경하지 않음)
-        bore_diameter (float): 축 내경 (mm, None이면 변경하지 않음)
+        length (float): 축 길이 (mm, 읽기 전용 - 변경 불가)
+        outer_diameter (float): 축 외경 (mm, 읽기 전용 가능성 있음)
+        bore_diameter (float): 축 내경 (mm, 읽기 전용 가능성 있음)
 
     Returns:
-        dict: 변경 결과
+        dict: 변경 결과 (일부 속성은 변경 실패 가능)
     """
     try:
         session = get_session(session_id)
@@ -1282,6 +1287,8 @@ def update_bearing_specs(
     """
     베어링의 제원(형번)을 변경합니다.
 
+    set_detail_from_catalogue() 메서드를 재호출하여 베어링 형번을 변경합니다.
+
     Args:
         session_id (str): 세션 ID
         bearing_name (str): 베어링 이름
@@ -1333,15 +1340,14 @@ def update_bearing_specs(
         # 베어링 제원 변경 코드 생성
         update_code = f"""
 # 베어링 제원 변경: {bearing_name}
+from mastapy.bearings import BearingCatalog
+
 try:
     if '{bearing_variable}' in locals() or '{bearing_variable}' in globals():
         bearing = {bearing_variable}
 
-        # 베어링 형번 변경
-        bearing_catalog = BearingCatalog()
-        new_designation = "{designation}"
-        new_bearing_design = bearing_catalog.get_bearing_design(new_designation)
-        bearing.bearing_design = new_bearing_design
+        # 베어링 형번 변경 (set_detail_from_catalogue 재호출)
+        bearing.set_detail_from_catalogue(BearingCatalog.SKF, "{designation}")
 
         print(f"베어링 '{{bearing.editable_name}}' 제원 변경 완료")
         print(f"  - 새로운 형번: {designation}")
@@ -1405,6 +1411,8 @@ def move_bearing(
     """
     베어링의 축 상 위치를 변경합니다.
 
+    shaft.mount_component() 메서드를 재호출하여 베어링을 새로운 위치로 재장착합니다.
+
     Args:
         session_id (str): 세션 ID
         bearing_name (str): 베어링 이름
@@ -1444,16 +1452,17 @@ def move_bearing(
             }
 
         bearing_variable = bearing_info.get("variable")
+        shaft_name = bearing_info.get("shaft_name")
 
-        # 베어링 위치 변경 코드 생성
+        # 베어링 위치 변경 코드 생성 (mount_component 재호출)
         move_code = f"""
 # 베어링 위치 변경: {bearing_name}
 try:
     if '{bearing_variable}' in locals() or '{bearing_variable}' in globals():
         bearing = {bearing_variable}
 
-        # 축 상 위치 변경
-        bearing.axial_position = {position}*MM
+        # 축에 베어링을 새로운 위치로 재장착 (mount_component 재호출)
+        {shaft_name}.mount_component(bearing, {position}*MM)
 
         print(f"베어링 '{{bearing.editable_name}}' 위치 변경 완료")
         print(f"  - 새로운 위치: {position} mm")
