@@ -24,6 +24,100 @@ load_dotenv()
 
 mcp = FastMCP("MASTA_Tools")
 
+# ============================================================================
+# Utility 함수들 (원래 Utility.py의 기능)
+# ============================================================================
+
+def calculate_normal_module(Centerdistance: float, z1: int, z2: int, beta: float) -> float:
+    """
+    중심거리, 잇수, 헬리컬 각도로부터 노멀 모듈을 계산합니다.
+
+    Args:
+        Centerdistance: 중심거리 (mm)
+        z1: 피니언 잇수
+        z2: 휠 잇수
+        beta: 헬리컬 각도 (도)
+
+    Returns:
+        float: 노멀 모듈 (mm)
+    """
+    total_teeth = z1 + z2
+    helix_angle_rad = math.radians(beta)  # 헬리컬 각도를 라디안으로 변환
+    normal_module = (2 * Centerdistance * math.cos(helix_angle_rad)) / total_teeth
+    return normal_module
+
+
+def get_nearest_bearing_code(inner_diameter: float) -> str:
+    """
+    내경에 가장 가까운 62xx 시리즈 베어링 형번을 반환합니다.
+
+    Args:
+        inner_diameter: 베어링 내경 (mm)
+
+    Returns:
+        str: 베어링 형번 (예: "6206")
+    """
+    # 내경별 62xx 시리즈 형번 매핑 (최대 100mm까지)
+    bearing_codes = {
+        10: "6200", 12: "6201", 15: "6202", 17: "6203", 20: "6204",
+        25: "6205", 30: "6206", 35: "6207", 40: "6208", 45: "6209",
+        50: "6210", 55: "6211", 60: "6212", 65: "6213", 70: "6214",
+        75: "6215", 80: "6216", 85: "6217", 90: "6218", 95: "6219",
+        100: "6220"
+    }
+
+    # 정확히 매칭되는 형번이 있는지 확인
+    if inner_diameter in bearing_codes:
+        return bearing_codes[inner_diameter]
+
+    # 매칭이 없는 경우 가장 가까운 내경을 찾아 형번 반환
+    nearest_diameter = min(bearing_codes.keys(), key=lambda x: abs(x - inner_diameter))
+    return bearing_codes[nearest_diameter]
+
+
+def generate_plot_code(assembly_name: str, output_path: str) -> str:
+    """
+    MASTA 어셈블리의 3D 뷰를 matplotlib으로 플롯하는 Python 코드를 생성합니다.
+
+    Args:
+        assembly_name: 어셈블리 변수 이름
+        output_path: 이미지 저장 경로
+
+    Returns:
+        str: 실행할 Python 코드
+    """
+    return f"""
+import matplotlib.pyplot as plt
+
+# MASTA 모델 3D 뷰 시각화
+plt.figure(figsize=(12, 12))
+
+# 3개의 서브플롯 생성
+plt.subplot(1, 3, 1)
+plt.imshow({assembly_name}.three_d_isometric_view)
+plt.title('Isometric View')
+plt.axis('off')
+
+plt.subplot(1, 3, 2)
+plt.imshow({assembly_name}.three_d_view_orientated_in_xz_plane_with_y_axis_pointing_into_the_screen)
+plt.title('XZ Plane View')
+plt.axis('off')
+
+plt.subplot(1, 3, 3)
+plt.imshow({assembly_name}.three_d_view_orientated_in_xy_plane_with_z_axis_pointing_into_the_screen)
+plt.title('XY Plane View')
+plt.axis('off')
+
+plt.tight_layout()
+
+# 이미지 저장
+plt.savefig(r'{output_path}', dpi=150, bbox_inches='tight')
+print(f"모델 시각화 이미지 저장 완료: {output_path}")
+plt.close()
+"""
+
+# ============================================================================
+
 # MASTA 설정
 masta_path: str = r"C:\Program Files\SMT\MASTA 14.1.1"
 # MASTA Python API를 사용하는 경우 프로세스 경로 (선택사항)
@@ -75,12 +169,11 @@ mp.init(r'C:\Program Files\SMT\MASTA 14.1.1')
 print("✓ MASTA 초기화 완료")
 
 # 단위 환산 상수 정의
-
 MM = 1e-3
 RAD = math.pi/180
 RPM = 2*math.pi/60
 print("✓ 단위 환산 상수 정의 완료 (MM, RAD, RPM)")
-
+print("✓ MASTA IPC 준비 완료")
 """
 
             # 코드 실행
@@ -88,15 +181,10 @@ print("✓ 단위 환산 상수 정의 완료 (MM, RAD, RPM)")
 
             # 실행 결과 확인 (오류 메시지가 포함되어 있는지 체크)
             if result and any(keyword in result.lower() for keyword in ['error', 'exception', 'traceback', 'failed', '✗']):
-                error_msg = f"MASTA 초기화 중 오류 발생:\n{result}"
-                print(error_msg)
                 return False, error_msg
 
             # 성공 시에만 initialized 플래그 설정
             self.is_initialized = True
-
-            success_msg = f"MASTA IPC 초기화 완료\n{result if result else '(결과 메시지 없음)'}"
-            print(success_msg)
             return True, result if result else "초기화 완료"
 
         except Exception as e:
@@ -330,7 +418,10 @@ def masta_initialize() -> dict:
 
         # Design 및 Assembly 객체 생성 코드
         design_code = f"""
+
 # 새로운 Design 작성
+from mastapy.system_model import Design
+
 {session.design_name} = Design()
 {session.assembly_name} = {session.design_name}.root_assembly
 
@@ -340,6 +431,15 @@ print(f"Assembly 객체 생성 완료: {session.assembly_name}")
 
         # 코드 실행
         execution_result = session.execute_python_code(design_code)
+
+        # 실행 결과 확인 (오류 메시지가 포함되어 있는지 체크)
+        if execution_result and any(keyword in execution_result.lower() for keyword in ['error', 'exception', 'traceback', 'failed', '✗']):
+            return {
+                "success": False,
+                "error": f"Design 객체 생성 실패: {execution_result}",
+                "session_id": new_session_id
+            }
+
         session.is_initialized = True
 
         # 초기화 메시지 결합
@@ -712,7 +812,8 @@ def create_bearing(
     bearing_name: str,
     shaft_name: str,
     position: float,
-    bearing_designation: str = "6206"
+    bearing_designation: str = None,
+    auto_select_by_diameter: float = None
 ) -> dict:
     """
     베어링을 생성하고 축에 장착합니다.
@@ -722,10 +823,22 @@ def create_bearing(
         bearing_name (str): 베어링 이름
         shaft_name (str): 베어링이 장착될 축 이름
         position (float): 베어링 장착 위치 (축 길이 방향, mm)
-        bearing_designation (str): 베어링 designation (기본값: "6206")
+        bearing_designation (str): 베어링 designation (예: "6206")
+        auto_select_by_diameter (float): 축 내경을 기준으로 자동으로 베어링 선택 (mm)
+                                         이 값이 지정되면 bearing_designation은 무시됨
 
     Returns:
         dict: 베어링 생성 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - bearing_name: 베어링 이름 (str)
+            - bearing_info: 베어링 정보 (dict)
+            - execution_result: 실행 결과 (str)
+            - total_bearings: 총 베어링 개수 (int)
+
+    Note:
+        - bearing_designation과 auto_select_by_diameter 중 하나는 반드시 지정해야 합니다
+        - auto_select_by_diameter를 사용하면 내경에 가장 가까운 62xx 시리즈 베어링이 자동 선택됩니다
     """
     try:
         session = get_session(session_id)
@@ -735,6 +848,14 @@ def create_bearing(
                 "success": False,
                 "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
             }
+
+        # 베어링 designation 결정
+        if auto_select_by_diameter is not None:
+            bearing_designation = get_nearest_bearing_code(auto_select_by_diameter)
+            print(f"자동 선택: 내경 {auto_select_by_diameter}mm -> 베어링 {bearing_designation}")
+        elif bearing_designation is None:
+            bearing_designation = "6206"  # 기본값
+            print(f"기본 베어링 사용: {bearing_designation}")
 
         # 베어링 생성 코드
         bearing_code = f"""
@@ -767,7 +888,8 @@ print(f"  - Designation: {bearing_designation}")
             "name": bearing_name,
             "shaft_name": shaft_name,
             "position": position,
-            "designation": bearing_designation
+            "designation": bearing_designation,
+            "auto_selected": auto_select_by_diameter is not None
         }
         session.bearings.append(bearing_info)
 
@@ -794,15 +916,22 @@ print(f"  - Designation: {bearing_designation}")
         }
 
 @mcp.tool()
-def show_model(session_id: str) -> dict:
+def show_model(session_id: str, save_image: bool = True) -> dict:
     """
     생성된 MASTA 모델을 시각화합니다.
 
     Args:
         session_id (str): 세션 ID
+        save_image (bool): 이미지를 파일로 저장할지 여부 (기본값: True)
 
     Returns:
         dict: 시각화 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - message: 결과 메시지 (str)
+            - image_path: 저장된 이미지 경로 (str, save_image=True인 경우)
+            - execution_result: 실행 결과 (str)
+            - model_summary: 모델 요약 정보 (dict)
     """
     try:
         session = get_session(session_id)
@@ -813,30 +942,77 @@ def show_model(session_id: str) -> dict:
                 "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
             }
 
-        # 모델 시각화 코드
-        show_code = f"""
-# MASTA 모델 시각화
-try:
-    Utility.plot_images(assembly={session.assembly_name})
-    print("모델 시각화 완료")
-except Exception as e:
-    print(f"시각화 중 오류: {{e}}")
-"""
-
-        # 코드 실행
-        execution_result = session.execute_python_code(show_code)
-
-        return {
+        result = {
             "success": True,
             "session_id": session_id,
-            "message": "모델 시각화 완료",
-            "execution_result": execution_result,
             "model_summary": {
                 "shafts": len(session.shafts),
                 "gears": len(session.gears),
                 "bearings": len(session.bearings)
             }
         }
+
+        if save_image:
+            # 이미지 저장 경로 생성
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_filename = f"model_view_{timestamp}.png"
+            image_path = os.path.join(session.images_dir, image_filename)
+
+            # 경로를 안전하게 처리 (백슬래시 이스케이프)
+            safe_image_path = image_path.replace('\\', '\\\\')
+
+            # 모델 시각화 코드 생성 및 실행
+            show_code = generate_plot_code(session.assembly_name, safe_image_path)
+            execution_result = session.execute_python_code(show_code)
+
+            # 실행 결과 확인
+            if "Failed to execute" in execution_result:
+                return {
+                    "success": False,
+                    "error": f"모델 시각화 실패: {execution_result}",
+                    "session_id": session_id
+                }
+
+            # 파일 추적 목록에 추가
+            session.add_file(image_path, "image")
+
+            result["message"] = "모델 시각화 및 이미지 저장 완료"
+            result["image_path"] = image_path
+            result["execution_result"] = execution_result
+        else:
+            # 화면에만 표시 (저장하지 않음)
+            show_code = f"""
+import matplotlib.pyplot as plt
+
+# MASTA 모델 3D 뷰 시각화
+plt.figure(figsize=(12, 12))
+
+# 3개의 서브플롯 생성
+plt.subplot(1, 3, 1)
+plt.imshow({session.assembly_name}.three_d_isometric_view)
+plt.title('Isometric View')
+plt.axis('off')
+
+plt.subplot(1, 3, 2)
+plt.imshow({session.assembly_name}.three_d_view_orientated_in_xz_plane_with_y_axis_pointing_into_the_screen)
+plt.title('XZ Plane View')
+plt.axis('off')
+
+plt.subplot(1, 3, 3)
+plt.imshow({session.assembly_name}.three_d_view_orientated_in_xy_plane_with_z_axis_pointing_into_the_screen)
+plt.title('XY Plane View')
+plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+print("모델 시각화 완료 (화면 표시)")
+"""
+            execution_result = session.execute_python_code(show_code)
+
+            result["message"] = "모델 시각화 완료 (화면 표시)"
+            result["execution_result"] = execution_result
+
+        return result
 
     except ValueError as e:
         return {
@@ -977,6 +1153,97 @@ def get_session_files(session_id: str) -> dict:
             "error": str(e),
             "session_id": session_id
         }
+
+@mcp.tool()
+def calculate_module_from_center_distance(
+    center_distance: float,
+    pinion_teeth: int,
+    wheel_teeth: int,
+    helix_angle: float = 0.0
+) -> dict:
+    """
+    중심거리, 잇수, 헬리컬 각도로부터 노멀 모듈을 계산합니다.
+
+    Args:
+        center_distance (float): 중심거리 (mm)
+        pinion_teeth (int): 피니언 잇수
+        wheel_teeth (int): 휠 잇수
+        helix_angle (float): 헬리컬 각도 (도, 기본값: 0.0)
+
+    Returns:
+        dict: 계산 결과
+            - success: 성공 여부 (bool)
+            - normal_module: 계산된 노멀 모듈 (float, mm)
+            - input_parameters: 입력 파라미터 정보 (dict)
+    """
+    try:
+        normal_module = calculate_normal_module(
+            center_distance, pinion_teeth, wheel_teeth, helix_angle
+        )
+
+        return {
+            "success": True,
+            "normal_module": round(normal_module, 6),
+            "input_parameters": {
+                "center_distance": center_distance,
+                "pinion_teeth": pinion_teeth,
+                "wheel_teeth": wheel_teeth,
+                "helix_angle": helix_angle,
+                "total_teeth": pinion_teeth + wheel_teeth,
+                "gear_ratio": wheel_teeth / pinion_teeth
+            }
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"모듈 계산 중 오류: {str(e)}"
+        }
+
+
+@mcp.tool()
+def find_bearing_by_diameter(inner_diameter: float) -> dict:
+    """
+    축 내경에 가장 가까운 62xx 시리즈 베어링 형번을 찾습니다.
+
+    Args:
+        inner_diameter (float): 베어링 내경 (mm)
+
+    Returns:
+        dict: 베어링 정보
+            - success: 성공 여부 (bool)
+            - bearing_code: 베어링 형번 (str, 예: "6206")
+            - inner_diameter: 입력된 내경 (float)
+            - matched_diameter: 매칭된 표준 내경 (float)
+            - is_exact_match: 정확히 일치하는지 여부 (bool)
+    """
+    try:
+        bearing_code = get_nearest_bearing_code(inner_diameter)
+
+        # 표준 내경 목록
+        standard_diameters = {
+            "6200": 10, "6201": 12, "6202": 15, "6203": 17, "6204": 20,
+            "6205": 25, "6206": 30, "6207": 35, "6208": 40, "6209": 45,
+            "6210": 50, "6211": 55, "6212": 60, "6213": 65, "6214": 70,
+            "6215": 75, "6216": 80, "6217": 85, "6218": 90, "6219": 95,
+            "6220": 100
+        }
+
+        matched_diameter = standard_diameters.get(bearing_code, inner_diameter)
+        is_exact_match = (matched_diameter == inner_diameter)
+
+        return {
+            "success": True,
+            "bearing_code": bearing_code,
+            "inner_diameter": inner_diameter,
+            "matched_diameter": matched_diameter,
+            "is_exact_match": is_exact_match
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"베어링 검색 중 오류: {str(e)}"
+        }
+
 
 @mcp.tool()
 def cleanup_session(session_id: str) -> dict:
