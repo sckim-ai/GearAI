@@ -1401,6 +1401,95 @@ except Exception as e:
 
 
 @mcp.tool()
+def save_model_image(session_id: str, image_name: str = None) -> dict:
+    """
+    MASTA 모델의 3D 뷰 이미지를 로컬에 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        image_name (str): 저장할 이미지 이름 (확장자 제외, None이면 자동 생성)
+
+    Returns:
+        dict: 저장 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - image_path: 저장된 이미지 경로 (str)
+            - image_name: 이미지 파일 이름 (str)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 이미지 이름 생성
+        if image_name is None:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_name = f"masta_model_{timestamp}"
+
+        # .png 확장자 추가 (없는 경우)
+        if not image_name.endswith('.png'):
+            image_name += '.png'
+
+        # 이미지 경로 생성
+        image_path = os.path.join(session.images_dir, image_name)
+        safe_image_path = image_path.replace('\\', '\\\\')
+
+        # 이미지 생성 및 저장 코드
+        plot_code = generate_plot_code(session.assembly_name, safe_image_path)
+
+        # 코드 실행
+        execution_result = session.execute_python_code(plot_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "Error" in execution_result:
+            return {
+                "success": False,
+                "error": f"이미지 저장 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 파일이 실제로 생성되었는지 확인
+        if not os.path.exists(image_path):
+            return {
+                "success": False,
+                "error": "이미지 파일이 생성되지 않았습니다.",
+                "session_id": session_id
+            }
+
+        # 파일 추적 목록에 추가
+        session.add_file(image_path, "image")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "image_path": image_path,
+            "image_name": image_name,
+            "file_size": os.path.getsize(image_path),
+            "execution_result": execution_result,
+            "message": f"모델 이미지가 저장되었습니다: {image_name}"
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"이미지 저장 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
 def get_session_status(session_id: str) -> dict:
     """
     세션 상태 및 생성된 컴포넌트 정보를 조회합니다.
