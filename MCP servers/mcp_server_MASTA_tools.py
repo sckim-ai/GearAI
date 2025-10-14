@@ -1682,6 +1682,7 @@ if __name__ == "__main__":
         position_z=0
     )
     print(f"✓ 축 생성: {shaft_result['shaft_variable']}")
+    print(f"결과: {shaft_result}")
 
     # 3. 축 제원 변경
     print("\n[2-2] 축 제원 변경")
@@ -1693,6 +1694,7 @@ if __name__ == "__main__":
         bore_diameter=10
     )
     print(f"✓ 축 제원 변경 완료")
+    print(f"결과: {update_shaft_result}")
 
     # 4. 축 이동
     print("\n[2-3] 축 위치 변경")
@@ -1704,6 +1706,7 @@ if __name__ == "__main__":
         position_z=0
     )
     print(f"✓ 축 위치 변경 완료")
+    print(f"결과: {move_shaft_result}")
 
     # 5. 축 삭제
     print("\n[2-4] 축 삭제")
@@ -1712,6 +1715,7 @@ if __name__ == "__main__":
         component_name=shaft_result['shaft_variable']
     )
     print(f"✓ 축 삭제 완료")
+    print(f"결과: {delete_shaft_result}")
 
     status_after_shaft = get_session_status(session_id)
     print(f"→ 축 삭제 후 컴포넌트 수: {status_after_shaft['component_count']}")
@@ -1740,6 +1744,8 @@ if __name__ == "__main__":
         position_z=0
     )
     print(f"✓ 축 2개 생성: {shaft1_result['shaft_variable']}, {shaft2_result['shaft_variable']}")
+    print(f"결과 1: {shaft1_result}")
+    print(f"결과 2: {shaft2_result}")
 
     # 6. 기어 쌍 생성
     print("\n[3-1] 기어 쌍 생성")
@@ -1754,6 +1760,7 @@ if __name__ == "__main__":
         pressure_angle=20.0
     )
     print(f"✓ 기어 쌍 생성: {gear_result['gear_pair_name']}")
+    print(f"결과: {gear_result}")
 
     # 7. 기어 장착 (제원 변경 대신 위치 지정)
     print("\n[3-2] 기어 축에 장착")
@@ -1766,6 +1773,7 @@ if __name__ == "__main__":
         wheel_position=70
     )
     print(f"✓ 기어 장착 완료")
+    print(f"결과: {mount_gear_result}")
 
     # 8. 기어 위치 변경 (재장착)
     print("\n[3-3] 기어 위치 변경 (재장착)")
@@ -1778,6 +1786,7 @@ if __name__ == "__main__":
         wheel_position=90
     )
     print(f"✓ 기어 위치 변경 완료")
+    print(f"결과: {remount_gear_result}")
 
     # 9. 기어 삭제
     print("\n[3-4] 기어 삭제")
@@ -1786,6 +1795,7 @@ if __name__ == "__main__":
         component_name=gear_result['gear_pair_name']
     )
     print(f"✓ 기어 삭제 완료")
+    print(f"결과: {delete_gear_result}")
 
     status_after_gear = get_session_status(session_id)
     print(f"→ 기어 삭제 후 컴포넌트 수: {status_after_gear['component_count']}")
@@ -1805,11 +1815,13 @@ if __name__ == "__main__":
         auto_select_by_diameter=30
     )
     print(f"✓ 베어링 생성: {bearing_result['bearing_name']}")
+    print(f"결과: {bearing_result}")
 
     # 11. 베어링 제원 변경 (다른 designation으로 재생성)
     print("\n[4-2] 베어링 제원 변경 (designation 변경)")
     # 기존 베어링 삭제
-    delete_component(session_id, bearing_result['bearing_name'])
+    delete_temp_result = delete_component(session_id, bearing_result['bearing_name'])
+    print(f"기존 베어링 삭제: {delete_temp_result}")
     # 새 designation으로 재생성
     bearing_updated = create_bearing(
         session_id=session_id,
@@ -1819,11 +1831,13 @@ if __name__ == "__main__":
         bearing_designation="6208"  # 6206 -> 6208로 변경
     )
     print(f"✓ 베어링 제원 변경 완료 (6208)")
+    print(f"결과: {bearing_updated}")
 
     # 12. 베어링 위치 변경 (재장착)
     print("\n[4-3] 베어링 위치 변경")
     # 기존 베어링 삭제
-    delete_component(session_id, bearing_updated['bearing_name'])
+    delete_temp_result2 = delete_component(session_id, bearing_updated['bearing_name'])
+    print(f"기존 베어링 삭제: {delete_temp_result2}")
     # 새 위치에 재생성
     bearing_moved = create_bearing(
         session_id=session_id,
@@ -1833,6 +1847,7 @@ if __name__ == "__main__":
         bearing_designation="6208"
     )
     print(f"✓ 베어링 위치 변경 완료")
+    print(f"결과: {bearing_moved}")
 
     # 13. 베어링 삭제
     print("\n[4-4] 베어링 삭제")
@@ -1841,6 +1856,7 @@ if __name__ == "__main__":
         component_name=bearing_moved['bearing_name']
     )
     print(f"✓ 베어링 삭제 완료")
+    print(f"결과: {delete_bearing_result}")
 
     status_after_bearing = get_session_status(session_id)
     print(f"→ 베어링 삭제 후 컴포넌트 수: {status_after_bearing['component_count']}")
@@ -1854,11 +1870,13 @@ if __name__ == "__main__":
     print("\n[5-1] 최종 세션 상태 확인")
     final_status = get_session_status(session_id)
     print(f"→ 최종 컴포넌트 수: {final_status['component_count']}")
+    print(f"결과: {final_status}")
 
     # 15. 세션 정리
     print("\n[5-2] 세션 정리")
     cleanup_result = cleanup_session(session_id)
     print(f"✓ 세션 정리 완료: {cleanup_result['success']}")
+    print(f"결과: {cleanup_result}")
 
     print("\n" + "=" * 80)
     print("전체 테스트 완료!")
