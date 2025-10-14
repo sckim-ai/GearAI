@@ -1310,6 +1310,95 @@ print("모델 시각화 완료 (화면 표시)")
         }
 
 @mcp.tool()
+def save_masta_file(session_id: str, file_name: str = None) -> dict:
+    """
+    MASTA Design을 파일로 저장합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        file_name (str): 저장할 파일 이름 (확장자 제외, None이면 자동 생성)
+
+    Returns:
+        dict: 저장 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - file_path: 저장된 파일 경로 (str)
+            - file_name: 파일 이름 (str)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 파일 이름 생성
+        if file_name is None:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"masta_design_{timestamp}"
+
+        # .masta 확장자 추가 (없는 경우)
+        if not file_name.endswith('.masta'):
+            file_name += '.masta'
+
+        # 파일 경로 생성
+        file_path = os.path.join(session.modelings_dir, file_name)
+        safe_file_path = file_path.replace('\\', '\\\\')
+
+        # MASTA 파일 저장 코드
+        save_code = f"""
+# MASTA 파일 저장
+try:
+    {session.design_name}.save_to_file(r'{safe_file_path}')
+    print(f"MASTA 파일 저장 완료: {file_path}")
+except Exception as e:
+    print(f"MASTA 파일 저장 실패: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(save_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "저장 실패" in execution_result:
+            return {
+                "success": False,
+                "error": f"MASTA 파일 저장 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 파일 추적 목록에 추가
+        session.add_file(file_path, "masta")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "file_path": file_path,
+            "file_name": file_name,
+            "execution_result": execution_result,
+            "message": f"MASTA 파일이 저장되었습니다: {file_name}"
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"MASTA 파일 저장 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
 def get_session_status(session_id: str) -> dict:
     """
     세션 상태 및 생성된 컴포넌트 정보를 조회합니다.
