@@ -584,6 +584,142 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
         }
 
 @mcp.tool()
+def update_shaft_specs(
+    session_id: str,
+    shaft_variable: str,
+    length: float = None,
+    outer_diameter: float = None,
+    bore_diameter: float = None
+) -> dict:
+    """
+    축의 제원을 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        shaft_variable (str): 축 변수명 (예: "shaft_1")
+        length (float): 축 길이 (mm, None이면 변경하지 않음)
+        outer_diameter (float): 축 외경 (mm, None이면 변경하지 않음)
+        bore_diameter (float): 축 내경 (mm, None이면 변경하지 않음)
+
+    Returns:
+        dict: 변경 결과
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {"success": False, "error": "세션이 초기화되지 않았습니다.", "session_id": session_id}
+
+        update_code = f"""
+# 축 제원 변경: {shaft_variable}
+try:
+    if '{shaft_variable}' in locals() or '{shaft_variable}' in globals():
+        shaft = {shaft_variable}
+        """
+
+        if length is not None:
+            update_code += f"\n        shaft.length = {length}*MM"
+        if outer_diameter is not None:
+            update_code += f"\n        shaft.outer_diameter = {outer_diameter}*MM"
+        if bore_diameter is not None:
+            update_code += f"\n        shaft.bore = {bore_diameter}*MM"
+
+        update_code += f"""
+
+        print(f"축 '{{shaft.editable_name}}' 제원 변경 완료")
+        {"print(f'  - 길이: " + str(length) + " mm')" if length else ""}
+        {"print(f'  - 외경: " + str(outer_diameter) + " mm')" if outer_diameter else ""}
+        {"print(f'  - 내경: " + str(bore_diameter) + " mm')" if bore_diameter else ""}
+    else:
+        print(f"오류: 축 '{shaft_variable}'를 찾을 수 없습니다")
+except Exception as e:
+    print(f"제원 변경 중 오류: {{e}}")
+"""
+
+        execution_result = session.execute_python_code(update_code)
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "shaft_variable": shaft_variable,
+            "updated_specs": {
+                "length": length,
+                "outer_diameter": outer_diameter,
+                "bore_diameter": bore_diameter
+            },
+            "execution_result": execution_result
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "session_id": session_id}
+
+
+@mcp.tool()
+def move_shaft(
+    session_id: str,
+    shaft_variable: str,
+    position_x: float,
+    position_y: float,
+    position_z: float
+) -> dict:
+    """
+    축의 위치를 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        shaft_variable (str): 축 변수명 (예: "shaft_1")
+        position_x (float): X축 위치 (mm)
+        position_y (float): Y축 위치 (mm)
+        position_z (float): Z축 위치 (mm)
+
+    Returns:
+        dict: 이동 결과
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {"success": False, "error": "세션이 초기화되지 않았습니다.", "session_id": session_id}
+
+        move_code = f"""
+# 축 위치 변경: {shaft_variable}
+from mastapy._private._math.vector_3d import Vector3D
+
+try:
+    if '{shaft_variable}' in locals() or '{shaft_variable}' in globals():
+        shaft = {shaft_variable}
+        desired_position = Vector3D({position_x}, {position_y}, {position_z}) * MM
+        shaft.set_position_of_component_and_connected_components(desired_position)
+
+        print(f"축 '{{shaft.editable_name}}' 위치 변경 완료")
+        print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
+    else:
+        print(f"오류: 축 '{shaft_variable}'를 찾을 수 없습니다")
+except Exception as e:
+    print(f"위치 변경 중 오류: {{e}}")
+"""
+
+        execution_result = session.execute_python_code(move_code)
+
+        # 세션 추적 목록 업데이트
+        for shaft_info in session.shafts:
+            if shaft_info.get("variable") == shaft_variable:
+                shaft_info["position"] = [position_x, position_y, position_z]
+                break
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "shaft_variable": shaft_variable,
+            "new_position": [position_x, position_y, position_z],
+            "execution_result": execution_result
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "session_id": session_id}
+
+
+@mcp.tool()
 def create_gear_pair(
     session_id: str,
     gear_pair_name: str,
