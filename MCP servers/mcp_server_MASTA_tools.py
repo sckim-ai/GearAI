@@ -2041,6 +2041,14 @@ if __name__ == "__main__":
     print(f"✓ 기어 위치 변경 완료")
     print(f"결과: {remount_gear_result}")
 
+    # 9-1. 기어 모델 파일 저장 (자동 파일명)
+    print("\n[3-4-1] 기어 모델 MASTA 파일 저장 (자동 파일명)")
+    save_gear_result = save_masta_file(
+        session_id=session_id
+    )
+    print(f"✓ 기어 모델 파일 저장 완료")
+    print(f"결과: {save_gear_result}")
+
     # 10. 기어 삭제
     print("\n[3-5] 기어 삭제")
     delete_gear_result = delete_component(
@@ -2101,6 +2109,15 @@ if __name__ == "__main__":
     )
     print(f"✓ 베어링 위치 변경 완료")
     print(f"결과: {bearing_moved}")
+
+    # 12-1. 베어링 포함 모델 파일 저장 (지정 파일명)
+    print("\n[4-3-1] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
+    save_bearing_result = save_masta_file(
+        session_id=session_id,
+        file_name="gear_with_bearing_model"
+    )
+    print(f"✓ 베어링 포함 모델 파일 저장 완료")
+    print(f"결과: {save_bearing_result}")
 
     # 13. 베어링 삭제
     print("\n[4-4] 베어링 삭제")
