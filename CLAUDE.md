@@ -123,5 +123,5 @@ The gear_agent implements a sophisticated multi-agent workflow:
 
 ### 코드
 - 코드는 중복되거나 너무 과하지 않고 간결하게 작성할 것.
-
+- 코드는 메모리, 계산량을 고려하여 효율적으로 구성할 것.
 

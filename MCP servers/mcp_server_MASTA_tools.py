@@ -478,8 +478,6 @@ def create_shaft(
     session_id: str,
     shaft_name: str,
     length: float,
-    outer_diameter: float,
-    bore_diameter: float = 0.0,
     position_x: float = 0.0,
     position_y: float = 0.0,
     position_z: float = 0.0
@@ -489,10 +487,8 @@ def create_shaft(
 
     Args:
         session_id (str): 세션 ID (masta_initialize()로 생성된 ID 필수)
-        shaft_name (str): 축 이름 (Python 변수명 규칙 준수)
+        shaft_name (str): 축 표시 이름 (editable_name으로 설정)
         length (float): 축 길이 (mm)
-        outer_diameter (float): 축 외경 (mm)
-        bore_diameter (float): 축 내경 (mm, 기본값: 0.0)
         position_x (float): X축 위치 (mm, 기본값: 0.0)
         position_y (float): Y축 위치 (mm, 기본값: 0.0)
         position_z (float): Z축 위치 (mm, 기본값: 0.0)
@@ -502,13 +498,14 @@ def create_shaft(
             - success: 성공 여부 (bool)
             - session_id: 세션 ID (str)
             - shaft_name: 생성된 축 이름 (str)
+            - shaft_variable: Python 변수명 (str)
             - shaft_info: 축 정보 (dict)
             - execution_result: 실행 결과 (str)
             - total_shafts: 세션 내 전체 축 개수 (int)
 
     Note:
         - 사전에 masta_initialize()가 완료되어야 합니다
-        - shaft_name은 유효한 Python 변수명이어야 합니다
+        - 축의 외경/내경은 이후 설정 가능합니다
     """
     try:
         session = get_session(session_id)
@@ -527,24 +524,25 @@ def create_shaft(
         }
 
     try:
-        # 축 생성 코드
+        # Python 변수명 생성 (공백, 특수문자 제거)
+        shaft_variable = f"shaft_{len(session.shafts) + 1}"
+
+        # 축 생성 코드 (test.ipynb 패턴 참조)
         shaft_code = f"""
 # 축 생성: {shaft_name}
-{shaft_name} = {session.assembly_name}.add_shaft(
-    length={length}*MM,
-    outer_diameter={outer_diameter}*MM,
-    bore={bore_diameter}*MM
-)
+{shaft_variable} = {session.assembly_name}.add_shaft({length}*MM)
 
-# 축 위치 설정
-import mastapy._math.vector_3d as vector_3d
-position = vector_3d.Vector3D({position_x}, {position_y}, {position_z}) * MM
-{shaft_name}.set_position_of_component_and_connected_components(position)
+# 축 이름 설정
+{shaft_variable}.editable_name = "{shaft_name}"
+
+# 축 위치 설정 (Vector3D 사용)
+from mastapy._private._math.vector_3d import Vector3D
+desired_position = Vector3D({position_x}, {position_y}, {position_z}) * MM
+{shaft_variable}.set_position_of_component_and_connected_components(desired_position)
 
 print(f"축 '{shaft_name}' 생성 완료")
+print(f"  - 변수명: {shaft_variable}")
 print(f"  - 길이: {length} mm")
-print(f"  - 외경: {outer_diameter} mm")
-print(f"  - 내경: {bore_diameter} mm")
 print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
 """
 
@@ -562,9 +560,8 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
         # 세션에 축 정보 저장
         shaft_info = {
             "name": shaft_name,
+            "variable": shaft_variable,
             "length": length,
-            "outer_diameter": outer_diameter,
-            "bore_diameter": bore_diameter,
             "position": [position_x, position_y, position_z]
         }
         session.shafts.append(shaft_info)
@@ -573,6 +570,7 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
             "success": True,
             "session_id": session_id,
             "shaft_name": shaft_name,
+            "shaft_variable": shaft_variable,
             "shaft_info": shaft_info,
             "execution_result": execution_result,
             "total_shafts": len(session.shafts)
@@ -1535,17 +1533,15 @@ if __name__ == "__main__":
     print("\n[2단계] 축 생성 중...")
     shaft_result = create_shaft(
         session_id=session_id,
-        shaft_name="test_shaft",
-        length=100,
-        outer_diameter=30,
-        bore_diameter=0,
+        shaft_name="TestShaft_1",
+        length=160,
         position_x=0,
         position_y=0,
         position_z=0
     )
     print(f"축 생성 결과: {shaft_result['success']}")
     if shaft_result['success']:
-        print(f"생성된 축: {shaft_result['shaft_name']}")
+        print(f"생성된 축: {shaft_result['shaft_name']} (변수: {shaft_result['shaft_variable']})")
 
     # 3. 세션 상태 확인
     print("\n[3단계] 세션 상태 확인...")
@@ -1556,7 +1552,7 @@ if __name__ == "__main__":
     print("\n[4단계] 축 삭제 중...")
     delete_result = delete_component(
         session_id=session_id,
-        component_name="test_shaft"
+        component_name=shaft_result['shaft_variable']  # 변수명 사용
     )
     print(f"축 삭제 결과: {delete_result['success']}")
 
