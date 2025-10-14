@@ -11,7 +11,6 @@ import time
 import subprocess
 from typing import Dict, Optional, Union, List
 import math
-import base64
 
 # 현재 디렉토리를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent))
@@ -362,51 +361,6 @@ def get_session_info() -> dict:
         ]
     }
 
-def _save_model_snapshot(session: SessionData, action_name: str) -> dict:
-    """
-    모델의 현재 상태를 이미지로 저장하는 내부 헬퍼 함수
-
-    Args:
-        session: SessionData 객체
-        action_name: 작업 이름 (예: "after_create_shaft", "after_update_gear")
-
-    Returns:
-        dict: 저장 결과 (success, image_path 등)
-    """
-    try:
-        # 이미지 저장 경로 생성
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        image_filename = f"{action_name}_{timestamp}.png"
-        image_path = os.path.join(session.images_dir, image_filename)
-
-        # 경로를 안전하게 처리 (백슬래시 이스케이프)
-        safe_image_path = image_path.replace('\\', '\\\\')
-
-        # 모델 시각화 코드 생성 및 실행
-        show_code = generate_plot_code(session.assembly_name, safe_image_path)
-        execution_result = session.execute_python_code(show_code)
-
-        # 실행 결과 확인
-        if "Failed to execute" in execution_result:
-            return {
-                "success": False,
-                "error": f"스냅샷 저장 실패: {execution_result}"
-            }
-
-        # 파일 추적 목록에 추가
-        session.add_file(image_path, "image")
-
-        return {
-            "success": True,
-            "image_path": image_path,
-            "action_name": action_name
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"스냅샷 저장 중 오류: {str(e)}"
-        }
-
 # MCP 툴 함수들
 @mcp.tool()
 def masta_initialize() -> dict:
@@ -612,9 +566,6 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
         }
         session.shafts.append(shaft_info)
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_create_shaft_{shaft_name}")
-
         return {
             "success": True,
             "session_id": session_id,
@@ -622,8 +573,7 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
             "shaft_variable": shaft_variable,
             "shaft_info": shaft_info,
             "execution_result": execution_result,
-            "total_shafts": len(session.shafts),
-            "snapshot": snapshot_result
+            "total_shafts": len(session.shafts)
         }
 
     except Exception as e:
@@ -688,9 +638,6 @@ except Exception as e:
 
         execution_result = session.execute_python_code(update_code)
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_update_shaft_{shaft_variable}")
-
         return {
             "success": True,
             "session_id": session_id,
@@ -700,8 +647,7 @@ except Exception as e:
                 "outer_diameter": outer_diameter,
                 "bore_diameter": bore_diameter
             },
-            "execution_result": execution_result,
-            "snapshot": snapshot_result
+            "execution_result": execution_result
         }
 
     except Exception as e:
@@ -761,16 +707,12 @@ except Exception as e:
                 shaft_info["position"] = [position_x, position_y, position_z]
                 break
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_move_shaft_{shaft_variable}")
-
         return {
             "success": True,
             "session_id": session_id,
             "shaft_variable": shaft_variable,
             "new_position": [position_x, position_y, position_z],
-            "execution_result": execution_result,
-            "snapshot": snapshot_result
+            "execution_result": execution_result
         }
 
     except Exception as e:
@@ -899,17 +841,13 @@ print(f"  - 기어비: {wheel_teeth/pinion_teeth:.2f}")
         }
         session.gears.append(gear_info)
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_create_gear_{gear_pair_name}")
-
         return {
             "success": True,
             "session_id": session_id,
             "gear_pair_name": gear_pair_name,
             "gear_info": gear_info,
             "execution_result": execution_result,
-            "total_gears": len(session.gears),
-            "snapshot": snapshot_result
+            "total_gears": len(session.gears)
         }
 
     except ValueError as e:
@@ -976,9 +914,6 @@ print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
         # 코드 실행
         execution_result = session.execute_python_code(mount_code)
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_mount_gear_{gear_pair_name}")
-
         return {
             "success": True,
             "session_id": session_id,
@@ -989,8 +924,7 @@ print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
                 "pinion_position": pinion_position,
                 "wheel_position": wheel_position
             },
-            "execution_result": execution_result,
-            "snapshot": snapshot_result
+            "execution_result": execution_result
         }
 
     except ValueError as e:
@@ -1131,9 +1065,6 @@ except Exception as e:
                     gear_info["wheel_profile_shift"] = wheel_profile_shift
                 break
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_update_gear_{gear_pair_name}")
-
         return {
             "success": True,
             "session_id": session_id,
@@ -1150,8 +1081,7 @@ except Exception as e:
                 "pinion_profile_shift": pinion_profile_shift,
                 "wheel_profile_shift": wheel_profile_shift
             },
-            "execution_result": execution_result,
-            "snapshot": snapshot_result
+            "execution_result": execution_result
         }
 
     except Exception as e:
@@ -1245,17 +1175,13 @@ print(f"  - Designation: {bearing_designation}")
         }
         session.bearings.append(bearing_info)
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_create_bearing_{bearing_name}")
-
         return {
             "success": True,
             "session_id": session_id,
             "bearing_name": bearing_name,
             "bearing_info": bearing_info,
             "execution_result": execution_result,
-            "total_bearings": len(session.bearings),
-            "snapshot": snapshot_result
+            "total_bearings": len(session.bearings)
         }
 
     except ValueError as e:
@@ -1778,15 +1704,11 @@ except Exception as e:
         session.gears = [g for g in session.gears if g.get("variable") != component_name and g.get("name") != component_name]
         session.bearings = [b for b in session.bearings if b.get("name") != component_name]
 
-        # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"after_delete_{component_name}")
-
         return {
             "success": True,
             "session_id": session_id,
             "component_name": component_name,
-            "execution_result": execution_result,
-            "snapshot": snapshot_result
+            "execution_result": execution_result
         }
 
     except ValueError as e:
@@ -1910,189 +1832,6 @@ except Exception as e:
         return {
             "success": False,
             "error": f"컴포넌트 전체 삭제 중 오류: {str(e)}",
-            "session_id": session_id
-        }
-
-
-@mcp.tool()
-def show_snapshot(image_path: str) -> dict:
-    """
-    이미지 파일을 읽어서 base64로 인코딩하여 반환합니다.
-    Claude Desktop에서 이미지를 표시할 수 있도록 합니다.
-
-    Args:
-        image_path (str): 이미지 파일 경로 (절대 경로)
-
-    Returns:
-        dict: 이미지 정보
-            - success: 성공 여부 (bool)
-            - image_path: 이미지 파일 경로 (str)
-            - image_base64: base64 인코딩된 이미지 데이터 (str)
-            - image_format: 이미지 포맷 (str, 예: "png", "jpg")
-            - file_size: 파일 크기 (bytes)
-            - message: 결과 메시지 (str)
-
-    Note:
-        - 반환된 image_base64를 사용하여 HTML img 태그로 표시 가능:
-          <img src="data:image/png;base64,{image_base64}">
-        - Claude Desktop의 artifact에서 이미지를 표시할 수 있습니다
-    """
-    try:
-        # 파일 존재 확인
-        if not os.path.exists(image_path):
-            return {
-                "success": False,
-                "error": f"이미지 파일을 찾을 수 없습니다: {image_path}"
-            }
-
-        # 파일 확장자 확인
-        file_ext = os.path.splitext(image_path)[1].lower()
-        image_format_map = {
-            '.png': 'png',
-            '.jpg': 'jpeg',
-            '.jpeg': 'jpeg',
-            '.gif': 'gif',
-            '.bmp': 'bmp',
-            '.webp': 'webp'
-        }
-
-        image_format = image_format_map.get(file_ext, 'png')
-
-        # 이미지 파일 읽기 및 base64 인코딩
-        with open(image_path, 'rb') as image_file:
-            image_data = image_file.read()
-            image_base64 = base64.b64encode(image_data).decode('utf-8')
-            file_size = len(image_data)
-
-        return {
-            "success": True,
-            "image_path": image_path,
-            "image_base64": image_base64,
-            "image_format": image_format,
-            "file_size": file_size,
-            "message": f"이미지를 성공적으로 로드했습니다 ({file_size:,} bytes)",
-            "html_tag": f'<img src="data:image/{image_format};base64,{image_base64}" alt="MASTA Model Snapshot" style="max-width: 100%; height: auto;">'
-        }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"이미지 로드 중 오류: {str(e)}",
-            "image_path": image_path
-        }
-
-
-@mcp.tool()
-def get_latest_snapshot(session_id: str) -> dict:
-    """
-    세션의 가장 최근 스냅샷 이미지를 가져옵니다.
-
-    Args:
-        session_id (str): 세션 ID
-
-    Returns:
-        dict: 최신 스냅샷 정보
-            - success: 성공 여부 (bool)
-            - image_path: 최신 이미지 파일 경로 (str)
-            - image_base64: base64 인코딩된 이미지 데이터 (str)
-            - image_format: 이미지 포맷 (str)
-            - created_at: 생성 시간 (str)
-            - message: 결과 메시지 (str)
-    """
-    try:
-        session = get_session(session_id)
-
-        # 이미지 파일만 필터링
-        image_files = [f for f in session.files if f.get("type") == "image"]
-
-        if not image_files:
-            return {
-                "success": False,
-                "error": "저장된 스냅샷이 없습니다.",
-                "session_id": session_id
-            }
-
-        # 가장 최근 파일 찾기
-        latest_file = max(image_files, key=lambda x: x.get("created_at", ""))
-        image_path = latest_file["path"]
-
-        # 이미지 로드
-        snapshot_result = show_snapshot(image_path)
-
-        if snapshot_result["success"]:
-            snapshot_result["created_at"] = latest_file.get("created_at")
-            snapshot_result["session_id"] = session_id
-
-        return snapshot_result
-
-    except ValueError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "session_id": session_id
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"최신 스냅샷 조회 중 오류: {str(e)}",
-            "session_id": session_id
-        }
-
-
-@mcp.tool()
-def list_snapshots(session_id: str) -> dict:
-    """
-    세션의 모든 스냅샷 목록을 반환합니다.
-
-    Args:
-        session_id (str): 세션 ID
-
-    Returns:
-        dict: 스냅샷 목록
-            - success: 성공 여부 (bool)
-            - session_id: 세션 ID (str)
-            - snapshots: 스냅샷 목록 (list)
-            - total_count: 전체 스냅샷 개수 (int)
-    """
-    try:
-        session = get_session(session_id)
-
-        # 이미지 파일만 필터링
-        image_files = [f for f in session.files if f.get("type") == "image"]
-
-        # 파일명에서 작업 정보 추출
-        snapshots = []
-        for img_file in image_files:
-            file_path = img_file["path"]
-            file_name = os.path.basename(file_path)
-
-            snapshots.append({
-                "path": file_path,
-                "name": file_name,
-                "created_at": img_file.get("created_at"),
-                "size": os.path.getsize(file_path) if os.path.exists(file_path) else 0
-            })
-
-        # 시간순 정렬 (최신순)
-        snapshots.sort(key=lambda x: x["created_at"], reverse=True)
-
-        return {
-            "success": True,
-            "session_id": session_id,
-            "snapshots": snapshots,
-            "total_count": len(snapshots)
-        }
-
-    except ValueError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "session_id": session_id
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"스냅샷 목록 조회 중 오류: {str(e)}",
             "session_id": session_id
         }
 
