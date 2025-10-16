@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import io
 from pathlib import Path
 import datetime
 import json
@@ -12,6 +13,11 @@ import subprocess
 from typing import Dict, Optional, Union, List
 import math
 import base64
+
+# UTF-8 출력 설정
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # 현재 디렉토리를 Python path에 추가
 sys.path.insert(0, str(Path(__file__).parent))
@@ -2687,16 +2693,26 @@ if __name__ == "__main__":
     print("=" * 80)
 
     # 10. 베어링 생성 (자동 선택)
-    print("\n[4-1] 베어링 생성")
+    print("\n[4-1] 베어링 생성 (미장착)")
     bearing_result = create_bearing(
         session_id=session_id,
         bearing_name="test_bearing",
-        shaft_name=shaft1_result['shaft_variable'],
-        position=40,
         auto_select_by_diameter=30
     )
     print(f"[OK] 베어링 생성: {bearing_result['bearing_name']}")
     print(f"결과: {bearing_result}")
+
+    # 10-1. 베어링 장착
+    print("\n[4-1-1] 베어링 축에 장착")
+    shaft_name = shaft1_result['shaft_info']['name']
+    bearing_mount_result = mount_bearing(
+        session_id=session_id,
+        bearing_name="test_bearing",
+        shaft_name=shaft_name,
+        position=40.0
+    )
+    print(f"[OK] 베어링 장착: {bearing_mount_result['shaft_name']} at {bearing_mount_result['position']}mm")
+    print(f"결과: {bearing_mount_result}")
 
     # 11. 베어링 제원 변경 (update_bearing_specs 사용)
     print("\n[4-2] 베어링 제원 변경 (designation 변경)")
@@ -2708,18 +2724,51 @@ if __name__ == "__main__":
     print(f"[OK] 베어링 제원 변경 완료 (6208)")
     print(f"결과: {bearing_update_result}")
 
-    # 12. 베어링 위치 변경 (move_bearing 사용)
-    print("\n[4-3] 베어링 위치 변경")
-    bearing_move_result = move_bearing(
+    # 12. 베어링 위치 변경 (mount_bearing 재사용)
+    print("\n[4-3] 베어링 위치 변경 (40mm -> 80mm)")
+    bearing_move_result = mount_bearing(
         session_id=session_id,
-        bearing_name=bearing_result['bearing_name'],
-        position=60  # 40 -> 60으로 이동
+        bearing_name="test_bearing",
+        shaft_name=shaft_name,
+        position=80.0
     )
-    print(f"[OK] 베어링 위치 변경 완료")
+    print(f"[OK] 베어링 위치 변경: {bearing_move_result['position']}mm")
     print(f"결과: {bearing_move_result}")
 
-    # 12-1. 베어링 포함 모델 파일 저장 (지정 파일명)
-    print("\n[4-3-1] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
+    # 12-1. move_bearing (deprecated) 테스트
+    print("\n[4-3-1] move_bearing (deprecated) 테스트")
+    bearing_move_result2 = move_bearing(
+        session_id=session_id,
+        bearing_name=bearing_result['bearing_name'],
+        position=60.0  # 80 -> 60으로 이동
+    )
+    print(f"[OK] move_bearing 완료: {bearing_move_result2.get('new_position')}mm")
+    if 'deprecated_warning' in bearing_move_result2:
+        print(f"⚠ {bearing_move_result2['deprecated_warning']}")
+    print(f"결과: {bearing_move_result2}")
+
+    # 12-2. 베어링 해제 테스트
+    print("\n[4-3-2] 베어링 해제 (unmount)")
+    bearing_unmount_result = unmount_bearing(
+        session_id=session_id,
+        bearing_name="test_bearing"
+    )
+    print(f"[OK] 베어링 해제 완료")
+    print(f"결과: {bearing_unmount_result}")
+
+    # 12-3. 베어링 재장착 테스트
+    print("\n[4-3-3] 베어링 재장착 (30mm)")
+    bearing_remount_result = mount_bearing(
+        session_id=session_id,
+        bearing_name="test_bearing",
+        shaft_name=shaft_name,
+        position=30.0
+    )
+    print(f"[OK] 베어링 재장착: {bearing_remount_result['position']}mm")
+    print(f"결과: {bearing_remount_result}")
+
+    # 12-4. 베어링 포함 모델 파일 저장 (지정 파일명)
+    print("\n[4-4] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
     save_bearing_result = save_masta_file(
         session_id=session_id,
         file_name="gear_with_bearing_model"
