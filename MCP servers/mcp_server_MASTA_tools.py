@@ -969,7 +969,12 @@ def mount_gear_on_shaft(
     wheel_position: float
 ) -> dict:
     """
-    기어를 축에 장착합니다.
+    기어를 축에 장착하거나 위치를 변경합니다.
+
+    이 함수는 기어의 현재 장착 상태를 확인하고 다음과 같이 동작합니다:
+    1. 기어가 장착되지 않은 경우: 새로 장착
+    2. 같은 축에 이미 장착된 경우: 위치만 변경 (연결 유지)
+    3. 다른 축에 장착된 경우: 기존 연결 제거 후 새 축에 장착
 
     Args:
         session_id (str): 세션 ID
@@ -991,20 +996,79 @@ def mount_gear_on_shaft(
                 "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
             }
 
-        # 기어 장착 코드
+        # 기어 장착/위치 변경 코드
         mount_code = f"""
-# 기어 장착: {gear_pair_name}
+# 기어 장착/위치 변경: {gear_pair_name}
 # 기어 쌍에서 피니언과 휠 참조
 pinion_mount = {gear_pair_name}.cylindrical_gears[0]
 wheel_mount = {gear_pair_name}.cylindrical_gears[1]
 
-# 축에 기어 장착
-{pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-{wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
+# 피니언 처리
+if pinion_mount.is_mounted:
+    # 이미 장착된 경우
+    current_conn = pinion_mount.inner_connection
+    current_shaft = current_conn.shaft
 
-print(f"기어 장착 완료:")
-print(f"  - 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
-print(f"  - 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
+    if current_shaft.name == "{pinion_shaft_name}":
+        # 같은 축: 위치만 변경 (연결의 AxialPosition 속성 수정 시도)
+        try:
+            # Connection의 wrapped 객체에서 AxialPosition 속성 찾기
+            if hasattr(current_conn.wrapped, 'AxialPosition'):
+                current_conn.wrapped.AxialPosition = {pinion_position}*MM
+                print(f"[위치 변경] 피니언: {{current_shaft.name}}에서 {pinion_position}mm로 위치 변경")
+            else:
+                # AxialPosition이 없으면 재장착
+                print(f"[재장착] 피니언: 위치 변경 불가, 재장착 수행")
+                # 재장착은 MASTA API에서 자동으로 기존 연결을 처리
+                {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
+                print(f"[재장착 완료] 피니언: {{current_shaft.name}}에 {pinion_position}mm 위치에 재장착")
+        except Exception as e:
+            print(f"[오류] 피니언 위치 변경 실패: {{e}}")
+            # 오류 발생 시 재장착 시도
+            {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
+            print(f"[재장착 완료] 피니언: {{current_shaft.name}}에 {pinion_position}*MM 위치에 재장착")
+    else:
+        # 다른 축: 재장착 (MASTA API가 자동으로 기존 연결 제거)
+        print(f"[축 변경] 피니언: {{current_shaft.name}} -> {pinion_shaft_name}")
+        {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
+        print(f"[장착 완료] 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
+else:
+    # 처음 장착
+    {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
+    print(f"[신규 장착] 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
+
+# 휠 처리
+if wheel_mount.is_mounted:
+    # 이미 장착된 경우
+    current_conn = wheel_mount.inner_connection
+    current_shaft = current_conn.shaft
+
+    if current_shaft.name == "{wheel_shaft_name}":
+        # 같은 축: 위치만 변경
+        try:
+            if hasattr(current_conn.wrapped, 'AxialPosition'):
+                current_conn.wrapped.AxialPosition = {wheel_position}*MM
+                print(f"[위치 변경] 휠: {{current_shaft.name}}에서 {wheel_position}mm로 위치 변경")
+            else:
+                # AxialPosition이 없으면 재장착
+                print(f"[재장착] 휠: 위치 변경 불가, 재장착 수행")
+                {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
+                print(f"[재장착 완료] 휠: {{current_shaft.name}}에 {wheel_position}mm 위치에 재장착")
+        except Exception as e:
+            print(f"[오류] 휠 위치 변경 실패: {{e}}")
+            {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
+            print(f"[재장착 완료] 휠: {{current_shaft.name}}에 {wheel_position}mm 위치에 재장착")
+    else:
+        # 다른 축: 재장착
+        print(f"[축 변경] 휠: {{current_shaft.name}} -> {wheel_shaft_name}")
+        {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
+        print(f"[장착 완료] 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
+else:
+    # 처음 장착
+    {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
+    print(f"[신규 장착] 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
+
+print(f"\\n기어 장착/위치 변경 완료")
 """
 
         # 코드 실행
