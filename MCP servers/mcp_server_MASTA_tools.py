@@ -1945,6 +1945,318 @@ def move_bearing(
         }
 
 
+# ============================================================================
+# Power Load 함수들
+# ============================================================================
+
+@mcp.tool()
+def create_power_load(
+    session_id: str,
+    power_load_name: str,
+    is_input: bool = True
+) -> dict:
+    """
+    Power Load를 생성합니다 (축에 장착하지 않음).
+
+    Args:
+        session_id (str): 세션 ID
+        power_load_name (str): Power Load 이름
+        is_input (bool): 입력 파워 로드 여부 (True: 입력, False: 출력)
+
+    Returns:
+        dict: Power Load 생성 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - power_load_name: Power Load 이름 (str)
+            - power_load_info: Power Load 정보 (dict)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Power Load 생성 코드
+        power_load_code = f"""
+# Power Load 생성: {power_load_name}
+{power_load_name} = {session.assembly_name}.add_power_load('{power_load_name}')
+
+print(f"Power Load '{{power_load_name}}' 생성 완료 (미장착 상태)")
+print(f"  - 타입: {'입력' if is_input else '출력'}")
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(power_load_code)
+
+        # 세션에 Power Load 정보 저장
+        power_load_info = {
+            "name": power_load_name,
+            "variable": power_load_name,
+            "is_input": is_input,
+            "mounted": False
+        }
+
+        # power_loads 리스트가 없으면 생성
+        if not hasattr(session, 'power_loads'):
+            session.power_loads = []
+        session.power_loads.append(power_load_info)
+
+        # 입력 파워 로드인 경우 assembly.design_properties에 설정
+        if is_input:
+            set_input_code = f"""
+# 입력 파워 로드로 설정
+{session.assembly_name}.design_properties.input_power_load = {power_load_name}
+print(f"입력 파워 로드로 설정 완료")
+"""
+            session.execute_python_code(set_input_code)
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"create_power_load_{power_load_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "power_load_name": power_load_name,
+            "power_load_info": power_load_info,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Power Load 생성 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def mount_power_load(
+    session_id: str,
+    power_load_name: str,
+    shaft_name: str,
+    position: float
+) -> dict:
+    """
+    Power Load를 축에 장착합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        power_load_name (str): Power Load 이름
+        shaft_name (str): 장착할 축 이름
+        position (float): 축 상 장착 위치 (mm)
+
+    Returns:
+        dict: 장착 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - power_load_name: Power Load 이름 (str)
+            - shaft_name: 축 이름 (str)
+            - position: 장착 위치 (float)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Power Load 정보 찾기
+        power_load_info = None
+        if hasattr(session, 'power_loads'):
+            for pl in session.power_loads:
+                if pl.get("name") == power_load_name:
+                    power_load_info = pl
+                    break
+
+        if not power_load_info:
+            return {
+                "success": False,
+                "error": f"Power Load '{power_load_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        # 축 변수명 찾기
+        shaft_variable, error = find_shaft_variable(session, shaft_name)
+        if error:
+            return error
+
+        power_load_variable = power_load_info.get("variable")
+
+        # 헬퍼 함수로 장착 코드 생성
+        mount_logic = generate_mount_unmount_code(
+            power_load_variable, shaft_variable, position, "Power Load", indent="    "
+        )
+
+        mount_code = f"""
+# Power Load 장착: {power_load_name} -> {shaft_name}
+try:
+    power_load = {power_load_variable}
+    shaft = {shaft_variable}
+
+{mount_logic}
+
+    print(f"  - is_mounted: {{power_load.is_mounted}}")
+except Exception as e:
+    print(f"Power Load 장착 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(mount_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"Power Load 장착 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 세션 추적 목록 업데이트
+        power_load_info["mounted"] = True
+        power_load_info["shaft_name"] = shaft_name
+        power_load_info["shaft_variable"] = shaft_variable
+        power_load_info["position"] = position
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"mount_power_load_{power_load_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "power_load_name": power_load_name,
+            "shaft_name": shaft_name,
+            "position": position,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Power Load 장착 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def unmount_power_load(
+    session_id: str,
+    power_load_name: str
+) -> dict:
+    """
+    Power Load를 축에서 해제합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        power_load_name (str): Power Load 이름
+
+    Returns:
+        dict: 해제 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - power_load_name: Power Load 이름 (str)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Power Load 정보 찾기
+        power_load_info = None
+        if hasattr(session, 'power_loads'):
+            for pl in session.power_loads:
+                if pl.get("name") == power_load_name:
+                    power_load_info = pl
+                    break
+
+        if not power_load_info:
+            return {
+                "success": False,
+                "error": f"Power Load '{power_load_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        power_load_variable = power_load_info.get("variable")
+
+        # Power Load 해제 코드 생성
+        unmount_code = f"""
+# Power Load 해제: {power_load_name}
+try:
+    power_load = {power_load_variable}
+
+    if power_load.is_mounted:
+        current_conn = power_load.inner_connection
+        print(f"[해제] Power Load: {{power_load.editable_name}}")
+        current_conn.delete()
+        print(f"[해제 완료] is_mounted: {{power_load.is_mounted}}")
+    else:
+        print(f"[경고] Power Load '{{power_load.editable_name}}'가 이미 해제된 상태입니다")
+except Exception as e:
+    print(f"Power Load 해제 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(unmount_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"Power Load 해제 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 세션 추적 목록 업데이트
+        power_load_info["mounted"] = False
+        power_load_info.pop("shaft_name", None)
+        power_load_info.pop("shaft_variable", None)
+        power_load_info.pop("position", None)
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"unmount_power_load_{power_load_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "power_load_name": power_load_name,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Power Load 해제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
 @mcp.tool()
 def show_model(session_id: str, save_image: bool = True) -> dict:
     """
