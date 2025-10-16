@@ -1009,27 +1009,27 @@ if pinion_mount.is_mounted:
     current_conn = pinion_mount.inner_connection
     current_shaft = current_conn.shaft
 
-    if current_shaft.name == "{pinion_shaft_name}":
+    if current_shaft.wrapped.Name == "{pinion_shaft_name}":
         # 같은 축: 위치만 변경 (연결의 AxialPosition 속성 수정 시도)
         try:
             # Connection의 wrapped 객체에서 AxialPosition 속성 찾기
             if hasattr(current_conn.wrapped, 'AxialPosition'):
                 current_conn.wrapped.AxialPosition = {pinion_position}*MM
-                print(f"[위치 변경] 피니언: {{current_shaft.name}}에서 {pinion_position}mm로 위치 변경")
+                print(f"[위치 변경] 피니언: {{current_shaft.wrapped.Name}}에서 {pinion_position}mm로 위치 변경")
             else:
                 # AxialPosition이 없으면 재장착
                 print(f"[재장착] 피니언: 위치 변경 불가, 재장착 수행")
                 # 재장착은 MASTA API에서 자동으로 기존 연결을 처리
                 {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-                print(f"[재장착 완료] 피니언: {{current_shaft.name}}에 {pinion_position}mm 위치에 재장착")
+                print(f"[재장착 완료] 피니언: {{current_shaft.wrapped.Name}}에 {pinion_position}mm 위치에 재장착")
         except Exception as e:
             print(f"[오류] 피니언 위치 변경 실패: {{e}}")
             # 오류 발생 시 재장착 시도
             {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-            print(f"[재장착 완료] 피니언: {{current_shaft.name}}에 {pinion_position}*MM 위치에 재장착")
+            print(f"[재장착 완료] 피니언: {{current_shaft.wrapped.Name}}에 {pinion_position}*MM 위치에 재장착")
     else:
         # 다른 축: 재장착 (MASTA API가 자동으로 기존 연결 제거)
-        print(f"[축 변경] 피니언: {{current_shaft.name}} -> {pinion_shaft_name}")
+        print(f"[축 변경] 피니언: {{current_shaft.wrapped.Name}} -> {pinion_shaft_name}")
         {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
         print(f"[장착 완료] 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
 else:
@@ -1043,24 +1043,24 @@ if wheel_mount.is_mounted:
     current_conn = wheel_mount.inner_connection
     current_shaft = current_conn.shaft
 
-    if current_shaft.name == "{wheel_shaft_name}":
+    if current_shaft.wrapped.Name == "{wheel_shaft_name}":
         # 같은 축: 위치만 변경
         try:
             if hasattr(current_conn.wrapped, 'AxialPosition'):
                 current_conn.wrapped.AxialPosition = {wheel_position}*MM
-                print(f"[위치 변경] 휠: {{current_shaft.name}}에서 {wheel_position}mm로 위치 변경")
+                print(f"[위치 변경] 휠: {{current_shaft.wrapped.Name}}에서 {wheel_position}mm로 위치 변경")
             else:
                 # AxialPosition이 없으면 재장착
                 print(f"[재장착] 휠: 위치 변경 불가, 재장착 수행")
                 {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
-                print(f"[재장착 완료] 휠: {{current_shaft.name}}에 {wheel_position}mm 위치에 재장착")
+                print(f"[재장착 완료] 휠: {{current_shaft.wrapped.Name}}에 {wheel_position}mm 위치에 재장착")
         except Exception as e:
             print(f"[오류] 휠 위치 변경 실패: {{e}}")
             {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
-            print(f"[재장착 완료] 휠: {{current_shaft.name}}에 {wheel_position}mm 위치에 재장착")
+            print(f"[재장착 완료] 휠: {{current_shaft.wrapped.Name}}에 {wheel_position}mm 위치에 재장착")
     else:
         # 다른 축: 재장착
-        print(f"[축 변경] 휠: {{current_shaft.name}} -> {wheel_shaft_name}")
+        print(f"[축 변경] 휠: {{current_shaft.wrapped.Name}} -> {wheel_shaft_name}")
         {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
         print(f"[장착 완료] 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
 else:
