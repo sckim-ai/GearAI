@@ -645,14 +645,14 @@ def update_shaft_specs(
     축의 제원을 변경합니다.
 
     IMPORTANT:
-        - length는 MASTA API에서 읽기 전용이므로 변경 불가합니다.
-        - outer_diameter와 bore_diameter는 add_section() 메서드를 사용하여 변경합니다.
-        - 기존 섹션을 모두 제거하고 새로운 섹션을 추가하는 방식입니다.
+        - length는 ShaftProfile을 재구성하여 변경합니다.
+        - outer_diameter와 bore_diameter는 ShaftProfile을 재구성하여 변경합니다.
+        - 기존 프로파일을 클리어하고 새로운 프로파일 포인트를 추가하는 방식입니다.
 
     Args:
         session_id (str): 세션 ID
         shaft_variable (str): 축 변수명 (예: "shaft_1")
-        length (float): 축 길이 (mm, 읽기 전용 - 변경 불가)
+        length (float): 축 길이 (mm)
         outer_diameter (float): 축 외경 (mm)
         bore_diameter (float): 축 내경 (mm)
 
@@ -670,38 +670,43 @@ def update_shaft_specs(
 try:
     if '{shaft_variable}' in locals() or '{shaft_variable}' in globals():
         shaft = {shaft_variable}
+
+        # 현재 제원 가져오기
         current_length = shaft.length
+        current_points = shaft.active_definition.outer_profile.points
+        current_od = current_points[0].diameter if len(current_points) > 0 else 30*MM
 
-        # 제원 변경을 위해 섹션 재구성
-        """
+        inner_points = shaft.active_definition.inner_profile.points
+        current_id = inner_points[0].diameter if len(inner_points) > 0 else 0*MM
 
-        if outer_diameter is not None or bore_diameter is not None:
-            od = outer_diameter if outer_diameter is not None else "shaft.active_definition.sections[0].start_outer_diameter"
-            bd = bore_diameter if bore_diameter is not None else "shaft.active_definition.sections[0].start_inner_diameter"
+        # 새로운 제원 설정
+        new_length = {length}*MM if {length} is not None else current_length
+        new_od = {outer_diameter}*MM if {outer_diameter} is not None else current_od
+        new_id = {bore_diameter}*MM if {bore_diameter} is not None else current_id
 
-            update_code += f"""
-        # 기존 섹션 제거
-        shaft.remove_all_sections()
+        # Outer profile 재구성
+        outer_profile = shaft.active_definition.outer_profile
+        outer_profile.clear()
+        outer_profile.add_profile_point(0, new_od)
+        outer_profile.add_profile_point(new_length, new_od)
+        outer_profile.make_valid()
 
-        # 새로운 섹션 추가 (전체 길이에 대해 동일한 직경)
-        shaft.add_section(
-            start_offset=0,
-            end_offset=current_length,
-            start_outer={od}*MM,
-            start_inner={bd}*MM,
-            end_outer={od}*MM,
-            end_inner={bd}*MM
-        )
+        # Inner profile 재구성
+        inner_profile = shaft.active_definition.inner_profile
+        inner_profile.clear()
+        inner_profile.add_profile_point(0, new_id)
+        inner_profile.add_profile_point(new_length, new_id)
+        inner_profile.make_valid()
+
         print(f"축 '{{shaft.editable_name}}' 제원 변경 완료")
         """
 
-            if outer_diameter is not None:
-                update_code += f"\n        print(f'  - 외경: {outer_diameter} mm')"
-            if bore_diameter is not None:
-                update_code += f"\n        print(f'  - 내경: {bore_diameter} mm')"
-
         if length is not None:
-            update_code += f"\n        print('  - 길이: 변경 불가 (읽기 전용 속성)')"
+            update_code += f"\n        print(f'  - 길이: {length} mm (변경 후: {{shaft.length*1000:.1f}} mm)')"
+        if outer_diameter is not None:
+            update_code += f"\n        print(f'  - 외경: {outer_diameter} mm')"
+        if bore_diameter is not None:
+            update_code += f"\n        print(f'  - 내경: {bore_diameter} mm')"
 
         update_code += f"""
     else:
@@ -722,7 +727,7 @@ except Exception as e:
             "session_id": session_id,
             "shaft_variable": shaft_variable,
             "updated_specs": {
-                "length": "read-only (cannot be changed)" if length is not None else None,
+                "length": length,
                 "outer_diameter": outer_diameter,
                 "bore_diameter": bore_diameter
             },
