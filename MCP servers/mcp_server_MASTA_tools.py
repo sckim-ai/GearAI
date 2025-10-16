@@ -1298,10 +1298,12 @@ def create_bearing(
                 break
 
         if not shaft_variable:
+            available_shafts = [s.get("name") for s in session.shafts]
             return {
                 "success": False,
-                "error": f"축 '{shaft_name}'를 찾을 수 없습니다.",
-                "session_id": session_id
+                "error": f"축 '{shaft_name}'를 찾을 수 없습니다. 사용 가능한 축: {available_shafts}",
+                "session_id": session_id,
+                "bearing_name": bearing_name
             }
 
         # 베어링 생성 코드
@@ -1360,13 +1362,15 @@ print(f"  - is_mounted: {{{bearing_name}.is_mounted}}")
         return {
             "success": False,
             "error": str(e),
-            "session_id": session_id
+            "session_id": session_id,
+            "bearing_name": bearing_name
         }
     except Exception as e:
         return {
             "success": False,
             "error": f"베어링 생성 중 오류: {str(e)}",
-            "session_id": session_id
+            "session_id": session_id,
+            "bearing_name": bearing_name
         }
 
 
