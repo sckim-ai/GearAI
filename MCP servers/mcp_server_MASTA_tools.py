@@ -645,9 +645,9 @@ def update_shaft_specs(
     축의 제원을 변경합니다.
 
     IMPORTANT:
-        - length는 ShaftProfile을 재구성하여 변경합니다.
-        - outer_diameter와 bore_diameter는 ShaftProfile을 재구성하여 변경합니다.
-        - 기존 프로파일을 클리어하고 새로운 프로파일 포인트를 추가하는 방식입니다.
+        - length는 기존 프로파일 포인트의 offset을 수정하여 변경합니다.
+        - outer_diameter와 bore_diameter는 기존 프로파일 포인트의 diameter를 수정하여 변경합니다.
+        - 기존 프로파일 포인트를 직접 수정하는 효율적인 방식입니다.
 
     Args:
         session_id (str): 세션 ID
@@ -671,32 +671,35 @@ try:
     if '{shaft_variable}' in locals() or '{shaft_variable}' in globals():
         shaft = {shaft_variable}
 
-        # 현재 제원 가져오기
-        current_length = shaft.length
-        current_points = shaft.active_definition.outer_profile.points
-        current_od = current_points[0].diameter if len(current_points) > 0 else 30*MM
-
+        # 기존 프로파일 포인트 가져오기
+        outer_points = shaft.active_definition.outer_profile.points
         inner_points = shaft.active_definition.inner_profile.points
-        current_id = inner_points[0].diameter if len(inner_points) > 0 else 0*MM
 
-        # 새로운 제원 설정
-        new_length = {length}*MM if {length} is not None else current_length
-        new_od = {outer_diameter}*MM if {outer_diameter} is not None else current_od
-        new_id = {bore_diameter}*MM if {bore_diameter} is not None else current_id
+        # 기존 포인트가 충분한지 확인 (최소 2개 필요: 시작, 끝)
+        if len(outer_points) < 2 or len(inner_points) < 2:
+            raise ValueError("프로파일 포인트가 충분하지 않습니다. 최소 2개 필요")
 
-        # Outer profile 재구성
-        outer_profile = shaft.active_definition.outer_profile
-        outer_profile.clear()
-        outer_profile.add_profile_point(0, new_od)
-        outer_profile.add_profile_point(new_length, new_od)
-        outer_profile.make_valid()
+        # 길이 변경
+        if {length} is not None:
+            new_length = {length}*MM
+            outer_points[-1].offset = new_length
+            inner_points[-1].offset = new_length
 
-        # Inner profile 재구성
-        inner_profile = shaft.active_definition.inner_profile
-        inner_profile.clear()
-        inner_profile.add_profile_point(0, new_id)
-        inner_profile.add_profile_point(new_length, new_id)
-        inner_profile.make_valid()
+        # 외경 변경 (모든 outer 포인트)
+        if {outer_diameter} is not None:
+            new_od = {outer_diameter}*MM
+            for point in outer_points:
+                point.diameter = new_od
+
+        # 내경 변경 (모든 inner 포인트)
+        if {bore_diameter} is not None:
+            new_id = {bore_diameter}*MM
+            for point in inner_points:
+                point.diameter = new_id
+
+        # 프로파일 유효성 검증
+        shaft.active_definition.outer_profile.make_valid()
+        shaft.active_definition.inner_profile.make_valid()
 
         print(f"축 '{{shaft.editable_name}}' 제원 변경 완료")
         """
