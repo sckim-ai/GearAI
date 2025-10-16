@@ -680,19 +680,19 @@ try:
             raise ValueError("프로파일 포인트가 충분하지 않습니다. 최소 2개 필요")
 
         # 길이 변경
-        if {length} is not None:
+        if {length} != None:
             new_length = {length}*MM
             outer_points[-1].offset = new_length
             inner_points[-1].offset = new_length
 
         # 외경 변경 (모든 outer 포인트)
-        if {outer_diameter} is not None:
+        if {outer_diameter} != None:
             new_od = {outer_diameter}*MM
             for point in outer_points:
                 point.diameter = new_od
 
         # 내경 변경 (모든 inner 포인트)
-        if {bore_diameter} is not None:
+        if {bore_diameter} != None:
             new_id = {bore_diameter}*MM
             for point in inner_points:
                 point.diameter = new_id

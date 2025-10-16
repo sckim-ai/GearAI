@@ -1,0 +1,120 @@
+[10/16/25 14:46:47] WARNING  Python REPL can execute arbitrary     python.py:17
+                             code. Use with caution.                           
+Traceback (most recent call last):
+  File "<string>", line 18, in <module>
+  File "d:\SW\Streamlit\.venv\Lib\site-packages\mastapy\_private\_internal\dataclasses.py", line 25, in _extended_setattr
+    raise FrozenInstanceError(f"cannot assign to field {name!r}") from None
+dataclasses.FrozenInstanceError: cannot assign to field 'nominal_profile_shift_coefficient'
+Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+  File "d:\SW\Streamlit\.venv\Lib\site-packages\mastapy\_private\_internal\type_enforcement.py", line 234, in wrapper_enforce_parameter_types
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "d:\SW\Streamlit\.venv\Lib\site-packages\mastapy\_private\system_model\part_model\shaft_model\_2549.py", line 438, in mount_component
+    pythonnet_method_call(
+  File "d:\SW\Streamlit\.venv\Lib\site-packages\mastapy\_private\_internal\python_net.py", line 156, in pythonnet_method_call
+    return found_method(*args)
+           ^^^^^^^^^^^^^^^^^^^
+SMT.MAA.Exceptions.ConnectionException: Attempt to connect incompatible sockets
+================================================================================
+MASTA Tools MCP Server - 통합 테스트 모드
+================================================================================
+
+[1단계] MASTA 초기화
+--------------------------------------------------------------------------------
+초기화 결과: True
+세션 ID: e306f321...
+
+================================================================================
+축(Shaft) 테스트: 생성 → 제원 변경 → 이동 → 삭제
+================================================================================
+
+[2-1] 축 생성
+[OK] 축 생성: shaft_1
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'shaft_name': 'TestShaft_1', 'shaft_variable': 'shaft_1', 'shaft_info': {'name': 'TestShaft_1', 'variable': 'shaft_1', 'length': 160, 'position': [0, 0, 0]}, 'execution_result': "Successfully executed!\n\nStdout: 축 'TestShaft_1' 생성 완료\n  - 변수명: shaft_1\n  - 길이: 160 mm\n  - 위치: (0, 0, 0) mm\n", 'total_shafts': 1, 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144711_091_create_shaft_TestShaft_1.png', 'action_name': 'create_shaft_TestShaft_1'}}
+
+[2-2] 축 제원 변경
+[OK] 축 제원 변경 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'shaft_variable': 'shaft_1', 'updated_specs': {'length': 200, 'outer_diameter': 50, 'bore_diameter': 10}, 'execution_result': "Successfully executed!\n\nStdout: 축 'TestShaft_1' 제원 변경 완료\n  - 길이: 200 mm (변경 후: 200.0 mm)\n  - 외경: 50 mm\n  - 내경: 10 mm\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144726_074_update_shaft_shaft_1.png', 'action_name': 'update_shaft_shaft_1'}}
+
+[2-3] 축 위치 변경
+[OK] 축 위치 변경 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'shaft_variable': 'shaft_1', 'new_position': [10, 5, 0], 'execution_result': "Successfully executed!\n\nStdout: 축 'TestShaft_1' 위치 변경 완료\n  - 위치: (10, 5, 0) mm\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144726_426_move_shaft_shaft_1.png', 'action_name': 'move_shaft_shaft_1'}}
+
+[2-4] 축 삭제
+[OK] 축 삭제 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'component_name': 'shaft_1', 'execution_result': "Successfully executed!\n\nStdout: 컴포넌트 'shaft_1' 삭제 완료 (delete 메서드 사용)\n변수 'shaft_1' 삭제 완료\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144726_758_delete_shaft_1.png', 'action_name': 'delete_shaft_1'}}
+→ 축 삭제 후 컴포넌트 수: {'shafts': 0, 'gears': 0, 'bearings': 0}
+
+================================================================================
+기어(Gear) 테스트: 생성 → 제원 변경 → 이동 → 삭제
+================================================================================
+
+[3-0] 기어 장착용 축 생성
+[OK] 축 2개 생성: shaft_1, shaft_2
+결과 1: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'shaft_name': 'GearShaft_1', 'shaft_variable': 'shaft_1', 'shaft_info': {'name': 'GearShaft_1', 'variable': 'shaft_1', 'length': 160, 'position': [0, 0, 0]}, 'execution_result': "Successfully executed!\n\nStdout: 축 'GearShaft_1' 생성 완료\n  - 변수명: shaft_1\n  - 길이: 160 mm\n  - 위치: (0, 0, 0) mm\n", 'total_shafts': 1, 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144727_070_create_shaft_GearShaft_1.png', 'action_name': 'create_shaft_GearShaft_1'}}
+결과 2: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'shaft_name': 'GearShaft_2', 'shaft_variable': 'shaft_2', 'shaft_info': {'name': 'GearShaft_2', 'variable': 'shaft_2', 'length': 140, 'position': [90, 31.618, 0]}, 'execution_result': "Successfully executed!\n\nStdout: 축 'GearShaft_2' 생성 완료\n  - 변수명: shaft_2\n  - 길이: 140 mm\n  - 위치: (90, 31.618, 0) mm\n", 'total_shafts': 2, 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144727_374_create_shaft_GearShaft_2.png', 'action_name': 'create_shaft_GearShaft_2'}}
+
+[3-1] 기어 쌍 생성
+[OK] 기어 쌍 생성: test_gear_pair
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'gear_pair_name': 'test_gear_pair', 'gear_info': {'name': 'test_gear_pair', 'center_distance': 45, 'pinion_teeth': 20, 'wheel_teeth': 40, 'normal_module': 2.0, 'helix_angle': 0.0, 'pressure_angle': 20.0, 'gear_ratio': 2.0, 'pinion_face_width': 20.0, 'wheel_face_width': 20.0}, 'execution_result': "Successfully executed!\n\nStdout: 기어 쌍 'test_gear_pair' 생성 완료\n  - 중심거리: 45 mm\n  - 피니언 잇수: 20\n  - 휠 잇수: 40\n  - 모듈: 2.0 mm\n  - 헬리컬각: 0.0°\n  - 압력각: 20.0°\n  - 기어비: 2.00\n", 'total_gears': 1, 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144728_253_create_gear_test_gear_pair.png', 'action_name': 'create_gear_test_gear_pair'}}
+
+[3-2] 기어 제원 변경
+[OK] 기어 제원 변경 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'gear_pair_name': 'test_gear_pair', 'updated_specs': {'center_distance': None, 'normal_module': 2.5, 'helix_angle': None, 'pressure_angle': None, 'pinion_teeth': 22, 'wheel_teeth': 44, 'pinion_face_width': 25.0, 'wheel_face_width': 25.0, 'pinion_profile_shift': 0.3, 'wheel_profile_shift': 0.2}, 'execution_result': "Successfully executed!\n\nStdout: 제원 변경 중 오류: cannot assign to field 'nominal_profile_shift_coefficient'\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144728_649_update_gear_test_gear_pair.png', 'action_name': 'update_gear_test_gear_pair'}}
+
+[3-3] 기어 축에 장착
+[OK] 기어 장착 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'gear_pair_name': 'test_gear_pair', 'mounting_info': {'pinion_shaft': 'shaft_1', 'wheel_shaft': 'shaft_2', 'pinion_position': 80, 'wheel_position': 70}, 'execution_result': 'Successfully executed!\n\nStdout: 기어 장착 완료:\n  - 피니언: shaft_1에 80mm 위치에 장착\n  - 휠: shaft_2에 70mm 위치에 장착\n', 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144729_007_mount_gear_test_gear_pair.png', 'action_name': 'mount_gear_test_gear_pair'}}
+
+[3-4] 기어 위치 변경 (재장착)
+[OK] 기어 위치 변경 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'gear_pair_name': 'test_gear_pair', 'mounting_info': {'pinion_shaft': 'shaft_1', 'wheel_shaft': 'shaft_2', 'pinion_position': 100, 'wheel_position': 90}, 'execution_result': "Failed to execute. Error detected in output:\nConnectionException('Attempt to connect incompatible sockets')", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144729_340_mount_gear_test_gear_pair.png', 'action_name': 'mount_gear_test_gear_pair'}}
+
+[3-4-1] 기어 모델 MASTA 파일 저장 (자동 파일명)
+[OK] 기어 모델 파일 저장 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'file_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\modelings\\masta_design_20251016_144729.masta', 'file_name': 'masta_design_20251016_144729.masta', 'execution_result': 'Successfully executed!\n\nStdout: MASTA 파일 저장 완료: D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\modelings\\masta_design_20251016_144729.masta\n저장 상태: \n', 'message': 'MASTA 파일이 저장되었습니다: masta_design_20251016_144729.masta'}
+
+[3-5] 기어 삭제
+[OK] 기어 삭제 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'component_name': 'test_gear_pair', 'execution_result': "Successfully executed!\n\nStdout: 컴포넌트 'test_gear_pair' 삭제 완료 (delete 메서드 사용)\n변수 'test_gear_pair' 삭제 완료\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144733_356_delete_test_gear_pair.png', 'action_name': 'delete_test_gear_pair'}}
+→ 기어 삭제 후 컴포넌트 수: {'shafts': 2, 'gears': 0, 'bearings': 0}
+
+================================================================================
+베어링(Bearing) 테스트: 생성 → 제원 변경 → 이동 → 삭제
+================================================================================
+
+[4-1] 베어링 생성
+자동 선택: 내경 30mm -> 베어링 6206
+[OK] 베어링 생성: test_bearing
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'bearing_name': 'test_bearing', 'bearing_info': {'name': 'test_bearing', 'variable': 'test_bearing', 'shaft_name': 'shaft_1', 'position': 40, 'designation': '6206', 'auto_selected': True}, 'execution_result': "Successfully executed!\n\nStdout: 베어링 designation '6206' 설정 완료\n베어링 'test_bearing' 생성 및 장착 완료\n  - 축: shaft_1\n  - 위치: 40 mm\n  - Designation: 6206\n", 'total_bearings': 1, 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144733_691_create_bearing_test_bearing.png', 'action_name': 'create_bearing_test_bearing'}}
+
+[4-2] 베어링 제원 변경 (designation 변경)
+[OK] 베어링 제원 변경 완료 (6208)
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'bearing_name': 'test_bearing', 'updated_specs': {'designation': '6208'}, 'execution_result': "Successfully executed!\n\nStdout: 베어링 'test_bearing' 제원 변경 완료\n  - 새로운 형번: 6208\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144734_102_update_bearing_test_bearing.png', 'action_name': 'update_bearing_test_bearing'}}
+
+[4-3] 베어링 위치 변경
+[OK] 베어링 위치 변경 완료
+결과: {'success': False, 'error': '베어링 위치 변경 실패: Successfully executed!\n\nStdout: 베어링 위치 변경 중 오류: Attempt to connect incompatible sockets\n', 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230'}
+
+[4-3-1] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)
+[OK] 베어링 포함 모델 파일 저장 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'file_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\modelings\\gear_with_bearing_model.masta', 'file_name': 'gear_with_bearing_model.masta', 'execution_result': 'Successfully executed!\n\nStdout: MASTA 파일 저장 완료: D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\modelings\\gear_with_bearing_model.masta\n저장 상태: \n', 'message': 'MASTA 파일이 저장되었습니다: gear_with_bearing_model.masta'}
+
+[4-4] 베어링 삭제
+[OK] 베어링 삭제 완료
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'component_name': 'test_bearing', 'execution_result': "Successfully executed!\n\nStdout: 컴포넌트 'test_bearing' 삭제 완료 (delete 메서드 사용)\n변수 'test_bearing' 삭제 완료\n", 'snapshot': {'success': True, 'image_path': 'D:\\SW\\Streamlit\\MCP servers\\outputs\\e306f321-f07a-406c-bf2b-8cddffc1b230\\images\\20251016_144734_713_delete_test_bearing.png', 'action_name': 'delete_test_bearing'}}
+→ 베어링 삭제 후 컴포넌트 수: {'shafts': 2, 'gears': 0, 'bearings': 0}
+
+================================================================================
+최종 세션 정리
+================================================================================
+
+[5-1] 최종 세션 상태 확인
+→ 최종 컴포넌트 수: {'shafts': 2, 'gears': 0, 'bearings': 0}
+결과: {'success': True, 'session_id': 'e306f321-f07a-406c-bf2b-8cddffc1b230', 'is_initialized': True, 'created_at': '2025-10-16T14:46:47.527670', 'last_accessed': '2025-10-16T14:47:34.970196', 'components': {'shafts': [{'name': 'GearShaft_1', 'variable': 'shaft_1', 'length': 160, 'position': [0, 0, 0]}, {'name': 'GearShaft_2', 'variable': 'shaft_2', 'length': 140, 'position': [90, 31.618, 0]}], 'gears': [], 'bearings': []}, 'component_count': {'shafts': 2, 'gears': 0, 'bearings': 0}, 'design_name': 'my_design', 'assembly_name': 'assembly'}
+
+================================================================================
+전체 테스트 완료!
+================================================================================
+XXX appending C:\Program Files\SMT\MASTA 14.1.1\hasp_windows_x64_59008.dll
