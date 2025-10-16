@@ -1952,8 +1952,7 @@ def move_bearing(
 @mcp.tool()
 def create_power_load(
     session_id: str,
-    power_load_name: str,
-    is_input: bool = True
+    power_load_name: str
 ) -> dict:
     """
     Power Load를 생성합니다 (축에 장착하지 않음).
@@ -1961,7 +1960,6 @@ def create_power_load(
     Args:
         session_id (str): 세션 ID
         power_load_name (str): Power Load 이름
-        is_input (bool): 입력 파워 로드 여부 (True: 입력, False: 출력)
 
     Returns:
         dict: Power Load 생성 결과
@@ -1982,8 +1980,7 @@ def create_power_load(
 # Power Load 생성: {power_load_name}
 {power_load_name} = {session.assembly_name}.add_power_load('{power_load_name}')
 
-print(f"Power Load '{{power_load_name}}' 생성 완료 (미장착 상태)")
-print(f"  - 타입: {'입력' if is_input else '출력'}")
+print(f"Power Load '{power_load_name}' 생성 완료 (미장착 상태)")
 """
 
         # 코드 실행
@@ -1993,7 +1990,6 @@ print(f"  - 타입: {'입력' if is_input else '출력'}")
         power_load_info = {
             "name": power_load_name,
             "variable": power_load_name,
-            "is_input": is_input,
             "mounted": False
         }
 
@@ -2001,15 +1997,6 @@ print(f"  - 타입: {'입력' if is_input else '출력'}")
         if not hasattr(session, 'power_loads'):
             session.power_loads = []
         session.power_loads.append(power_load_info)
-
-        # 입력 파워 로드인 경우 assembly.design_properties에 설정
-        if is_input:
-            set_input_code = f"""
-# 입력 파워 로드로 설정
-{session.assembly_name}.design_properties.input_power_load = {power_load_name}
-print(f"입력 파워 로드로 설정 완료")
-"""
-            session.execute_python_code(set_input_code)
 
         # 모델 스냅샷 저장
         snapshot_result = _save_model_snapshot(session, f"create_power_load_{power_load_name}")
