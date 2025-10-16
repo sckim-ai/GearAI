@@ -1290,13 +1290,27 @@ def create_bearing(
             bearing_designation = "6206"  # 기본값
             print(f"기본 베어링 사용: {bearing_designation}")
 
+        # shaft_name으로 실제 축 변수명 찾기
+        shaft_variable = None
+        for shaft_info in session.shafts:
+            if shaft_info.get("name") == shaft_name:
+                shaft_variable = shaft_info.get("variable")
+                break
+
+        if not shaft_variable:
+            return {
+                "success": False,
+                "error": f"축 '{shaft_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
         # 베어링 생성 코드
         bearing_code = f"""
 # 베어링 생성: {bearing_name}
 {bearing_name} = {session.assembly_name}.add_bearing("{bearing_name}")
 
 # 베어링을 축에 장착
-{shaft_name}.mount_component({bearing_name}, {position}*MM)
+{shaft_variable}.mount_component({bearing_name}, {position}*MM)
 
 # 베어링 designation 설정
 try:
@@ -1308,9 +1322,10 @@ except Exception as e:
     print("기본 개념 베어링으로 설정됨")
 
 print(f"베어링 '{bearing_name}' 생성 및 장착 완료")
-print(f"  - 축: {shaft_name}")
+print(f"  - 축: {shaft_variable}")
 print(f"  - 위치: {position} mm")
 print(f"  - Designation: {bearing_designation}")
+print(f"  - is_mounted: {{{bearing_name}.is_mounted}}")
 """
 
         # 코드 실행
@@ -1319,8 +1334,9 @@ print(f"  - Designation: {bearing_designation}")
         # 세션에 베어링 정보 저장
         bearing_info = {
             "name": bearing_name,
-            "variable": bearing_name,  # 베어링 변수명 추가
-            "shaft_name": shaft_name,
+            "variable": bearing_name,  # 베어링 변수명
+            "shaft_name": shaft_name,   # 축 표시 이름
+            "shaft_variable": shaft_variable,  # 축 변수명
             "position": position,
             "designation": bearing_designation,
             "auto_selected": auto_select_by_diameter is not None
@@ -1530,20 +1546,26 @@ def move_bearing(
         bearing_variable = bearing_info.get("variable")
         shaft_name = bearing_info.get("shaft_name")
 
-        # 베어링 위치 변경 코드 생성 (mount_component 재호출)
+        # 베어링 위치 변경 코드 생성 (connection 삭제 후 재장착)
         move_code = f"""
 # 베어링 위치 변경: {bearing_name}
 try:
-    if '{bearing_variable}' in locals() or '{bearing_variable}' in globals():
-        bearing = {bearing_variable}
+    bearing = {bearing_variable}
 
-        # 축에 베어링을 새로운 위치로 재장착 (mount_component 재호출)
-        {shaft_name}.mount_component(bearing, {position}*MM)
+    # 베어링이 이미 장착되어 있는지 확인
+    if bearing.is_mounted:
+        # 기존 connection 삭제
+        current_conn = bearing.inner_connection
+        current_shaft = current_conn.shaft
+        print(f"[위치 변경] 베어링: {{bearing.editable_name}} ({position}mm)")
+        current_conn.delete()
 
-        print(f"베어링 '{{bearing.editable_name}}' 위치 변경 완료")
-        print(f"  - 새로운 위치: {position} mm")
+        # 새로운 위치로 재장착 (기존 축 참조 사용)
+        current_shaft.mount_component(bearing, {position}*MM)
+        print(f"[위치 변경 완료] 베어링: {position}mm 위치로 변경")
     else:
-        print(f"오류: 베어링 '{bearing_variable}'를 찾을 수 없습니다")
+        # 처음 장착 (이 경우는 발생하지 않아야 함)
+        print(f"[오류] 베어링이 장착되지 않은 상태입니다")
 except Exception as e:
     print(f"베어링 위치 변경 중 오류: {{e}}")
     import traceback
