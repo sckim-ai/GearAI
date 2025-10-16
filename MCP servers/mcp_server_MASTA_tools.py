@@ -1093,6 +1093,106 @@ print(f"\\n기어 장착/위치 변경 완료")
             "session_id": session_id
         }
 
+
+@mcp.tool()
+def unmount_gear(
+    session_id: str,
+    gear_pair_name: str
+) -> dict:
+    """
+    기어 쌍(피니언과 휠)을 축에서 해제합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        gear_pair_name (str): 기어 쌍 이름
+
+    Returns:
+        dict: 해제 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - gear_pair_name: 기어 쌍 이름 (str)
+            - execution_result: 실행 결과 (str)
+            - snapshot: 스냅샷 저장 결과 (dict)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 기어 해제 코드
+        unmount_code = f"""
+# 기어 해제: {gear_pair_name}
+try:
+    # 기어 쌍에서 피니언과 휠 참조
+    pinion_mount = {gear_pair_name}.cylindrical_gears[0]
+    wheel_mount = {gear_pair_name}.cylindrical_gears[1]
+
+    # 피니언 해제
+    if pinion_mount.is_mounted:
+        current_conn = pinion_mount.inner_connection
+        print(f"[해제] 피니언: {{pinion_mount.editable_name}}")
+        current_conn.delete()
+        print(f"[해제 완료] 피니언 is_mounted: {{pinion_mount.is_mounted}}")
+    else:
+        print(f"[경고] 피니언이 이미 해제된 상태입니다")
+
+    # 휠 해제
+    if wheel_mount.is_mounted:
+        current_conn = wheel_mount.inner_connection
+        print(f"[해제] 휠: {{wheel_mount.editable_name}}")
+        current_conn.delete()
+        print(f"[해제 완료] 휠 is_mounted: {{wheel_mount.is_mounted}}")
+    else:
+        print(f"[경고] 휠이 이미 해제된 상태입니다")
+
+    print(f"\\n기어 쌍 해제 완료")
+except Exception as e:
+    print(f"기어 해제 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(unmount_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"기어 해제 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"unmount_gear_{gear_pair_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "gear_pair_name": gear_pair_name,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"기어 해제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
 @mcp.tool()
 def update_gear_specs(
     session_id: str,
@@ -2667,8 +2767,30 @@ if __name__ == "__main__":
     print(f"[OK] 기어 위치 변경 완료")
     print(f"결과: {remount_gear_result}")
 
-    # 9-1. 기어 모델 파일 저장 (자동 파일명)
-    print("\n[3-4-1] 기어 모델 MASTA 파일 저장 (자동 파일명)")
+    # 9-1. 기어 해제 테스트
+    print("\n[3-4-1] 기어 해제 (unmount)")
+    unmount_gear_result = unmount_gear(
+        session_id=session_id,
+        gear_pair_name=gear_result['gear_pair_name']
+    )
+    print(f"[OK] 기어 해제 완료")
+    print(f"결과: {unmount_gear_result}")
+
+    # 9-2. 기어 재장착 테스트
+    print("\n[3-4-2] 기어 재장착")
+    remount_gear_result2 = mount_gear_on_shaft(
+        session_id=session_id,
+        gear_pair_name=gear_result['gear_pair_name'],
+        pinion_shaft_name=shaft1_result['shaft_variable'],
+        wheel_shaft_name=shaft2_result['shaft_variable'],
+        pinion_position=50,
+        wheel_position=45
+    )
+    print(f"[OK] 기어 재장착 완료")
+    print(f"결과: {remount_gear_result2}")
+
+    # 9-3. 기어 모델 파일 저장 (자동 파일명)
+    print("\n[3-5] 기어 모델 MASTA 파일 저장 (자동 파일명)")
     save_gear_result = save_masta_file(
         session_id=session_id
     )
