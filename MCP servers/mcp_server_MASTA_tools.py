@@ -645,19 +645,19 @@ def update_shaft_specs(
     축의 제원을 변경합니다.
 
     IMPORTANT:
-        MASTA API 제약으로 인해 축의 많은 속성(length 포함)이 읽기 전용입니다.
-        축 제원을 변경하려면 delete_component()로 축을 삭제한 후
-        create_shaft()로 새로운 제원의 축을 재생성하는 것을 권장합니다.
+        - length는 MASTA API에서 읽기 전용이므로 변경 불가합니다.
+        - outer_diameter와 bore_diameter는 add_section() 메서드를 사용하여 변경합니다.
+        - 기존 섹션을 모두 제거하고 새로운 섹션을 추가하는 방식입니다.
 
     Args:
         session_id (str): 세션 ID
         shaft_variable (str): 축 변수명 (예: "shaft_1")
         length (float): 축 길이 (mm, 읽기 전용 - 변경 불가)
-        outer_diameter (float): 축 외경 (mm, 읽기 전용 가능성 있음)
-        bore_diameter (float): 축 내경 (mm, 읽기 전용 가능성 있음)
+        outer_diameter (float): 축 외경 (mm)
+        bore_diameter (float): 축 내경 (mm)
 
     Returns:
-        dict: 변경 결과 (일부 속성은 변경 실패 가능)
+        dict: 변경 결과
     """
     try:
         session = get_session(session_id)
@@ -670,25 +670,46 @@ def update_shaft_specs(
 try:
     if '{shaft_variable}' in locals() or '{shaft_variable}' in globals():
         shaft = {shaft_variable}
+        current_length = shaft.length
+
+        # 제원 변경을 위해 섹션 재구성
         """
 
+        if outer_diameter is not None or bore_diameter is not None:
+            od = outer_diameter if outer_diameter is not None else "shaft.active_definition.sections[0].start_outer_diameter"
+            bd = bore_diameter if bore_diameter is not None else "shaft.active_definition.sections[0].start_inner_diameter"
+
+            update_code += f"""
+        # 기존 섹션 제거
+        shaft.remove_all_sections()
+
+        # 새로운 섹션 추가 (전체 길이에 대해 동일한 직경)
+        shaft.add_section(
+            start_offset=0,
+            end_offset=current_length,
+            start_outer={od}*MM,
+            start_inner={bd}*MM,
+            end_outer={od}*MM,
+            end_inner={bd}*MM
+        )
+        print(f"축 '{{shaft.editable_name}}' 제원 변경 완료")
+        """
+
+            if outer_diameter is not None:
+                update_code += f"\n        print(f'  - 외경: {outer_diameter} mm')"
+            if bore_diameter is not None:
+                update_code += f"\n        print(f'  - 내경: {bore_diameter} mm')"
+
         if length is not None:
-            update_code += f"\n        shaft.length = {length}*MM"
-        if outer_diameter is not None:
-            update_code += f"\n        shaft.outer_diameter = {outer_diameter}*MM"
-        if bore_diameter is not None:
-            update_code += f"\n        shaft.bore = {bore_diameter}*MM"
+            update_code += f"\n        print('  - 길이: 변경 불가 (읽기 전용 속성)')"
 
         update_code += f"""
-
-        print(f"축 '{{shaft.editable_name}}' 제원 변경 완료")
-        {"print(f'  - 길이: " + str(length) + " mm')" if length else ""}
-        {"print(f'  - 외경: " + str(outer_diameter) + " mm')" if outer_diameter else ""}
-        {"print(f'  - 내경: " + str(bore_diameter) + " mm')" if bore_diameter else ""}
     else:
         print(f"오류: 축 '{shaft_variable}'를 찾을 수 없습니다")
 except Exception as e:
     print(f"제원 변경 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
 """
 
         execution_result = session.execute_python_code(update_code)
@@ -701,7 +722,7 @@ except Exception as e:
             "session_id": session_id,
             "shaft_variable": shaft_variable,
             "updated_specs": {
-                "length": length,
+                "length": "read-only (cannot be changed)" if length is not None else None,
                 "outer_diameter": outer_diameter,
                 "bore_diameter": bore_diameter
             },
@@ -2242,7 +2263,7 @@ if __name__ == "__main__":
         position_y=0,
         position_z=0
     )
-    print(f"✓ 축 생성: {shaft_result['shaft_variable']}")
+    print(f"[OK] 축 생성: {shaft_result['shaft_variable']}")
     print(f"결과: {shaft_result}")
 
     # 3. 축 제원 변경
@@ -2254,7 +2275,7 @@ if __name__ == "__main__":
         outer_diameter=50,
         bore_diameter=10
     )
-    print(f"✓ 축 제원 변경 완료")
+    print(f"[OK] 축 제원 변경 완료")
     print(f"결과: {update_shaft_result}")
 
     # 4. 축 이동
@@ -2266,7 +2287,7 @@ if __name__ == "__main__":
         position_y=5,
         position_z=0
     )
-    print(f"✓ 축 위치 변경 완료")
+    print(f"[OK] 축 위치 변경 완료")
     print(f"결과: {move_shaft_result}")
 
     # 5. 축 삭제
@@ -2275,7 +2296,7 @@ if __name__ == "__main__":
         session_id=session_id,
         component_name=shaft_result['shaft_variable']
     )
-    print(f"✓ 축 삭제 완료")
+    print(f"[OK] 축 삭제 완료")
     print(f"결과: {delete_shaft_result}")
 
     status_after_shaft = get_session_status(session_id)
@@ -2304,7 +2325,7 @@ if __name__ == "__main__":
         position_y=31.618,
         position_z=0
     )
-    print(f"✓ 축 2개 생성: {shaft1_result['shaft_variable']}, {shaft2_result['shaft_variable']}")
+    print(f"[OK] 축 2개 생성: {shaft1_result['shaft_variable']}, {shaft2_result['shaft_variable']}")
     print(f"결과 1: {shaft1_result}")
     print(f"결과 2: {shaft2_result}")
 
@@ -2320,7 +2341,7 @@ if __name__ == "__main__":
         helix_angle=0.0,
         pressure_angle=20.0
     )
-    print(f"✓ 기어 쌍 생성: {gear_result['gear_pair_name']}")
+    print(f"[OK] 기어 쌍 생성: {gear_result['gear_pair_name']}")
     print(f"결과: {gear_result}")
 
     # 7. 기어 제원 변경
@@ -2336,7 +2357,7 @@ if __name__ == "__main__":
         pinion_profile_shift=0.3,
         wheel_profile_shift=0.2
     )
-    print(f"✓ 기어 제원 변경 완료")
+    print(f"[OK] 기어 제원 변경 완료")
     print(f"결과: {update_gear_result}")
 
     # 8. 기어 장착
@@ -2349,7 +2370,7 @@ if __name__ == "__main__":
         pinion_position=80,
         wheel_position=70
     )
-    print(f"✓ 기어 장착 완료")
+    print(f"[OK] 기어 장착 완료")
     print(f"결과: {mount_gear_result}")
 
     # 9. 기어 위치 변경 (재장착)
@@ -2362,7 +2383,7 @@ if __name__ == "__main__":
         pinion_position=100,
         wheel_position=90
     )
-    print(f"✓ 기어 위치 변경 완료")
+    print(f"[OK] 기어 위치 변경 완료")
     print(f"결과: {remount_gear_result}")
 
     # 9-1. 기어 모델 파일 저장 (자동 파일명)
@@ -2370,7 +2391,7 @@ if __name__ == "__main__":
     save_gear_result = save_masta_file(
         session_id=session_id
     )
-    print(f"✓ 기어 모델 파일 저장 완료")
+    print(f"[OK] 기어 모델 파일 저장 완료")
     print(f"결과: {save_gear_result}")
 
     # 10. 기어 삭제
@@ -2379,7 +2400,7 @@ if __name__ == "__main__":
         session_id=session_id,
         component_name=gear_result['gear_pair_name']
     )
-    print(f"✓ 기어 삭제 완료")
+    print(f"[OK] 기어 삭제 완료")
     print(f"결과: {delete_gear_result}")
 
     status_after_gear = get_session_status(session_id)
@@ -2399,7 +2420,7 @@ if __name__ == "__main__":
         position=40,
         auto_select_by_diameter=30
     )
-    print(f"✓ 베어링 생성: {bearing_result['bearing_name']}")
+    print(f"[OK] 베어링 생성: {bearing_result['bearing_name']}")
     print(f"결과: {bearing_result}")
 
     # 11. 베어링 제원 변경 (update_bearing_specs 사용)
@@ -2409,7 +2430,7 @@ if __name__ == "__main__":
         bearing_name=bearing_result['bearing_name'],
         designation="6208"  # 자동 선택된 형번 -> 6208로 변경
     )
-    print(f"✓ 베어링 제원 변경 완료 (6208)")
+    print(f"[OK] 베어링 제원 변경 완료 (6208)")
     print(f"결과: {bearing_update_result}")
 
     # 12. 베어링 위치 변경 (move_bearing 사용)
@@ -2419,7 +2440,7 @@ if __name__ == "__main__":
         bearing_name=bearing_result['bearing_name'],
         position=60  # 40 -> 60으로 이동
     )
-    print(f"✓ 베어링 위치 변경 완료")
+    print(f"[OK] 베어링 위치 변경 완료")
     print(f"결과: {bearing_move_result}")
 
     # 12-1. 베어링 포함 모델 파일 저장 (지정 파일명)
@@ -2428,7 +2449,7 @@ if __name__ == "__main__":
         session_id=session_id,
         file_name="gear_with_bearing_model"
     )
-    print(f"✓ 베어링 포함 모델 파일 저장 완료")
+    print(f"[OK] 베어링 포함 모델 파일 저장 완료")
     print(f"결과: {save_bearing_result}")
 
     # 13. 베어링 삭제
@@ -2437,7 +2458,7 @@ if __name__ == "__main__":
         session_id=session_id,
         component_name=bearing_result['bearing_name']
     )
-    print(f"✓ 베어링 삭제 완료")
+    print(f"[OK] 베어링 삭제 완료")
     print(f"결과: {delete_bearing_result}")
 
     status_after_bearing = get_session_status(session_id)
@@ -2457,7 +2478,7 @@ if __name__ == "__main__":
     # # 15. 세션 정리
     # print("\n[5-2] 세션 정리")
     # cleanup_result = cleanup_session(session_id)
-    # print(f"✓ 세션 정리 완료: {cleanup_result['success']}")
+    # print(f"[OK] 세션 정리 완료: {cleanup_result['success']}")
     # print(f"결과: {cleanup_result}")
 
     print("\n" + "=" * 80)
