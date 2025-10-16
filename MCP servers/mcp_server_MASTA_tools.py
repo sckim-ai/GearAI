@@ -1243,19 +1243,18 @@ except Exception as e:
 def create_bearing(
     session_id: str,
     bearing_name: str,
-    shaft_name: str,
-    position: float,
     bearing_designation: str = None,
     auto_select_by_diameter: float = None
 ) -> dict:
     """
-    베어링을 생성하고 축에 장착합니다.
+    베어링을 생성합니다 (축에 장착하지 않음).
+
+    베어링 생성과 장착을 분리하여 더 유연한 구조를 제공합니다.
+    생성 후 mount_bearing() 함수로 축에 장착하세요.
 
     Args:
         session_id (str): 세션 ID
         bearing_name (str): 베어링 이름
-        shaft_name (str): 베어링이 장착될 축 이름
-        position (float): 베어링 장착 위치 (축 길이 방향, mm)
         bearing_designation (str): 베어링 designation (예: "6206")
         auto_select_by_diameter (float): 축 내경을 기준으로 자동으로 베어링 선택 (mm)
                                          이 값이 지정되면 bearing_designation은 무시됨
@@ -1272,6 +1271,7 @@ def create_bearing(
     Note:
         - bearing_designation과 auto_select_by_diameter 중 하나는 반드시 지정해야 합니다
         - auto_select_by_diameter를 사용하면 내경에 가장 가까운 62xx 시리즈 베어링이 자동 선택됩니다
+        - 생성 후 mount_bearing()으로 축에 장착해야 합니다
     """
     try:
         session = get_session(session_id)
@@ -1279,7 +1279,9 @@ def create_bearing(
         if not session.is_initialized:
             return {
                 "success": False,
-                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id,
+                "bearing_name": bearing_name
             }
 
         # 베어링 designation 결정
@@ -1290,29 +1292,10 @@ def create_bearing(
             bearing_designation = "6206"  # 기본값
             print(f"기본 베어링 사용: {bearing_designation}")
 
-        # shaft_name으로 실제 축 변수명 찾기
-        shaft_variable = None
-        for shaft_info in session.shafts:
-            if shaft_info.get("name") == shaft_name:
-                shaft_variable = shaft_info.get("variable")
-                break
-
-        if not shaft_variable:
-            available_shafts = [s.get("name") for s in session.shafts]
-            return {
-                "success": False,
-                "error": f"축 '{shaft_name}'를 찾을 수 없습니다. 사용 가능한 축: {available_shafts}",
-                "session_id": session_id,
-                "bearing_name": bearing_name
-            }
-
-        # 베어링 생성 코드
+        # 베어링 생성 코드 (장착하지 않음)
         bearing_code = f"""
 # 베어링 생성: {bearing_name}
 {bearing_name} = {session.assembly_name}.add_bearing("{bearing_name}")
-
-# 베어링을 축에 장착
-{shaft_variable}.mount_component({bearing_name}, {position}*MM)
 
 # 베어링 designation 설정
 try:
@@ -1323,9 +1306,7 @@ except Exception as e:
     print(f"베어링 designation 설정 실패: {{e}}")
     print("기본 개념 베어링으로 설정됨")
 
-print(f"베어링 '{bearing_name}' 생성 및 장착 완료")
-print(f"  - 축: {shaft_variable}")
-print(f"  - 위치: {position} mm")
+print(f"베어링 '{bearing_name}' 생성 완료 (미장착 상태)")
 print(f"  - Designation: {bearing_designation}")
 print(f"  - is_mounted: {{{bearing_name}.is_mounted}}")
 """
@@ -1337,11 +1318,9 @@ print(f"  - is_mounted: {{{bearing_name}.is_mounted}}")
         bearing_info = {
             "name": bearing_name,
             "variable": bearing_name,  # 베어링 변수명
-            "shaft_name": shaft_name,   # 축 표시 이름
-            "shaft_variable": shaft_variable,  # 축 변수명
-            "position": position,
             "designation": bearing_designation,
-            "auto_selected": auto_select_by_diameter is not None
+            "auto_selected": auto_select_by_diameter is not None,
+            "mounted": False  # 아직 장착되지 않음
         }
         session.bearings.append(bearing_info)
 
@@ -1499,27 +1478,157 @@ except Exception as e:
 
 
 @mcp.tool()
-def move_bearing(
+def mount_bearing(
     session_id: str,
     bearing_name: str,
+    shaft_name: str,
     position: float
 ) -> dict:
     """
-    베어링의 축 상 위치를 변경합니다.
-
-    shaft.mount_component() 메서드를 재호출하여 베어링을 새로운 위치로 재장착합니다.
+    베어링을 축에 장착합니다.
 
     Args:
         session_id (str): 세션 ID
         bearing_name (str): 베어링 이름
-        position (float): 새로운 축 상 위치 (mm)
+        shaft_name (str): 장착할 축 이름
+        position (float): 축 상 장착 위치 (mm)
 
     Returns:
-        dict: 변경 결과
+        dict: 장착 결과
             - success: 성공 여부 (bool)
             - session_id: 세션 ID (str)
             - bearing_name: 베어링 이름 (str)
-            - new_position: 새로운 위치 (float)
+            - shaft_name: 축 이름 (str)
+            - position: 장착 위치 (float)
+            - execution_result: 실행 결과 (str)
+            - snapshot: 스냅샷 저장 결과 (dict)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 베어링 정보 찾기
+        bearing_info = None
+        for bearing in session.bearings:
+            if bearing.get("name") == bearing_name:
+                bearing_info = bearing
+                break
+
+        if not bearing_info:
+            return {
+                "success": False,
+                "error": f"베어링 '{bearing_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        # shaft_name으로 실제 축 변수명 찾기
+        shaft_variable = None
+        for shaft_info in session.shafts:
+            if shaft_info.get("name") == shaft_name:
+                shaft_variable = shaft_info.get("variable")
+                break
+
+        if not shaft_variable:
+            available_shafts = [s.get("name") for s in session.shafts]
+            return {
+                "success": False,
+                "error": f"축 '{shaft_name}'를 찾을 수 없습니다. 사용 가능한 축: {available_shafts}",
+                "session_id": session_id
+            }
+
+        bearing_variable = bearing_info.get("variable")
+
+        # 베어링 장착 코드 생성
+        mount_code = f"""
+# 베어링 장착: {bearing_name} -> {shaft_name}
+try:
+    bearing = {bearing_variable}
+    shaft = {shaft_variable}
+
+    # 이미 장착되어 있으면 먼저 해제
+    if bearing.is_mounted:
+        current_conn = bearing.inner_connection
+        print(f"[기존 연결 해제] 베어링: {{bearing.editable_name}}")
+        current_conn.delete()
+
+    # 축에 베어링 장착
+    shaft.mount_component(bearing, {position}*MM)
+    print(f"[장착 완료] 베어링: {{bearing.editable_name}} -> {shaft_name} ({position}mm)")
+    print(f"  - is_mounted: {{bearing.is_mounted}}")
+except Exception as e:
+    print(f"베어링 장착 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(mount_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"베어링 장착 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 세션 추적 목록 업데이트
+        if bearing_info:
+            bearing_info["mounted"] = True
+            bearing_info["shaft_name"] = shaft_name
+            bearing_info["shaft_variable"] = shaft_variable
+            bearing_info["position"] = position
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"mount_bearing_{bearing_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "bearing_name": bearing_name,
+            "shaft_name": shaft_name,
+            "position": position,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"베어링 장착 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def unmount_bearing(
+    session_id: str,
+    bearing_name: str
+) -> dict:
+    """
+    베어링을 축에서 해제합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        bearing_name (str): 베어링 이름
+
+    Returns:
+        dict: 해제 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - bearing_name: 베어링 이름 (str)
             - execution_result: 실행 결과 (str)
             - snapshot: 스냅샷 저장 결과 (dict)
     """
@@ -1548,60 +1657,145 @@ def move_bearing(
             }
 
         bearing_variable = bearing_info.get("variable")
-        shaft_name = bearing_info.get("shaft_name")
 
-        # 베어링 위치 변경 코드 생성 (connection 삭제 후 재장착)
-        move_code = f"""
-# 베어링 위치 변경: {bearing_name}
+        # 베어링 해제 코드 생성
+        unmount_code = f"""
+# 베어링 해제: {bearing_name}
 try:
     bearing = {bearing_variable}
 
-    # 베어링이 이미 장착되어 있는지 확인
     if bearing.is_mounted:
-        # 기존 connection 삭제
         current_conn = bearing.inner_connection
-        current_shaft = current_conn.shaft
-        print(f"[위치 변경] 베어링: {{bearing.editable_name}} ({position}mm)")
+        print(f"[해제] 베어링: {{bearing.editable_name}}")
         current_conn.delete()
-
-        # 새로운 위치로 재장착 (기존 축 참조 사용)
-        current_shaft.mount_component(bearing, {position}*MM)
-        print(f"[위치 변경 완료] 베어링: {position}mm 위치로 변경")
+        print(f"[해제 완료] is_mounted: {{bearing.is_mounted}}")
     else:
-        # 처음 장착 (이 경우는 발생하지 않아야 함)
-        print(f"[오류] 베어링이 장착되지 않은 상태입니다")
+        print(f"[경고] 베어링 '{{bearing.editable_name}}'가 이미 해제된 상태입니다")
 except Exception as e:
-    print(f"베어링 위치 변경 중 오류: {{e}}")
+    print(f"베어링 해제 중 오류: {{e}}")
     import traceback
     traceback.print_exc()
 """
 
         # 코드 실행
-        execution_result = session.execute_python_code(move_code)
+        execution_result = session.execute_python_code(unmount_code)
 
         # 실행 결과 확인
         if "Failed to execute" in execution_result or "오류" in execution_result:
             return {
                 "success": False,
-                "error": f"베어링 위치 변경 실패: {execution_result}",
+                "error": f"베어링 해제 실패: {execution_result}",
                 "session_id": session_id
             }
 
         # 세션 추적 목록 업데이트
         if bearing_info:
-            bearing_info["position"] = position
+            bearing_info["mounted"] = False
+            bearing_info.pop("shaft_name", None)
+            bearing_info.pop("shaft_variable", None)
+            bearing_info.pop("position", None)
 
         # 모델 스냅샷 저장
-        snapshot_result = _save_model_snapshot(session, f"move_bearing_{bearing_name}")
+        snapshot_result = _save_model_snapshot(session, f"unmount_bearing_{bearing_name}")
 
         return {
             "success": True,
             "session_id": session_id,
             "bearing_name": bearing_name,
-            "new_position": position,
             "execution_result": execution_result,
             "snapshot": snapshot_result
         }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"베어링 해제 중 오류: {str(e)}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def move_bearing(
+    session_id: str,
+    bearing_name: str,
+    position: float,
+    shaft_name: str = None
+) -> dict:
+    """
+    [DEPRECATED] 베어링의 축 상 위치를 변경합니다.
+
+    이 함수는 하위 호환성을 위해 유지되지만, 새로운 코드에서는 다음을 사용하세요:
+    - 같은 축에서 위치만 변경: unmount_bearing() + mount_bearing()
+    - 다른 축으로 이동: unmount_bearing() + mount_bearing(new_shaft)
+
+    이 함수는 내부적으로 mount_bearing()을 호출합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        bearing_name (str): 베어링 이름
+        position (float): 새로운 축 상 위치 (mm)
+        shaft_name (str): 새로운 축 이름 (None이면 기존 축 유지)
+
+    Returns:
+        dict: 변경 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - bearing_name: 베어링 이름 (str)
+            - new_position: 새로운 위치 (float)
+            - deprecated_warning: deprecated 경고 메시지 (str)
+    """
+    try:
+        session = get_session(session_id)
+
+        if not session.is_initialized:
+            return {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+
+        # 베어링 정보 찾기
+        bearing_info = None
+        for bearing in session.bearings:
+            if bearing.get("name") == bearing_name:
+                bearing_info = bearing
+                break
+
+        if not bearing_info:
+            return {
+                "success": False,
+                "error": f"베어링 '{bearing_name}'를 찾을 수 없습니다.",
+                "session_id": session_id
+            }
+
+        # shaft_name이 지정되지 않으면 기존 축 사용
+        if shaft_name is None:
+            shaft_name = bearing_info.get("shaft_name")
+            if not shaft_name:
+                return {
+                    "success": False,
+                    "error": "베어링이 장착되지 않았거나 축 정보가 없습니다. shaft_name을 명시적으로 지정하세요.",
+                    "session_id": session_id
+                }
+
+        # mount_bearing() 호출 (내부적으로 unmount + mount 수행)
+        result = mount_bearing(session_id, bearing_name, shaft_name, position)
+
+        # deprecated 경고 추가
+        if result.get("success"):
+            result["deprecated_warning"] = (
+                "move_bearing()은 deprecated 되었습니다. "
+                "향후 mount_bearing()을 직접 사용하세요."
+            )
+            result["new_position"] = position
+
+        return result
 
     except ValueError as e:
         return {
