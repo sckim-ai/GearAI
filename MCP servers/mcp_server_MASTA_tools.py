@@ -324,6 +324,86 @@ def get_session(session_id: str) -> SessionData:
     session.update_access_time()
     return session
 
+
+def validate_session(session_id: str) -> tuple[SessionData, dict]:
+    """
+    세션을 검증하고 반환합니다. 실패 시 에러 딕셔너리도 반환합니다.
+
+    Returns:
+        tuple: (session, error_dict or None)
+    """
+    try:
+        session = get_session(session_id)
+        if not session.is_initialized:
+            return None, {
+                "success": False,
+                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
+                "session_id": session_id
+            }
+        return session, None
+    except ValueError as e:
+        return None, {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+
+def find_shaft_variable(session: SessionData, shaft_name: str) -> tuple[str, dict]:
+    """
+    축 이름으로 축 변수명을 찾습니다.
+
+    Returns:
+        tuple: (shaft_variable or None, error_dict or None)
+    """
+    for shaft_info in session.shafts:
+        if shaft_info.get("name") == shaft_name:
+            return shaft_info.get("variable"), None
+
+    available_shafts = [s.get("name") for s in session.shafts]
+    return None, {
+        "success": False,
+        "error": f"축 '{shaft_name}'를 찾을 수 없습니다. 사용 가능한 축: {available_shafts}",
+        "session_id": session.session_id
+    }
+
+
+def generate_mount_unmount_code(component_var: str, shaft_var: str, position: float,
+                                  component_type: str = "component", indent: str = "") -> str:
+    """
+    컴포넌트(기어/베어링) 장착/해제/재장착 코드를 생성합니다.
+
+    Args:
+        component_var: 컴포넌트 변수명
+        shaft_var: 축 변수명
+        position: 장착 위치 (mm)
+        component_type: 컴포넌트 타입 ("gear", "bearing", "component")
+        indent: 들여쓰기 문자열 (기본값: "")
+
+    Returns:
+        str: 실행할 Python 코드
+    """
+    code = f"""if {component_var}.is_mounted:
+    current_conn = {component_var}.inner_connection
+    current_shaft = current_conn.shaft
+    if current_shaft == {shaft_var}:
+        print(f"[위치 변경] {component_type}: {shaft_var}에서 위치 변경 ({position}mm)")
+        current_conn.delete()
+        {shaft_var}.mount_component({component_var}, {position}*MM)
+        print(f"[위치 변경 완료] {component_type}: {position}mm 위치로 변경")
+    else:
+        print(f"[축 변경] {component_type}: 다른 축으로 이동 -> {shaft_var}")
+        current_conn.delete()
+        {shaft_var}.mount_component({component_var}, {position}*MM)
+        print(f"[축 변경 완료] {component_type}: {shaft_var}에 {position}mm 위치에 장착")
+else:
+    {shaft_var}.mount_component({component_var}, {position}*MM)
+    print(f"[신규 장착] {component_type}: {shaft_var}에 {position}mm 위치에 장착")"""
+
+    if indent:
+        return '\n'.join(indent + line for line in code.split('\n'))
+    return code
+
 def create_new_session(session_id: str) -> SessionData:
     """새로운 세션을 생성"""
     if session_id in session_manager:
@@ -1002,6 +1082,14 @@ def mount_gear_on_shaft(
                 "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요."
             }
 
+        # 헬퍼 함수로 장착 로직 생성
+        pinion_logic = generate_mount_unmount_code(
+            "pinion_mount", pinion_shaft_name, pinion_position, "피니언"
+        )
+        wheel_logic = generate_mount_unmount_code(
+            "wheel_mount", wheel_shaft_name, wheel_position, "휠"
+        )
+
         # 기어 장착/위치 변경 코드
         mount_code = f"""
 # 기어 장착/위치 변경: {gear_pair_name}
@@ -1010,52 +1098,10 @@ pinion_mount = {gear_pair_name}.cylindrical_gears[0]
 wheel_mount = {gear_pair_name}.cylindrical_gears[1]
 
 # 피니언 처리
-if pinion_mount.is_mounted:
-    # 이미 장착된 경우
-    current_conn = pinion_mount.inner_connection
-    current_shaft = current_conn.shaft
-
-    # 축 비교: 객체가 같은지 확인
-    if current_shaft == {pinion_shaft_name}:
-        # 같은 축: 연결 삭제 후 재장착 (위치 변경)
-        print(f"[위치 변경] 피니언: {pinion_shaft_name}에서 위치 변경 ({pinion_position}mm)")
-        current_conn.delete()
-        {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-        print(f"[위치 변경 완료] 피니언: {pinion_position}mm 위치로 변경")
-    else:
-        # 다른 축: 연결 삭제 후 새 축에 장착
-        print(f"[축 변경] 피니언: 다른 축으로 이동 -> {pinion_shaft_name}")
-        current_conn.delete()
-        {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-        print(f"[축 변경 완료] 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
-else:
-    # 처음 장착
-    {pinion_shaft_name}.mount_component(pinion_mount, {pinion_position}*MM)
-    print(f"[신규 장착] 피니언: {pinion_shaft_name}에 {pinion_position}mm 위치에 장착")
+{pinion_logic}
 
 # 휠 처리
-if wheel_mount.is_mounted:
-    # 이미 장착된 경우
-    current_conn = wheel_mount.inner_connection
-    current_shaft = current_conn.shaft
-
-    # 축 비교: 객체가 같은지 확인
-    if current_shaft == {wheel_shaft_name}:
-        # 같은 축: 연결 삭제 후 재장착 (위치 변경)
-        print(f"[위치 변경] 휠: {wheel_shaft_name}에서 위치 변경 ({wheel_position}mm)")
-        current_conn.delete()
-        {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
-        print(f"[위치 변경 완료] 휠: {wheel_position}mm 위치로 변경")
-    else:
-        # 다른 축: 연결 삭제 후 새 축에 장착
-        print(f"[축 변경] 휠: 다른 축으로 이동 -> {wheel_shaft_name}")
-        current_conn.delete()
-        {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
-        print(f"[축 변경 완료] 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
-else:
-    # 처음 장착
-    {wheel_shaft_name}.mount_component(wheel_mount, {wheel_position}*MM)
-    print(f"[신규 장착] 휠: {wheel_shaft_name}에 {wheel_position}mm 위치에 장착")
+{wheel_logic}
 
 print(f"\\n기어 장착/위치 변경 완료")
 """
@@ -1610,14 +1656,10 @@ def mount_bearing(
             - snapshot: 스냅샷 저장 결과 (dict)
     """
     try:
-        session = get_session(session_id)
-
-        if not session.is_initialized:
-            return {
-                "success": False,
-                "error": "세션이 초기화되지 않았습니다. masta_initialize()를 먼저 호출하세요.",
-                "session_id": session_id
-            }
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
 
         # 베어링 정보 찾기
         bearing_info = None
@@ -1633,39 +1675,26 @@ def mount_bearing(
                 "session_id": session_id
             }
 
-        # shaft_name으로 실제 축 변수명 찾기
-        shaft_variable = None
-        for shaft_info in session.shafts:
-            if shaft_info.get("name") == shaft_name:
-                shaft_variable = shaft_info.get("variable")
-                break
-
-        if not shaft_variable:
-            available_shafts = [s.get("name") for s in session.shafts]
-            return {
-                "success": False,
-                "error": f"축 '{shaft_name}'를 찾을 수 없습니다. 사용 가능한 축: {available_shafts}",
-                "session_id": session_id
-            }
+        # 축 변수명 찾기
+        shaft_variable, error = find_shaft_variable(session, shaft_name)
+        if error:
+            return error
 
         bearing_variable = bearing_info.get("variable")
 
-        # 베어링 장착 코드 생성
+        # 헬퍼 함수로 장착 코드 생성
+        mount_logic = generate_mount_unmount_code(
+            bearing_variable, shaft_variable, position, "베어링", indent="    "
+        )
+
         mount_code = f"""
 # 베어링 장착: {bearing_name} -> {shaft_name}
 try:
     bearing = {bearing_variable}
     shaft = {shaft_variable}
 
-    # 이미 장착되어 있으면 먼저 해제
-    if bearing.is_mounted:
-        current_conn = bearing.inner_connection
-        print(f"[기존 연결 해제] 베어링: {{bearing.editable_name}}")
-        current_conn.delete()
+{mount_logic}
 
-    # 축에 베어링 장착
-    shaft.mount_component(bearing, {position}*MM)
-    print(f"[장착 완료] 베어링: {{bearing.editable_name}} -> {shaft_name} ({position}mm)")
     print(f"  - is_mounted: {{bearing.is_mounted}}")
 except Exception as e:
     print(f"베어링 장착 중 오류: {{e}}")
@@ -1685,11 +1714,10 @@ except Exception as e:
             }
 
         # 세션 추적 목록 업데이트
-        if bearing_info:
-            bearing_info["mounted"] = True
-            bearing_info["shaft_name"] = shaft_name
-            bearing_info["shaft_variable"] = shaft_variable
-            bearing_info["position"] = position
+        bearing_info["mounted"] = True
+        bearing_info["shaft_name"] = shaft_name
+        bearing_info["shaft_variable"] = shaft_variable
+        bearing_info["position"] = position
 
         # 모델 스냅샷 저장
         snapshot_result = _save_model_snapshot(session, f"mount_bearing_{bearing_name}")
@@ -2833,7 +2861,10 @@ if __name__ == "__main__":
         shaft_name=shaft_name,
         position=40.0
     )
-    print(f"[OK] 베어링 장착: {bearing_mount_result['shaft_name']} at {bearing_mount_result['position']}mm")
+    if bearing_mount_result.get("success"):
+        print(f"[OK] 베어링 장착: {bearing_mount_result['shaft_name']} at {bearing_mount_result['position']}mm")
+    else:
+        print(f"[ERROR] 베어링 장착 실패: {bearing_mount_result.get('error')}")
     print(f"결과: {bearing_mount_result}")
 
     # 11. 베어링 제원 변경 (update_bearing_specs 사용)
