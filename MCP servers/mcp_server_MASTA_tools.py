@@ -2938,6 +2938,437 @@ def periodic_cleanup():
 cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
 cleanup_thread.start()
 
+
+# ============================================================================
+# Load Case 관리 함수들
+# ============================================================================
+
+@mcp.tool()
+def create_load_case(
+    session_id: str,
+    case_name: str,
+    torque: float,
+    speed: float,
+    duration: float = 1.0,
+    include_efficiency: bool = True
+) -> dict:
+    """
+    Load Case를 추가합니다. (기존 load case에 추가)
+
+    Args:
+        session_id (str): 세션 ID
+        case_name (str): Load Case 이름
+        torque (float): 토크 값 (Nm)
+        speed (float): 속도 (rpm)
+        duration (float): 지속 시간 (hr, 기본값 1.0)
+        include_efficiency (bool): 효율 계산 포함 여부 (기본값 True)
+
+    Returns:
+        dict: 추가 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - case_name: Load Case 이름 (str)
+            - case_index: 추가된 Load Case 인덱스 (int)
+            - total_cases: 전체 Load Case 개수 (int)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Load Case 추가 코드 생성
+        create_code = f"""
+# Load Case 추가: {case_name}
+import math
+
+RAD = math.pi / 180
+RPM = 2 * math.pi / 60
+
+try:
+    # Design state는 항상 1개 존재 (활용)
+    design_state = my_design.design_states[0]
+
+    # Load Case 생성
+    static_load = design_state.create_load_case("{case_name}")
+    static_load.transmission_efficiency_settings.include_efficiency = {include_efficiency}
+    static_load.duration = {duration}  # hr
+
+    # Power Load 설정 (첫 번째 power load 사용)
+    if len(static_load.power_loads) > 0:
+        static_load.power_loads[0].torque = {torque}
+        static_load.power_loads[0].speed = {speed} * RPM
+        print(f"[추가] Load Case: {case_name}")
+        print(f"  - Torque: {torque} Nm")
+        print(f"  - Speed: {speed} rpm")
+        print(f"  - Duration: {duration} hr")
+        print(f"  - Include Efficiency: {include_efficiency}")
+    else:
+        print(f"[경고] Power Load가 없어 토크/속도를 설정할 수 없습니다")
+
+    # 현재 Load Case 개수 출력
+    total_cases = design_state.static_loads.count()
+    print(f"[OK] 전체 Load Case 개수: {{total_cases}}")
+
+except Exception as e:
+    print(f"Load Case 추가 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(create_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"Load Case 추가 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # Load Case 개수 확인 코드 실행
+        count_code = "print(my_design.design_states[0].static_loads.count())"
+        count_result = session.execute_python_code(count_code)
+
+        try:
+            total_cases = int(count_result.strip().split('\n')[-1])
+            case_index = total_cases - 1  # 마지막 추가된 케이스의 인덱스
+        except:
+            total_cases = -1
+            case_index = -1
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"create_load_case_{case_name}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "case_name": case_name,
+            "case_index": case_index,
+            "total_cases": total_cases,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": f"예상치 못한 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def update_load_case(
+    session_id: str,
+    case_index: int,
+    case_name: Optional[str] = None,
+    torque: Optional[float] = None,
+    speed: Optional[float] = None,
+    duration: Optional[float] = None,
+    include_efficiency: Optional[bool] = None
+) -> dict:
+    """
+    기존 Load Case를 변경합니다.
+
+    Args:
+        session_id (str): 세션 ID
+        case_index (int): 변경할 Load Case 인덱스 (0부터 시작)
+        case_name (str, optional): 새로운 이름
+        torque (float, optional): 새로운 토크 값 (Nm)
+        speed (float, optional): 새로운 속도 (rpm)
+        duration (float, optional): 새로운 지속 시간 (hr)
+        include_efficiency (bool, optional): 효율 계산 포함 여부
+
+    Returns:
+        dict: 변경 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - case_index: Load Case 인덱스 (int)
+            - total_cases: 전체 Load Case 개수 (int)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Load Case 개수 확인
+        count_code = "print(my_design.design_states[0].static_loads.count())"
+        count_result = session.execute_python_code(count_code)
+
+        try:
+            total_cases = int(count_result.strip().split('\n')[-1])
+        except:
+            return {
+                "success": False,
+                "error": "Load Case 개수를 확인할 수 없습니다",
+                "session_id": session_id
+            }
+
+        # Load Case 존재 여부 확인
+        if total_cases == 0:
+            return {
+                "success": False,
+                "error": "Load Case가 존재하지 않습니다. 먼저 Load Case를 생성하세요",
+                "session_id": session_id
+            }
+
+        if case_index >= total_cases:
+            return {
+                "success": False,
+                "error": f"{case_index}번 Load Case는 존재하지 않습니다. (현재 0~{total_cases-1}번까지 존재)",
+                "session_id": session_id,
+                "total_cases": total_cases
+            }
+
+        # Load Case 변경 코드 생성
+        update_code = f"""
+# Load Case 변경: 인덱스 {case_index}
+import math
+
+RAD = math.pi / 180
+RPM = 2 * math.pi / 60
+
+try:
+    design_state = my_design.design_states[0]
+    static_load = design_state.static_loads[{case_index}]
+
+    print(f"[변경] Load Case 인덱스: {case_index}")
+    print(f"  - 기존 이름: {{static_load.name}}")
+
+"""
+
+        # 선택적 파라미터 업데이트
+        if case_name is not None:
+            update_code += f"""
+    static_load.name = "{case_name}"
+    print(f"  - 새 이름: {case_name}")
+"""
+
+        if duration is not None:
+            update_code += f"""
+    static_load.duration = {duration}
+    print(f"  - 새 Duration: {duration} hr")
+"""
+
+        if include_efficiency is not None:
+            update_code += f"""
+    static_load.transmission_efficiency_settings.include_efficiency = {include_efficiency}
+    print(f"  - 새 Include Efficiency: {include_efficiency}")
+"""
+
+        if torque is not None or speed is not None:
+            update_code += """
+    if len(static_load.power_loads) > 0:
+"""
+            if torque is not None:
+                update_code += f"""
+        static_load.power_loads[0].torque = {torque}
+        print(f"  - 새 Torque: {torque} Nm")
+"""
+            if speed is not None:
+                update_code += f"""
+        static_load.power_loads[0].speed = {speed} * RPM
+        print(f"  - 새 Speed: {speed} rpm")
+"""
+            update_code += """
+    else:
+        print(f"  [경고] Power Load가 없어 토크/속도를 설정할 수 없습니다")
+"""
+
+        update_code += """
+    print(f"[OK] Load Case 변경 완료")
+
+except Exception as e:
+    print(f"Load Case 변경 중 오류: {e}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(update_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"Load Case 변경 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"update_load_case_{case_index}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "case_index": case_index,
+            "total_cases": total_cases,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": f"예상치 못한 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}",
+            "session_id": session_id
+        }
+
+
+@mcp.tool()
+def delete_load_case(
+    session_id: str,
+    case_index: int
+) -> dict:
+    """
+    Load Case를 삭제합니다. (단, 1개만 남은 경우 삭제하지 않음)
+
+    Args:
+        session_id (str): 세션 ID
+        case_index (int): 삭제할 Load Case 인덱스 (0부터 시작)
+
+    Returns:
+        dict: 삭제 결과
+            - success: 성공 여부 (bool)
+            - session_id: 세션 ID (str)
+            - case_index: 삭제된 Load Case 인덱스 (int)
+            - total_cases: 삭제 후 남은 Load Case 개수 (int)
+            - execution_result: 실행 결과 (str)
+    """
+    try:
+        # 세션 검증
+        session, error = validate_session(session_id)
+        if error:
+            return error
+
+        # Load Case 개수 확인
+        count_code = "print(my_design.design_states[0].static_loads.count())"
+        count_result = session.execute_python_code(count_code)
+
+        try:
+            total_cases = int(count_result.strip().split('\n')[-1])
+        except:
+            return {
+                "success": False,
+                "error": "Load Case 개수를 확인할 수 없습니다",
+                "session_id": session_id
+            }
+
+        # Load Case 존재 여부 확인
+        if total_cases == 0:
+            return {
+                "success": False,
+                "error": "삭제할 Load Case가 존재하지 않습니다",
+                "session_id": session_id
+            }
+
+        # 1개만 남은 경우 삭제 방지
+        if total_cases == 1:
+            return {
+                "success": False,
+                "error": "Load Case가 1개만 남아있어 삭제할 수 없습니다. 최소 1개는 유지해야 합니다",
+                "session_id": session_id,
+                "total_cases": total_cases
+            }
+
+        # 인덱스 범위 확인
+        if case_index >= total_cases:
+            return {
+                "success": False,
+                "error": f"{case_index}번 Load Case는 존재하지 않습니다. (현재 0~{total_cases-1}번까지 존재)",
+                "session_id": session_id,
+                "total_cases": total_cases
+            }
+
+        # Load Case 삭제 코드 생성
+        delete_code = f"""
+# Load Case 삭제: 인덱스 {case_index}
+try:
+    design_state = my_design.design_states[0]
+    static_load = design_state.static_loads[{case_index}]
+
+    case_name = static_load.name
+    print(f"[삭제] Load Case 인덱스: {case_index}")
+    print(f"  - 이름: {{case_name}}")
+
+    # Load Case 삭제
+    design_state.static_loads.remove(static_load)
+
+    # 삭제 후 개수 확인
+    remaining_cases = design_state.static_loads.count()
+    print(f"[OK] Load Case 삭제 완료")
+    print(f"  - 남은 Load Case 개수: {{remaining_cases}}")
+
+except Exception as e:
+    print(f"Load Case 삭제 중 오류: {{e}}")
+    import traceback
+    traceback.print_exc()
+"""
+
+        # 코드 실행
+        execution_result = session.execute_python_code(delete_code)
+
+        # 실행 결과 확인
+        if "Failed to execute" in execution_result or "오류" in execution_result:
+            return {
+                "success": False,
+                "error": f"Load Case 삭제 실패: {execution_result}",
+                "session_id": session_id
+            }
+
+        # 삭제 후 개수 재확인
+        count_result = session.execute_python_code(count_code)
+        try:
+            remaining_cases = int(count_result.strip().split('\n')[-1])
+        except:
+            remaining_cases = -1
+
+        # 모델 스냅샷 저장
+        snapshot_result = _save_model_snapshot(session, f"delete_load_case_{case_index}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "case_index": case_index,
+            "total_cases": remaining_cases,
+            "execution_result": execution_result,
+            "snapshot": snapshot_result
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": f"예상치 못한 오류가 발생했습니다: {str(e)}\n{traceback.format_exc()}",
+            "session_id": session_id
+        }
+
+
 if __name__ == "__main__":
     print("=" * 80)
     print("MASTA Tools MCP Server - 통합 테스트 모드")
@@ -3240,19 +3671,164 @@ if __name__ == "__main__":
     status_after_bearing = get_session_status(session_id)
     print(f"→ 베어링 삭제 후 컴포넌트 수: {status_after_bearing['component_count']}")
 
+    # ========== Power Load 테스트 ==========
+    print("\n" + "=" * 80)
+    print("Power Load 테스트: 생성 → 장착 → 해제 → 재장착 → 삭제")
+    print("=" * 80)
+
+    # Power Load 생성
+    print("\n[5-1] Input Power Load 생성")
+    input_pl_result = create_power_load(
+        session_id=session_id,
+        power_load_name="Input_Power_Load"
+    )
+    print(f"[OK] Input Power Load 생성: {input_pl_result['power_load_name']}")
+    print(f"결과: {input_pl_result}")
+
+    print("\n[5-2] Output Power Load 생성")
+    output_pl_result = create_power_load(
+        session_id=session_id,
+        power_load_name="Output_Power_Load"
+    )
+    print(f"[OK] Output Power Load 생성: {output_pl_result['power_load_name']}")
+    print(f"결과: {output_pl_result}")
+
+    # Power Load 장착
+    print("\n[5-3] Power Load 축에 장착")
+    mount_input_pl_result = mount_power_load(
+        session_id=session_id,
+        power_load_name="Input_Power_Load",
+        shaft_name=shaft1_result['shaft_info']['name'],
+        position=30.0
+    )
+    print(f"[OK] Input Power Load 장착 완료")
+    print(f"결과: {mount_input_pl_result}")
+
+    mount_output_pl_result = mount_power_load(
+        session_id=session_id,
+        power_load_name="Output_Power_Load",
+        shaft_name=shaft2_result['shaft_info']['name'],
+        position=70.0
+    )
+    print(f"[OK] Output Power Load 장착 완료")
+    print(f"결과: {mount_output_pl_result}")
+
+    # ========== Load Case 테스트 ==========
+    print("\n" + "=" * 80)
+    print("Load Case 테스트: 생성 → 변경 → 삭제")
+    print("=" * 80)
+
+    # Load Case 생성 (첫 번째)
+    print("\n[6-1] Load Case 1 생성 (150Nm, 3000rpm)")
+    lc1_result = create_load_case(
+        session_id=session_id,
+        case_name="LC_150Nm_3000rpm",
+        torque=150.0,
+        speed=3000.0,
+        duration=1.0,
+        include_efficiency=True
+    )
+    print(f"[OK] Load Case 1 생성 완료")
+    print(f"결과: {lc1_result}")
+
+    # Load Case 생성 (두 번째)
+    print("\n[6-2] Load Case 2 생성 (200Nm, 4000rpm)")
+    lc2_result = create_load_case(
+        session_id=session_id,
+        case_name="LC_200Nm_4000rpm",
+        torque=200.0,
+        speed=4000.0,
+        duration=2.0,
+        include_efficiency=True
+    )
+    print(f"[OK] Load Case 2 생성 완료")
+    print(f"결과: {lc2_result}")
+
+    # Load Case 생성 (세 번째)
+    print("\n[6-3] Load Case 3 생성 (250Nm, 5000rpm)")
+    lc3_result = create_load_case(
+        session_id=session_id,
+        case_name="LC_250Nm_5000rpm",
+        torque=250.0,
+        speed=5000.0,
+        duration=1.5,
+        include_efficiency=False
+    )
+    print(f"[OK] Load Case 3 생성 완료")
+    print(f"결과: {lc3_result}")
+
+    # Load Case 변경 테스트 (2번 인덱스 변경)
+    print("\n[6-4] Load Case 2 (인덱스 1) 변경 (토크 220Nm으로 변경)")
+    update_lc_result = update_load_case(
+        session_id=session_id,
+        case_index=1,
+        torque=220.0,
+        case_name="LC_220Nm_4000rpm_modified"
+    )
+    print(f"[OK] Load Case 2 변경 완료")
+    print(f"결과: {update_lc_result}")
+
+    # Load Case 삭제 테스트 (3번째 삭제)
+    print("\n[6-5] Load Case 3 (인덱스 2) 삭제")
+    delete_lc_result = delete_load_case(
+        session_id=session_id,
+        case_index=2
+    )
+    print(f"[OK] Load Case 3 삭제 완료")
+    print(f"결과: {delete_lc_result}")
+
+    # 존재하지 않는 Load Case 변경 시도 (에러 테스트)
+    print("\n[6-6] 존재하지 않는 Load Case (인덱스 5) 변경 시도 (에러 테스트)")
+    error_update_result = update_load_case(
+        session_id=session_id,
+        case_index=5,
+        torque=300.0
+    )
+    if not error_update_result.get('success'):
+        print(f"[예상된 에러] {error_update_result.get('error')}")
+    print(f"결과: {error_update_result}")
+
+    # Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)
+    print("\n[6-7] Load Case 1개만 남을 때까지 삭제")
+    # 현재 2개 남음 (인덱스 0, 1), 인덱스 1 삭제
+    delete_lc2_result = delete_load_case(
+        session_id=session_id,
+        case_index=1
+    )
+    print(f"[OK] Load Case 삭제 완료 (1개 남음)")
+    print(f"결과: {delete_lc2_result}")
+
+    print("\n[6-8] Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)")
+    error_delete_result = delete_load_case(
+        session_id=session_id,
+        case_index=0
+    )
+    if not error_delete_result.get('success'):
+        print(f"[예상된 에러] {error_delete_result.get('error')}")
+    print(f"결과: {error_delete_result}")
+
+    # Load Case 포함 모델 저장
+    print("\n[6-9] Load Case 포함 모델 MASTA 파일 저장")
+    save_lc_result = save_masta_file(
+        session_id=session_id,
+        file_name="full_model_with_load_cases"
+    )
+    print(f"[OK] Load Case 포함 모델 저장 완료")
+    print(f"결과: {save_lc_result}")
+
     # ========== 최종 정리 ==========
     print("\n" + "=" * 80)
     print("최종 세션 정리")
     print("=" * 80)
 
     # 14. 최종 세션 상태 확인
-    print("\n[5-1] 최종 세션 상태 확인")
+    print("\n[7-1] 최종 세션 상태 확인")
     final_status = get_session_status(session_id)
     print(f"→ 최종 컴포넌트 수: {final_status['component_count']}")
     print(f"결과: {final_status}")
 
     # # 15. 세션 정리
-    # print("\n[5-2] 세션 정리")
+    # print("\n[7-2] 세션 정리")
     # cleanup_result = cleanup_session(session_id)
     # print(f"[OK] 세션 정리 완료: {cleanup_result['success']}")
     # print(f"결과: {cleanup_result}")
