@@ -678,7 +678,35 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
     3) Planetary: z3 / z1 (링기어 잇수 / 선기어 잇수),
     4) Double pinion planetary: z3 / z1 (링기어 잇수 / 선기어 잇수)
 
-## 4. 출력 형식
+## 4. 작동조건 변경 요청
+- 작동조건(시간, 온도, 토크, 속도 등) 변경 시 해당 값만 수정합니다
+- 기어타입에 따라 작동조건은 아래의 규칙을 준수하여 변경해야 함 
+   1) CASE1: Gear Pair 인 경우 아래의 정보가 모두 포함되어야 함
+    - Gear1/Gear2 속도 중 1개 (Gear1/Gear2 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - Gear1/Gear2 파워 중 1개, 또는 Gear1/Gear2 토크 중 1개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2는 사용자의 어휘에 따라 입력/출력 기어 or Pinion/Wheel 기어 등으로 불릴 수 있음
+    - 예시1: 입력속도 1000 rpm, 출력토크 50Nm -> OK
+    - 예시2: 입력속도 1000 rpm, 출력속도 500 rpm, 출력토크 50Nm -> NG (입출력 속도 모두 주어짐)
+    - 예시3: 입력속도 1000 rpm, 입력파워 100W, 출력토크 50Nm -> NG (입력 파워와 토크 모두 주어짐)
+
+   2) CASE2: Three Gear 
+    - Gear1/Gear2/Gear3 의 속도 중 1개 (입/출력 속도가 모두 주어진 경우 기어비와 상충되기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3 의 파워 중 2개, 또는 토크 중 2개 (파워와 토크는 상호 변환 가능. 둘 다 주어지는 경우 상충될 수 있기 때문에 권장하지 않음)
+    - Gear1/Gear2/Gear3은 사용자의 어휘에 따라 입력/아이들러/출력 기어 or Pinion/Idler/Wheel 기어 등으로 불릴 수 있음
+    - 예시1: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 토크 50Nm -> OK
+    - 예시2: Gear1 속도 1000 rpm, Gear2 속도 500 rpm, Gear3 토크 50Nm -> NG (입출력 속도 모두 주어짐)
+    - 예시3: Gear1 속도 1000 rpm, Gear2 파워 100W, Gear3 파워 50W -> NG (입력 파워와 토크 모두 주어짐)
+
+   3) CASE3: Simple Planetary, Double Pinion Planetary
+    - Sun/Carrier/Ring 의 속도 중 2개 (유성기어의 속도는 3개의 입력 중 2개로 결정되기 때문에 반드시 2개 입력 필요)
+    - Sun/Carrier/Ring 의 파워 중 1개, 또는 토크 중 1개 (유성기어의 파워 또는 토크는 1개의 입력과 입력된 속도로 나머지가 모두 계산됨)
+
+    ### 입출력 작동조건 단위 (사용자가 단위계를 입력하지 않은 경우 아래 단위로 간주함)
+    - 속도 단위: "rpm" (예: "1000rpm", "3600rpm" 등)
+    - 파워 단위: "kW" (예: "100 kW", "5kW" 등) 
+    - 토크 단위: "Nm" (예: "50Nm", "200Nm" 등)
+
+## 5. 출력 형식
 - **표준 JSON 형식** (중첩 구조 포함)
 - **변경된 항목만** 포함
 - 상위 경로를 포함한 Key 이름은 원본과 정확히 일치
@@ -2151,12 +2179,12 @@ if __name__ == "__main__":
         exit(1)
 
     print(f"✅ SimpleSizing 완료")
-    print(f"   생성된 케이스 수: {simplesizing_result.get('result_count', 0)}")
+    print(f"   생성된 케이스 수: {simplesizing_result.get('result_rows', 0)}")
 
     # 4. SimpleSizing 결과 조회
     print("\n[4/8] SimpleSizing 결과 조회...")
     sizing_results = get_simplesizing_results(session_id, return_all=False, top_n=10)
-
+    print(sizing_results)
     if not sizing_results.get("success"):
         print(f"❌ 결과 조회 실패: {sizing_results.get('error')}")
         exit(1)
@@ -2170,21 +2198,22 @@ if __name__ == "__main__":
     if len(results_df) > 0:
         import pandas as pd
         df = pd.DataFrame(results_df)
-        # Rank 1차, PPTE 2차 정렬
-        df_sorted = df.sort_values(['rank', 'PPTE'], ascending=[True, True])
-        print(df_sorted[['rank', 'module', 'z1', 'z2', 'PPTE', 'total mass', 'efficiency']].head(5).to_string(index=True))
+        # Rank 1차, PPTE 2차 정렬 (올바른 컬럼명 사용)
+        df_sorted = df.sort_values(['Rank', 'max. PPTE (μm)'], ascending=[True, True])
+        print(df_sorted[['Rank', 'm_n [mm]', 'z1', 'z2', 'max. PPTE (μm)', 'total mass (kg)', 'efficiency (%)']].head(5).to_string(index=True))
         print("   " + "-"*80)
 
         # 5. 첫 번째 케이스 적용 (Rank 1 중 PPTE 최소)
-        selected_index = 0  # df_sorted의 첫 번째 = Rank 1 & PPTE 최소
-        print(f"\n[5/8] SimpleSizing 케이스 적용 (index={selected_index})...")
-        print(f"   선택된 케이스: Rank={df_sorted.iloc[selected_index]['rank']}, "
-              f"Module={df_sorted.iloc[selected_index]['module']}, "
-              f"z1={df_sorted.iloc[selected_index]['z1']}, "
-              f"z2={df_sorted.iloc[selected_index]['z2']}, "
-              f"PPTE={df_sorted.iloc[selected_index]['PPTE']}")
+        # df_sorted의 첫 번째 행의 원본 인덱스 사용
+        selected_original_index = df_sorted.index[0]  # 정렬된 DataFrame의 첫 번째 행의 원본 인덱스
+        print(f"\n[5/8] SimpleSizing 케이스 적용 (원본 index={selected_original_index})...")
+        print(f"   선택된 케이스: Rank={df_sorted.iloc[0]['Rank']}, "
+              f"Module={df_sorted.iloc[0]['m_n [mm]']}, "
+              f"z1={int(df_sorted.iloc[0]['z1'])}, "
+              f"z2={int(df_sorted.iloc[0]['z2'])}, "
+              f"PPTE={df_sorted.iloc[0]['max. PPTE (μm)']:.4f} μm")
 
-        apply_result = apply_simplesizing_case(selected_index, session_id)
+        apply_result = apply_simplesizing_case(selected_original_index, session_id)
 
         if not apply_result.get("success"):
             print(f"❌ 케이스 적용 실패: {apply_result.get('error')}")
@@ -2249,4 +2278,4 @@ if __name__ == "__main__":
     # report = get_gear_report(session_id)
     # save_data = save_GearDesignData(session_id)
 
-    asyncio.run(mcp.run())
+    # asyncio.run(mcp.run())
