@@ -2104,29 +2104,149 @@ if __name__ == "__main__":
     def on_progress(message, percentage):
         print(f"  📊 진행: [{percentage:3d}%] {message}")
 
+    # ============================================================
+    # SimpleSizing 전체 워크플로우 테스트
+    # ============================================================
+
+    print("\n" + "="*60)
+    print("SimpleSizing 워크플로우 테스트 시작")
+    print("="*60)
+
+    # 1. 세션 초기화
+    print("\n[1/8] 세션 초기화...")
     result = initialize()
 
+    if not result.get("success"):
+        print(f"❌ 초기화 실패: {result.get('error')}")
+        exit(1)
+
+    session_id = result["session_id"]
+    print(f"✅ 세션 생성 완료: {session_id}")
+
     # 진행 상황 콜백 등록
-    if result.get("success"):
-        session = get_session(result["session_id"])
-        session.ipc_client.progress_callback = on_progress
+    session = get_session(session_id)
+    session.ipc_client.progress_callback = on_progress
 
-    responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", result["session_id"])
-    load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", result["session_id"])
-    geo_result = calc_geometry(result["session_id"])  # 예시 세션 ID
-    calc_result = calc_load_case(result["session_id"])
-    geo_result2 = get_geometry_results(result["session_id"])
-    message = get_messages(result["session_id"])
-    image2d = get_2D_image(result["session_id"])
-    image3d = get_3d_image(result["session_id"])
-    model3d = get_3d_modeling(result["session_id"])
-    report = get_gear_report(result["session_id"])
-    summary = get_allresults_summary(result["session_id"])
-    save_data = save_GearDesignData(result["session_id"])
+    # 2. 기본 데이터 설정 (기어비, 작동조건 등)
+    print("\n[2/8] 기본 기어 데이터 설정...")
+    modify_result = modify_gear_data(
+        "기어비 3, 입력 토크 100 Nm, 입력 회전수 1500 rpm으로 설정해줘",
+        session_id
+    )
+    if modify_result.get("success"):
+        print(f"✅ 데이터 설정 완료")
+        print(f"   변경사항: {modify_result.get('change_summary', 'N/A')}")
+    else:
+        print(f"❌ 데이터 설정 실패: {modify_result.get('error')}")
 
-    # print("\n=== SimpleSizing 테스트 (진행 상황 콜백 포함) ===")
-    # simplesizing = simple_sizing_gearpair("기어비 3에 적절한 기어를 선정해줘. 모듈은 2~4 사이였으면 좋겠어. 치폭은 30으로 해줘", result["session_id"])
-    # sizingresults = get_simplesizing_results(result["session_id"], False)
-    # print(f"\n결과: {simplesizing}")
+    # 3. SimpleSizing 실행
+    print("\n[3/8] SimpleSizing 실행 중...")
+    simplesizing_result = simple_sizing_gearpair(
+        "기어비 3, 저소음 설계를 원해. 모듈은 2~4 사이로 찾아줘. 치폭은 30mm로 해줘.",
+        session_id
+    )
+
+    if not simplesizing_result.get("success"):
+        print(f"❌ SimpleSizing 실패: {simplesizing_result.get('error')}")
+        exit(1)
+
+    print(f"✅ SimpleSizing 완료")
+    print(f"   생성된 케이스 수: {simplesizing_result.get('result_count', 0)}")
+
+    # 4. SimpleSizing 결과 조회
+    print("\n[4/8] SimpleSizing 결과 조회...")
+    sizing_results = get_simplesizing_results(session_id, return_all=False, top_n=10)
+
+    if not sizing_results.get("success"):
+        print(f"❌ 결과 조회 실패: {sizing_results.get('error')}")
+        exit(1)
+
+    results_df = sizing_results.get("results", [])
+    print(f"✅ 결과 조회 완료: {len(results_df)}개 케이스")
+
+    # 결과 표시 (상위 5개, Rank 1 우선)
+    print("\n   [SimpleSizing 결과 - Rank 기준 정렬, PPTE 오름차순]")
+    print("   " + "-"*80)
+    if len(results_df) > 0:
+        import pandas as pd
+        df = pd.DataFrame(results_df)
+        # Rank 1차, PPTE 2차 정렬
+        df_sorted = df.sort_values(['rank', 'PPTE'], ascending=[True, True])
+        print(df_sorted[['rank', 'module', 'z1', 'z2', 'PPTE', 'total mass', 'efficiency']].head(5).to_string(index=True))
+        print("   " + "-"*80)
+
+        # 5. 첫 번째 케이스 적용 (Rank 1 중 PPTE 최소)
+        selected_index = 0  # df_sorted의 첫 번째 = Rank 1 & PPTE 최소
+        print(f"\n[5/8] SimpleSizing 케이스 적용 (index={selected_index})...")
+        print(f"   선택된 케이스: Rank={df_sorted.iloc[selected_index]['rank']}, "
+              f"Module={df_sorted.iloc[selected_index]['module']}, "
+              f"z1={df_sorted.iloc[selected_index]['z1']}, "
+              f"z2={df_sorted.iloc[selected_index]['z2']}, "
+              f"PPTE={df_sorted.iloc[selected_index]['PPTE']}")
+
+        apply_result = apply_simplesizing_case(selected_index, session_id)
+
+        if not apply_result.get("success"):
+            print(f"❌ 케이스 적용 실패: {apply_result.get('error')}")
+            exit(1)
+
+        print(f"✅ 케이스 적용 완료")
+        print(f"   메시지: {apply_result.get('message')}")
+    else:
+        print("   결과 없음")
+        exit(1)
+
+    # 6. Geometry 계산
+    print("\n[6/8] Geometry 계산 중...")
+    geo_result = calc_geometry(session_id)
+
+    if not geo_result.get("success"):
+        print(f"❌ Geometry 계산 실패: {geo_result.get('error')}")
+        exit(1)
+
+    print(f"✅ Geometry 계산 완료")
+
+    # 7. Load Case 계산
+    print("\n[7/8] Load Case 계산 중...")
+    calc_result = calc_load_case(session_id)
+
+    if not calc_result.get("success"):
+        print(f"❌ Load Case 계산 실패: {calc_result.get('error')}")
+        exit(1)
+
+    print(f"✅ Load Case 계산 완료")
+    if calc_result.get("messages"):
+        print(f"   메시지: {calc_result['messages'][:200]}...")
+
+    # 8. 최종 결과 요약
+    print("\n[8/8] 최종 결과 요약 조회...")
+    summary = get_allresults_summary(session_id)
+
+    if not summary.get("success"):
+        print(f"❌ 결과 요약 실패: {summary.get('error')}")
+        exit(1)
+
+    print(f"✅ 결과 요약 완료")
+    summary_data = summary.get("summary", {})
+    print("\n   [최종 계산 결과]")
+    print("   " + "-"*80)
+    for key, value in list(summary_data.items())[:10]:
+        print(f"   {key}: {value}")
+    print("   " + "-"*80)
+
+    print("\n" + "="*60)
+    print("SimpleSizing 워크플로우 테스트 완료! ✅")
+    print("="*60)
+
+    # 기존 워크플로우 테스트는 주석 처리
+    # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", session_id)
+    # load = load_GearDesignData(r":\SW\GearDesign\GearDesign\Example\Ex3-Three gear.GD1", session_id)
+    # geo_result2 = get_geometry_results(session_id)
+    # message = get_messages(session_id)
+    # image2d = get_2D_image(session_id)
+    # image3d = get_3d_image(session_id)
+    # model3d = get_3d_modeling(session_id)
+    # report = get_gear_report(session_id)
+    # save_data = save_GearDesignData(session_id)
 
     asyncio.run(mcp.run())
