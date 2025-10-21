@@ -1775,6 +1775,7 @@ def apply_simplesizing_case(row_index: int, session_id: str) -> dict:
         - 사전에 simple_sizing_gearpair()가 완료되어야 합니다
         - 적용 후에는 calc_geometry() → calc_load_case()를 수행하여 최종 검증해야 합니다
         - row_index는 0부터 시작하며, get_simplesizing_results()의 results 리스트 인덱스와 일치합니다
+        - C# 측에서 updated_config를 반환해야 changed_data가 정확히 동기화됩니다
 
     Example:
         # SimpleSizing 수행
@@ -1828,41 +1829,32 @@ def apply_simplesizing_case(row_index: int, session_id: str) -> dict:
             # 선택된 row의 데이터를 dict로 변환
             selected_row = df.iloc[row_index].to_dict()
 
-            # IPC를 통해 C#에 전달
+            # IPC를 통해 C#에 전달하고 적용
             response = session.ipc_client.apply_simplesizing_case(selected_row)
 
             if response.get("success", False):
-                # 적용 성공 시 changed_data도 업데이트 (일관성 유지)
-                # 주요 제원만 업데이트
-                update_dict = {}
-                if "module" in selected_row:
-                    update_dict["Normal Module"] = selected_row["module"]
-                if "z1" in selected_row:
-                    update_dict["z1"] = int(selected_row["z1"])
-                if "z2" in selected_row:
-                    update_dict["z2"] = int(selected_row["z2"])
-                if "helix_angle" in selected_row:
-                    update_dict["Helix Angle"] = selected_row["helix_angle"]
-                if "x1" in selected_row:
-                    update_dict["x1"] = selected_row["x1"]
-                if "x2" in selected_row:
-                    update_dict["x2"] = selected_row["x2"]
+                # C#에서 변경된 config 데이터 반환받아 업데이트
+                updated_config = response.get("updated_config")
 
-                # CDMethod는 항상 1로 설정 (자동 계산)
-                update_dict["CDMethod"] = 1
+                if updated_config:
+                    # GearDesign에서 반환한 전체 config로 changed_data 업데이트
+                    session.changed_data = updated_config
 
-                # changed_data 업데이트 (Basic Data 섹션)
-                if "Basic Data" not in session.changed_data:
-                    session.changed_data["Basic Data"] = {}
-
-                session.changed_data["Basic Data"].update(update_dict)
-
-                return {
-                    "success": True,
-                    "message": f"{row_index}번 케이스가 적용되었습니다",
-                    "applied_data": selected_row,
-                    "session_id": session.session_id
-                }
+                    return {
+                        "success": True,
+                        "message": f"{row_index}번 케이스가 적용되었습니다",
+                        "applied_data": selected_row,
+                        "session_id": session.session_id
+                    }
+                else:
+                    # updated_config가 없으면 경고 (하위 호환성)
+                    return {
+                        "success": True,
+                        "message": f"{row_index}번 케이스가 적용되었습니다 (config 업데이트 없음)",
+                        "applied_data": selected_row,
+                        "session_id": session.session_id,
+                        "warning": "C#에서 updated_config를 반환하지 않았습니다. Program.cs 업데이트가 필요합니다."
+                    }
             else:
                 return {
                     "success": False,
