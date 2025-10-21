@@ -87,7 +87,33 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
   - **반드시 rank 기반 분석 후 표로 표시**
 - **`apply_simplesizing_case(row_index, session_id)`**: 선택한 케이스 적용
   - row_index는 0부터 시작 (get_simplesizing_results의 results 인덱스)
+  - **UI 더블클릭과 동일한 로직 사용** (SimpleSizingCase 클래스 공통화)
+  - 자동으로 updated_config를 반환하여 session.changed_data 동기화
   - 적용 후 calc_geometry → calc_load_case 필수
+
+#### apply_simplesizing_case 내부 동작
+
+```
+Python MCP Server
+    ↓ (IPC 전송: case_data = DataFrame row → dict)
+C# Program.cs apply_simplesizing_case handler
+    ↓ SimpleSizingCase.FromDictionary(case_data)
+    ↓ SimpleSizingForm.ApplySizingCaseToMainForm(mainForm, sizingCase) ← UI와 공통
+GearDesignForm 컨트롤 업데이트 (TB_m_n, TB_z1, TB_z2, TB_a1, TB_beta, TB_alpha_n, TB_b1, TB_b2, Drop_CDMethod 등)
+    ↓ form.SaveDataInput_Json(false)
+    ↓ (IPC 반환: updated_config)
+Python session.changed_data = updated_config (자동 동기화)
+```
+
+**적용되는 값**:
+- 모듈 (m_n)
+- 잇수 (z1, z2)
+- 중심거리 (a)
+- 헬릭스각 (β)
+- 압력각 (α_n)
+- 페이스폭 (Facewidth)
+- 전위계수 초기화 (x1=0, x2=0)
+- 중심거리 방법 자동 설정 (CDMethod=0)
 
 ---
 
@@ -164,17 +190,24 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 요청: "기어비 3, 모듈 2~4 사이로 찾아줘"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank+지표 기준 표 표시)
-  → 사용자 선택 → apply_simplesizing_case(row_index)
-  → calc_geometry → calc_load_case
+  → 사용자에게 추천 (예: "3번 케이스 추천합니다")
+  → 사용자 선택 확인
+  → apply_simplesizing_case(row_index=3) ← row_index는 표의 인덱스 (0부터 시작)
+  → calc_geometry → calc_load_case → get_allresults_summary
 ```
+
+**apply_simplesizing_case 예시**:
+- 표에서 4번째 행(index=3) 선택 시: `apply_simplesizing_case(3, session_id)`
+- 자동으로 UI와 동일한 로직으로 mainForm 업데이트 및 config 동기화
 
 ### 3. 성능 기준 요청 (SimpleSizing 워크플로우)
 ```
 요청: "저소음 기어, 기어비 3"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank ↑ → PPTE ↑ 정렬, 표 표시)
-  → Rank 1 중 PPTE 최소 케이스 추천 → 사용자 선택
-  → apply_simplesizing_case(row_index) → calc_geometry → calc_load_case
+  → Rank 1 중 PPTE 최소 케이스 추천 (예: "Rank 1에서 PPTE 0.5로 가장 낮은 0번 케이스 추천")
+  → 사용자 선택 확인
+  → apply_simplesizing_case(row_index=0) → calc_geometry → calc_load_case
 ```
 
 ### 4. 복합 성능 기준 (SimpleSizing 워크플로우)
@@ -182,8 +215,9 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 요청: "경량+저소음, 기어비 4"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (Rank 1 필터링 → total mass + PPTE 비교)
-  → 트레이드오프 설명 → 사용자 선택
-  → apply_simplesizing_case(row_index) → calc_geometry → calc_load_case
+  → 트레이드오프 설명 (예: "1번은 경량 우선, 5번은 저소음 우선, 3번은 균형")
+  → 사용자 선택 확인
+  → apply_simplesizing_case(row_index=3) → calc_geometry → calc_load_case
 ```
 
 ---
@@ -223,7 +257,8 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 - [ ] initialize() 세션 생성
 - [ ] session_id 모든 함수에 전달
 - [ ] calc_geometry → calc_load_case 순서
-- [ ] SimpleSizing: simple_sizing_gearpair → get_simplesizing_results → 선택 → apply_simplesizing_case
+- [ ] SimpleSizing: simple_sizing_gearpair → get_simplesizing_results → 추천 → 사용자 선택 확인 → apply_simplesizing_case(row_index)
+- [ ] apply_simplesizing_case 후 반드시 calc_geometry → calc_load_case 실행
 
 ### 결과 표시 (필수!)
 - [ ] get_allresults_summary() → **마크다운 표**
