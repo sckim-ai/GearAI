@@ -32,7 +32,7 @@
 **실행 순서**:
 ```
 initialize() → modify_gear_data() → calc_geometry() → calc_load_case()
-→ get_allresults_summary() (표로 표시 필수) → get_2D_image/get_gear_report
+→ get_allresults_summary() (표로 표시 필수) → get_2D_image/get_gear_report/get_3d_image/get_3d_modeling
 ```
 
 ### 2️⃣ SimpleSizing 워크플로우 (러프한 조건/성능 기준)
@@ -153,7 +153,7 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 ```
 요청: "모듈 3, 잇수 20-60, 헬리컬각 15도 설계"
 → initialize → modify_gear_data → calc_geometry → calc_load_case
-  → get_allresults_summary (표 표시) → get_gear_report
+  → get_allresults_summary (표 표시) → get_gear_report 
 ```
 
 ### 2. 러프한 조건 (SimpleSizing 워크플로우)
