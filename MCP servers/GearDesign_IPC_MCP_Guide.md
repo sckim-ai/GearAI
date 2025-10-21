@@ -46,7 +46,7 @@ initialize() → modify_gear_data() → calc_geometry() → calc_load_case()
 ```
 initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 → get_simplesizing_results() (rank 기반 분석 + 표 표시 필수)
-→ 사용자 선택 → modify_gear_data(선택 케이스)
+→ 사용자 선택 → apply_simplesizing_case(row_index)
 → calc_geometry() → calc_load_case() → get_allresults_summary()
 ```
 
@@ -85,6 +85,9 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
   - 이전 대화 기반 요구사항 요약하여 입력
 - **`get_simplesizing_results(session_id, return_all=False, top_n=100)`**: 결과 조회
   - **반드시 rank 기반 분석 후 표로 표시**
+- **`apply_simplesizing_case(row_index, session_id)`**: 선택한 케이스 적용
+  - row_index는 0부터 시작 (get_simplesizing_results의 results 인덱스)
+  - 적용 후 calc_geometry → calc_load_case 필수
 
 ---
 
@@ -161,7 +164,8 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 요청: "기어비 3, 모듈 2~4 사이로 찾아줘"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank+지표 기준 표 표시)
-  → 사용자 선택 → modify_gear_data → calc_geometry → calc_load_case
+  → 사용자 선택 → apply_simplesizing_case(row_index)
+  → calc_geometry → calc_load_case
 ```
 
 ### 3. 성능 기준 요청 (SimpleSizing 워크플로우)
@@ -169,7 +173,8 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 요청: "저소음 기어, 기어비 3"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank ↑ → PPTE ↑ 정렬, 표 표시)
-  → Rank 1 중 PPTE 최소 케이스 추천 → 사용자 선택 → 최종 검증
+  → Rank 1 중 PPTE 최소 케이스 추천 → 사용자 선택
+  → apply_simplesizing_case(row_index) → calc_geometry → calc_load_case
 ```
 
 ### 4. 복합 성능 기준 (SimpleSizing 워크플로우)
@@ -177,7 +182,8 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 요청: "경량+저소음, 기어비 4"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (Rank 1 필터링 → total mass + PPTE 비교)
-  → 트레이드오프 설명 → 사용자 선택 → 최종 검증
+  → 트레이드오프 설명 → 사용자 선택
+  → apply_simplesizing_case(row_index) → calc_geometry → calc_load_case
 ```
 
 ---
@@ -217,7 +223,7 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 - [ ] initialize() 세션 생성
 - [ ] session_id 모든 함수에 전달
 - [ ] calc_geometry → calc_load_case 순서
-- [ ] SimpleSizing: simple_sizing_gearpair → get_simplesizing_results → 선택 → modify_gear_data
+- [ ] SimpleSizing: simple_sizing_gearpair → get_simplesizing_results → 선택 → apply_simplesizing_case
 
 ### 결과 표시 (필수!)
 - [ ] get_allresults_summary() → **마크다운 표**

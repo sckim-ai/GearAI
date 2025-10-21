@@ -239,6 +239,14 @@ class GearDesignIPC:
         }
         return self._send_command(command)
 
+    def apply_simplesizing_case(self, case_data: Dict[str, any]) -> Dict[str, any]:
+        """SimpleSizing 결과 케이스를 현재 기어 데이터에 적용"""
+        command = {
+            "action": "apply_simplesizing_case",
+            "case_data": case_data
+        }
+        return self._send_command(command)
+
     def stop(self):
         """프로세스 종료"""
         if self.process:
@@ -1737,6 +1745,141 @@ def get_simplesizing_results(session_id: str, return_all: bool = False, top_n: i
         return {
             "success": False,
             "error": f"결과 조회 중 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def apply_simplesizing_case(row_index: int, session_id: str) -> dict:
+    """
+    SimpleSizing 결과의 특정 케이스를 현재 기어 데이터에 적용합니다.
+
+    이 함수는 SimpleSizing 결과 DataFrame에서 사용자가 선택한 행(케이스)의 데이터를
+    IPC를 통해 GearDesign에 전달하여 현재 기어 설계 데이터에 적용합니다.
+
+    Args:
+        row_index (int): SimpleSizing 결과 DataFrame의 행 인덱스 (0부터 시작)
+                        예: get_simplesizing_results()로 조회한 결과에서 3번째 케이스를 선택하려면 row_index=2
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
+
+    Returns:
+        dict: 적용 결과
+            - 성공 시: {
+                "success": True,
+                "message": "케이스가 적용되었습니다",
+                "applied_data": {...},  # 적용된 데이터 (모듈, 잇수 등)
+                "session_id": "세션ID"
+              }
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 사전에 simple_sizing_gearpair()가 완료되어야 합니다
+        - 적용 후에는 calc_geometry() → calc_load_case()를 수행하여 최종 검증해야 합니다
+        - row_index는 0부터 시작하며, get_simplesizing_results()의 results 리스트 인덱스와 일치합니다
+
+    Example:
+        # SimpleSizing 수행
+        simple_sizing_gearpair("기어비 3, 저소음", session_id)
+
+        # 결과 조회
+        results = get_simplesizing_results(session_id, False, 20)
+
+        # 사용자가 2번 케이스(인덱스 1) 선택
+        apply_result = apply_simplesizing_case(1, session_id)
+
+        # 적용 후 계산
+        calc_geometry(session_id)
+        calc_load_case(session_id)
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    if session.simplesizing_results is None:
+        return {
+            "success": False,
+            "error": "SimpleSizing 계산이 먼저 수행되어야 합니다. simple_sizing_gearpair() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    try:
+        # DataFrame에서 특정 row 추출
+        if isinstance(session.simplesizing_results, pd.DataFrame):
+            df = session.simplesizing_results
+
+            if row_index < 0 or row_index >= len(df):
+                return {
+                    "success": False,
+                    "error": f"잘못된 인덱스: {row_index} (유효 범위: 0~{len(df)-1})",
+                    "session_id": session.session_id
+                }
+
+            # 선택된 row의 데이터를 dict로 변환
+            selected_row = df.iloc[row_index].to_dict()
+
+            # IPC를 통해 C#에 전달
+            response = session.ipc_client.apply_simplesizing_case(selected_row)
+
+            if response.get("success", False):
+                # 적용 성공 시 changed_data도 업데이트 (일관성 유지)
+                # 주요 제원만 업데이트
+                update_dict = {}
+                if "module" in selected_row:
+                    update_dict["Normal Module"] = selected_row["module"]
+                if "z1" in selected_row:
+                    update_dict["z1"] = int(selected_row["z1"])
+                if "z2" in selected_row:
+                    update_dict["z2"] = int(selected_row["z2"])
+                if "helix_angle" in selected_row:
+                    update_dict["Helix Angle"] = selected_row["helix_angle"]
+                if "x1" in selected_row:
+                    update_dict["x1"] = selected_row["x1"]
+                if "x2" in selected_row:
+                    update_dict["x2"] = selected_row["x2"]
+
+                # CDMethod는 항상 1로 설정 (자동 계산)
+                update_dict["CDMethod"] = 1
+
+                # changed_data 업데이트 (Basic Data 섹션)
+                if "Basic Data" not in session.changed_data:
+                    session.changed_data["Basic Data"] = {}
+
+                session.changed_data["Basic Data"].update(update_dict)
+
+                return {
+                    "success": True,
+                    "message": f"{row_index}번 케이스가 적용되었습니다",
+                    "applied_data": selected_row,
+                    "session_id": session.session_id
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"케이스 적용 실패: {response.get('error', 'Unknown error')}",
+                    "session_id": session.session_id
+                }
+        else:
+            return {
+                "success": False,
+                "error": "SimpleSizing 결과가 DataFrame이 아닙니다",
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"케이스 적용 중 오류: {str(e)}",
             "session_id": session.session_id
         }
 
