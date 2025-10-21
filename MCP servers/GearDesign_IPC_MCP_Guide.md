@@ -32,6 +32,110 @@
 
 ---
 
+## 워크플로우 선택 가이드 (중요!)
+
+### 사용자 요청 분석 및 워크플로우 결정
+
+**LLM은 사용자 요청을 받으면 반드시 아래 기준에 따라 워크플로우를 선택해야 합니다.**
+
+#### 1️⃣ 기본 워크플로우 선택 (Basic Design Flow)
+다음 조건에 **모두** 해당하면 사이징 없이 바로 계산을 수행합니다:
+
+**조건**:
+- ✅ 모듈(Module)이 **구체적 수치**로 제공됨 (예: "모듈 3", "모듈 2.5")
+- ✅ 잇수(z1, z2)가 **구체적 수치**로 제공됨 (예: "잇수 20-60", "피니언 25, 기어 75")
+- ✅ 기타 주요 제원이 **구체적**으로 명시됨 (헬리컬각, 압력각, 전위계수 등)
+
+**예시**:
+```
+✅ "모듈 3, 잇수 20-60인 헬리컬 기어를 설계해줘. 헬리컬각은 15도야."
+   → 모듈(3), 잇수(20-60), 헬리컬각(15도) 모두 명확 → 기본 워크플로우
+
+✅ "모듈 2.5, 피니언 25개, 기어 75개로 평기어를 계산해줘."
+   → 모듈(2.5), 잇수(25-75) 명확 → 기본 워크플로우
+
+✅ "이 파일의 모듈을 3.5로 바꾸고 재계산해줘."
+   → 기존 파일 수정 요청 → 기본 워크플로우
+```
+
+**워크플로우**:
+```
+initialize → modify_gear_data → calc_geometry → calc_load_case → get_allresults_summary
+```
+
+---
+
+#### 2️⃣ SimpleSizing 워크플로우 선택 (Sizing Flow)
+다음 조건 중 **하나라도** 해당하면 사이징을 먼저 수행합니다:
+
+**조건**:
+- ❌ 모듈이 **범위로 제공**되거나 **미지정** (예: "모듈 2~4", "적절한 모듈")
+- ❌ 잇수가 **미지정**이고 기어비만 제공 (예: "기어비 3", "감속비 5:1")
+- ❌ 작동조건(토크, 속도, 동력)만 제공되고 구체적 제원 없음
+- ❌ "적절한", "적당한", "좋은" 등의 **추상적 표현** 사용
+- ❌ "찾아줘", "선정해줘", "설계해줘"와 같은 **탐색적 요청**
+
+**예시**:
+```
+❌ "기어비 3 정도 되는 기어를 찾아줘. 모듈은 2~4 사이로."
+   → 모듈이 범위(2~4), 잇수 미지정 → SimpleSizing 워크플로우
+
+❌ "감속비 5:1로 토크 100Nm를 전달할 수 있는 기어를 설계해줘."
+   → 작동조건만 제공, 구체적 제원 없음 → SimpleSizing 워크플로우
+
+❌ "기어비 4에 적절한 헬리컬 기어를 선정해줘."
+   → "적절한"이라는 추상적 표현, 잇수 미지정 → SimpleSizing 워크플로우
+
+❌ "치폭 30, 헬리컬각 10도로 좋은 기어쌍을 찾아줘."
+   → 모듈/잇수 미지정, "좋은"이라는 추상적 표현 → SimpleSizing 워크플로우
+```
+
+**워크플로우**:
+```
+initialize → modify_gear_data (기본설정) → simple_sizing_gearpair →
+get_simplesizing_results (표로 표시) → 사용자 선택 → modify_gear_data (선택 케이스 적용) →
+calc_geometry → calc_load_case → get_allresults_summary
+```
+
+---
+
+#### 3️⃣ 판단이 애매한 경우
+
+다음과 같이 **일부는 명확하고 일부는 불명확한 경우**:
+
+**예시**:
+```
+"모듈 3으로 기어비 4가 되는 기어를 찾아줘."
+→ 모듈은 명확(3)하지만 잇수는 미지정
+→ 🔍 SimpleSizing 워크플로우 선택 (잇수 탐색 필요)
+```
+
+**기준**:
+- 모듈 또는 잇수 중 **하나라도 미지정이면 SimpleSizing** 수행
+- 사용자가 여러 대안을 비교하고 싶어하는 의도가 있으면 SimpleSizing
+
+---
+
+### 워크플로우 선택 의사결정 트리
+
+```
+사용자 요청 접수
+    ↓
+[모듈이 구체적 수치인가?]
+    ├─ NO → SimpleSizing 워크플로우
+    └─ YES
+        ↓
+    [잇수가 구체적 수치인가?]
+        ├─ NO → SimpleSizing 워크플로우
+        └─ YES
+            ↓
+        [추상적 표현("적절한", "좋은") 사용?]
+            ├─ YES → SimpleSizing 워크플로우
+            └─ NO → 기본 워크플로우
+```
+
+---
+
 ## 도구 사용 가이드
 
 ### 1. 세션 관리
@@ -204,9 +308,15 @@
 
 ## 사용 예시 시나리오
 
-### 시나리오 1: 새로운 기어 설계
+### 시나리오 1: 구체적 제원이 주어진 경우 (기본 워크플로우)
 ```
 사용자: "모듈 3, 잇수 20-60인 헬리컬 기어를 설계해줘. 헬리컬각은 15도야."
+
+LLM 판단:
+- 모듈(3) ✅ 구체적
+- 잇수(20-60) ✅ 구체적
+- 헬리컬각(15도) ✅ 구체적
+→ 기본 워크플로우 선택
 
 LLM 실행:
 1. initialize() → session_id 획득
@@ -218,23 +328,55 @@ LLM 실행:
 7. get_gear_report(session_id) → 보고서 경로 전달
 ```
 
-### 시나리오 2: 기어쌍 사이징
+### 시나리오 2: 러프한 조건만 주어진 경우 (SimpleSizing 워크플로우)
 ```
 사용자: "기어비 3 정도 되는 기어를 찾아줘. 모듈은 2~4 사이, 치폭은 30으로."
 
+LLM 판단:
+- 모듈(2~4) ❌ 범위 지정
+- 잇수 ❌ 미지정 (기어비만 제공)
+- "찾아줘" ❌ 탐색적 요청
+→ SimpleSizing 워크플로우 선택
+
 LLM 실행:
 1. initialize() → session_id 획득
-2. modify_gear_data("기본 설정: 기어비 3, 치폭 30", session_id)
+2. modify_gear_data("기본 설정: 치폭 30", session_id)
 3. simple_sizing_gearpair("기어비 3, 모듈 2~4, 치폭 30", session_id)
 4. get_simplesizing_results(session_id, False, 20) → 상위 20개 결과를 표로 표시
-5. 사용자에게 선택 요청
-6. (선택 후) modify_gear_data("선택된 케이스 제원 적용", session_id)
-7. calc_geometry → calc_load_case → 최종 검증
+5. 사용자에게 선택 요청: "위 결과 중 적절한 케이스를 선택해주세요."
+6. (사용자가 2번 케이스 선택)
+7. modify_gear_data("2번 케이스: 모듈 2.5, 잇수 24-72 적용", session_id)
+8. calc_geometry(session_id) → calc_load_case(session_id)
+9. get_allresults_summary(session_id) → 최종 결과 표시
+10. get_gear_report(session_id) → 보고서 생성
 ```
 
-### 시나리오 3: 기존 파일 수정
+### 시나리오 3: 일부만 구체적인 경우 (SimpleSizing 워크플로우)
+```
+사용자: "모듈 3으로 감속비 4:1인 기어를 설계해줘."
+
+LLM 판단:
+- 모듈(3) ✅ 구체적
+- 잇수 ❌ 미지정 (기어비만 제공)
+→ SimpleSizing 워크플로우 선택 (잇수 탐색 필요)
+
+LLM 실행:
+1. initialize() → session_id 획득
+2. modify_gear_data("모듈 3 설정", session_id)
+3. simple_sizing_gearpair("기어비 4, 모듈 3 고정", session_id)
+4. get_simplesizing_results(session_id, False, 10) → 상위 10개 결과 표시
+5. 사용자 선택 → modify_gear_data 적용
+6. calc_geometry → calc_load_case → 최종 검증
+```
+
+### 시나리오 4: 기존 파일 수정 (기본 워크플로우)
 ```
 사용자: "이 파일(Ex3-Three gear.GD1)을 불러와서 기어1 잇수를 30으로 바꿔줘."
+
+LLM 판단:
+- 기존 파일 수정 요청
+- 변경할 제원(잇수 30) ✅ 구체적
+→ 기본 워크플로우 선택
 
 LLM 실행:
 1. initialize() → session_id 획득
@@ -264,10 +406,23 @@ LLM 실행:
 
 ## 요약 체크리스트
 
+### 워크플로우 선택
+- [ ] 사용자 요청 분석: 모듈/잇수가 구체적 수치인가?
+- [ ] 추상적 표현("적절한", "좋은") 또는 범위 지정 시 SimpleSizing 선택
+- [ ] 구체적 제원이 모두 주어진 경우 기본 워크플로우 선택
+
+### 실행 순서
 - [ ] initialize()로 세션 생성 확인
 - [ ] session_id를 모든 함수에 전달
 - [ ] calc_geometry → calc_load_case 순서 준수
-- [ ] get_allresults_summary() 결과를 표로 표시
-- [ ] SimpleSizing 결과를 표로 표시하고 선택 가능하게 안내
+- [ ] SimpleSizing 사용 시: simple_sizing_gearpair → get_simplesizing_results → 사용자 선택 → modify_gear_data
+
+### 결과 표시
+- [ ] get_allresults_summary() 결과를 **반드시 마크다운 표로 표시**
+- [ ] get_simplesizing_results() 결과를 **반드시 표로 표시**하고 선택 가능하게 안내
+- [ ] calc_load_case() 메시지를 사용자에게 전달
+
+### 오류 처리
 - [ ] 오류 발생 시 success 필드와 error 메시지 확인
+- [ ] change_summary로 실제 변경사항 검증
 - [ ] 기어비 설정 시 기어 타입 고려
