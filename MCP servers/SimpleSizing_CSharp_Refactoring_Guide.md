@@ -44,6 +44,7 @@ namespace GearDesign.Utility
 
         /// <summary>
         /// Dictionary (IPC)에서 SimpleSizingCase 생성
+        /// DataGridView와 동일한 컬럼명 사용 (SimpleSizing 결과 DataFrame과 일치)
         /// </summary>
         public static SimpleSizingCase FromDictionary(Dictionary<string, object> data)
         {
@@ -51,11 +52,11 @@ namespace GearDesign.Utility
             {
                 Z1 = GetValueSafely(data, "z1"),
                 Z2 = GetValueSafely(data, "z2"),
-                Module = GetValueSafely(data, "module"),
-                CenterDistance = GetValueSafely(data, "center_distance") ?? GetValueSafely(data, "a"),
-                HelixAngle = GetValueSafely(data, "helix_angle"),
-                PressureAngle = GetValueSafely(data, "pressure_angle"),
-                FaceWidth = GetValueSafely(data, "face_width")
+                Module = GetValueSafely(data, "m_n [mm]"),
+                CenterDistance = GetValueSafely(data, "a [mm]"),
+                HelixAngle = GetValueSafely(data, "β [deg]"),
+                PressureAngle = GetValueSafely(data, "α_n [deg]"),
+                FaceWidth = GetValueSafely(data, "Facewidth [mm]")
             };
         }
 
@@ -326,19 +327,21 @@ private int ParseInt(string text)
 
 ---
 
-## Python 측 컬럼명 매핑
+## Python 측 컬럼명 (공통)
 
-Python SimpleSizing 결과에서 C#으로 전달되는 키:
+Python SimpleSizing 결과 DataFrame과 C# FromDictionary()가 **동일한 키** 사용:
 
-| Python DataFrame 컬럼 | C# SimpleSizingCase 프로퍼티 | C# DataGridView 컬럼 |
-|----------------------|------------------------------|---------------------|
+| DataFrame/IPC 컬럼 | C# SimpleSizingCase 프로퍼티 | DataGridView 컬럼 |
+|-------------------|------------------------------|-------------------|
 | `z1` | `Z1` | `"z1"` |
 | `z2` | `Z2` | `"z2"` |
-| `module` | `Module` | `"m_n [mm]"` |
-| `helix_angle` | `HelixAngle` | `"β [deg]"` |
-| `pressure_angle` | `PressureAngle` | `"α_n [deg]"` |
-| `face_width` | `FaceWidth` | `"Facewidth [mm]"` |
-| `center_distance` 또는 `a` | `CenterDistance` | `"a [mm]"` |
+| `m_n [mm]` | `Module` | `"m_n [mm]"` |
+| `a [mm]` | `CenterDistance` | `"a [mm]"` |
+| `β [deg]` | `HelixAngle` | `"β [deg]"` |
+| `α_n [deg]` | `PressureAngle` | `"α_n [deg]"` |
+| `Facewidth [mm]` | `FaceWidth` | `"Facewidth [mm]"` |
+
+**중요**: FromDictionary()와 FromDataGridViewRow()가 동일한 컬럼명을 사용하므로 Python에서 별도 매핑 불필요
 
 ---
 

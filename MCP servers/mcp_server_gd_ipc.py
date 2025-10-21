@@ -1855,18 +1855,8 @@ def apply_simplesizing_case(row_index: int, session_id: str) -> dict:
                 }
 
             # 선택된 row의 데이터를 dict로 변환
-            selected_row_raw = df.iloc[row_index].to_dict()
-
-            # DataFrame 컬럼명을 C# SimpleSizingCase가 기대하는 키로 매핑
-            selected_row = {
-                "z1": selected_row_raw.get("z1"),
-                "z2": selected_row_raw.get("z2"),
-                "module": selected_row_raw.get("m_n [mm]"),
-                "center_distance": selected_row_raw.get("a [mm]"),
-                "helix_angle": selected_row_raw.get("β [deg]"),
-                "pressure_angle": selected_row_raw.get("α_n [deg]"),
-                "face_width": selected_row_raw.get("Facewidth [mm]")
-            }
+            # DataFrame 컬럼명과 C# SimpleSizingCase.FromDictionary() 키가 일치하므로 직접 전달
+            selected_row = df.iloc[row_index].to_dict()
 
             # IPC를 통해 C#에 전달하고 적용
             response = session.ipc_client.apply_simplesizing_case(selected_row)
