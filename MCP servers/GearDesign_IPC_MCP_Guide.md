@@ -154,7 +154,7 @@ Python session.changed_data = updated_config (자동 동기화)
 
 | 성능 기준 | 1차 정렬 | 2차 정렬 | 추가 고려사항 |
 |-----------|----------|----------|---------------|
-| **저소음** | rank ↑ | PPTE ↑ | - |
+| **저소음** | rank ↑ | PPTE ↑ | **Overlap ratio ≈ 1 또는 2** (초저소음: 2 권장) |
 | **경량** | rank ↑ | total mass ↑ | 안전률 확인 필수 |
 | **고효율** | rank ↑ | efficiency ↓ | - |
 | **컴팩트** | rank ↑ | CenterDistance ↑ | - |
@@ -162,6 +162,35 @@ Python session.changed_data = updated_config (자동 동기화)
 | **복합 기준** | rank=1 필터링 | 트레이드오프 설명 | Rank 1 내에서 각 지표 비교 |
 
 (↑: 오름차순, ↓: 내림차순)
+
+#### 저소음 설계 상세 가이드 ⭐
+
+**물림율(Overlap Ratio) 최적화**가 저소음 설계의 핵심:
+- **목표**: Overlap ratio를 **1.0 또는 2.0에 가깝게** 설정
+- **초저소음**: Overlap ratio = **2.0**이 1.0보다 유리 (더 부드러운 동력 전달)
+- **조정 방법**:
+  1. **치폭(Facewidth) 조정**: 증가 → overlap ratio 증가
+  2. **헬리컬각(β) 조정**: 증가 → overlap ratio 증가
+  3. **반복 조정**: SimpleSizing 재실행하여 overlap ratio 확인
+
+**SimpleSizing 수행 시 저소음 설계 프로세스**:
+```
+1. SimpleSizing 실행 (초기 조건)
+2. 결과에서 overlap ratio 확인
+3. overlap ratio가 1.0 또는 2.0과 차이가 큰 경우:
+   - 목표값에 따라 치폭/헬리컬각 조정
+   - SimpleSizing 재실행
+4. Rank 1 중 PPTE 최소 + overlap ratio ≈ 1 or 2인 케이스 선택
+```
+
+**LLM 응답 예시**:
+```
+저소음 설계를 위해 overlap ratio를 확인한 결과, 현재 1.35입니다.
+초저소음을 위해 overlap ratio를 2.0에 가깝게 조정하겠습니다:
+- 치폭 30mm → 45mm 증가
+- 헬리컬각 15° → 20° 증가
+SimpleSizing을 재실행하여 최적화하겠습니다.
+```
 
 ### LLM 응답 템플릿
 
@@ -295,7 +324,8 @@ Python session.changed_data = updated_config (자동 동기화)
 
 ### SimpleSizing 성능 분석 (핵심!)
 - [ ] **모든 분석 1차 정렬: rank ↑**
-- [ ] 저소음: 2차 PPTE ↑
+- [ ] 저소음: 2차 PPTE ↑, **overlap ratio ≈ 1 또는 2 확인** (초저소음: 2 권장)
+- [ ] 저소음: overlap ratio 조정 필요 시 치폭/헬리컬각 증가 후 SimpleSizing 재실행
 - [ ] 경량: 2차 total mass ↑ (안전률 확인)
 - [ ] 고효율: 2차 efficiency ↓
 - [ ] 복합: Rank 1 필터링 → 트레이드오프 설명
@@ -313,9 +343,10 @@ Python session.changed_data = updated_config (자동 동기화)
 
 ---
 
-## 요약: 가장 중요한 4가지
+## 요약: 가장 중요한 5가지
 
 1. **워크플로우 선택**: 성능 기준/범위/추상적 표현 → SimpleSizing, 구체적 제원 → 기본
 2. **SimpleSizing 분석**: 반드시 rank 1차 정렬 → Rank 1 중에서 요청 지표 기준 선택
-3. **SimpleSizing 결과 부족**: 모듈 범위 확대/잇수 감소/치폭 조정으로 조건 완화 제안
-4. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 **항상 표로 표시**
+3. **저소음 설계**: PPTE 최소화 + **overlap ratio ≈ 1 or 2** (초저소음: 2 권장, 치폭/헬리컬각 조정)
+4. **SimpleSizing 결과 부족**: 모듈 범위 확대/잇수 감소/치폭 조정으로 조건 완화 제안
+5. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 **항상 표로 표시**
