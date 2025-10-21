@@ -646,6 +646,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
    
 2. **실제 데이터**: '$' 없는 일반 Key
    - 이 값들만 수정 대상입니다
+   - 메타데이터가 없는 Key 값은 수정 대상이 아닙니다
 
 # 수정 규칙
 
@@ -661,7 +662,15 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
 - 압력각 (Pressure Angle)
 - 전위계수 (x1, x2, x3, x4)
 
-## 3. 출력 형식
+## 3. 기어비 변경 요청
+- 기어비는 기어 타입에 따라 잇수비로 결정됩니다. 따라서 사용자가 기어비 변경을 요청하면 기어 잇수를 적절히 변경해야 합니다. 
+- 기어타입에 따른 기어비 계산 상세 내용은 아래와 같습니다.
+    1) Gear pair: z2 / z1,
+    2) Three gear: z3 / z1,
+    3) Planetary: z3 / z1 (링기어 잇수 / 선기어 잇수),
+    4) Double pinion planetary: z3 / z1 (링기어 잇수 / 선기어 잇수)
+
+## 4. 출력 형식
 - **표준 JSON 형식** (중첩 구조 포함)
 - **변경된 항목만** 포함
 - 상위 경로를 포함한 Key 이름은 원본과 정확히 일치
@@ -1485,7 +1494,8 @@ def get_gear_report(session_id: str) -> dict:
 @mcp.tool()
 def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
     """
-    간단한 기어쌍 사이징을 수행합니다.
+    사용자 요구에 따라 적절한 Gear pair 제원을 선정하기 위한 Sizing을 수행합니다.
+    Sizing은 최적화는 아니지만, 다양한 제원에 대해 case study를 수행하여 적절한 기어쌍 제원을 도출하는 것을 목표로 합니다.
 
     현재 세션의 기어 데이터를 바탕으로 사용자 요구에 따라 간단한 기어쌍 사이징을 수행하고,
     결과를 세션에 저장합니다.
