@@ -50,6 +50,25 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 → calc_geometry() → calc_load_case() → get_allresults_summary()
 ```
 
+**⚠️ SimpleSizing 결과가 없는 경우 (제약조건 미충족)**
+
+SimpleSizing 결과가 0개 또는 매우 적게 나오는 경우, 다음 방법으로 조건을 완화:
+
+1. **모듈 범위 확대**: 최소값 감소 또는 최대값 증가 (예: 2~4 → 1.5~5)
+2. **잇수 범위 확대**: 최소값 감소 또는 최대값 증가 (예: z_min=15 → 12)
+3. **치폭 조정**: 치폭 증가 또는 범위로 변경 (예: 30mm → 30~50mm)
+4. **최대 계산 횟수 증가**: 더 많은 조합 탐색 (예: max_iterations 증가)
+5. **안전률 기준 완화**: 최소 안전률 요구사항 낮추기
+
+**LLM 응답 예시**:
+```
+SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 너무 엄격합니다.
+다음 중 하나를 조정해주세요:
+1. 모듈 범위 확대 (예: 1.5~3.0)
+2. 최소 잇수 감소 (예: z_min=15)
+3. 치폭 증가 또는 범위 지정 (예: 30~50mm)
+```
+
 ---
 
 ## 핵심 도구 (필수 정보만)
@@ -244,6 +263,15 @@ Python session.changed_data = updated_config (자동 동기화)
 - `change_summary`로 변경사항 검증
 - 경로 불일치 시 LLM의 JSON 키 확인
 
+### SimpleSizing 결과 부족 시 대응
+- 결과가 0개 또는 소수인 경우 → 제약조건이 너무 엄격함
+- **조건 완화 우선순위**:
+  1. 모듈 범위 확대 (가장 효과적)
+  2. 최소 잇수 감소
+  3. 치폭 증가 또는 범위 지정
+  4. 최대 계산 횟수 증가
+- 사용자에게 구체적인 조정 방법 제안 필요
+
 ---
 
 ## 체크리스트
@@ -273,6 +301,11 @@ Python session.changed_data = updated_config (자동 동기화)
 - [ ] 복합: Rank 1 필터링 → 트레이드오프 설명
 - [ ] **Rank 2+ 추천 금지** (특별한 이유 없으면)
 
+### SimpleSizing 결과 부족 시
+- [ ] 결과 0개 또는 소수 → 사용자에게 조건 완화 제안
+- [ ] 우선 순위: 모듈 범위 확대 > 잇수 감소 > 치폭 조정
+- [ ] 구체적인 수치 예시 제공 (예: 2~4 → 1.5~5)
+
 ### 오류 처리
 - [ ] success 필드 확인
 - [ ] change_summary 검증
@@ -280,8 +313,9 @@ Python session.changed_data = updated_config (자동 동기화)
 
 ---
 
-## 요약: 가장 중요한 3가지
+## 요약: 가장 중요한 4가지
 
 1. **워크플로우 선택**: 성능 기준/범위/추상적 표현 → SimpleSizing, 구체적 제원 → 기본
 2. **SimpleSizing 분석**: 반드시 rank 1차 정렬 → Rank 1 중에서 요청 지표 기준 선택
-3. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 **항상 표로 표시**
+3. **SimpleSizing 결과 부족**: 모듈 범위 확대/잇수 감소/치폭 조정으로 조건 완화 제안
+4. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 **항상 표로 표시**

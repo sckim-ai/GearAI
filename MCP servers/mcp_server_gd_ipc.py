@@ -2124,6 +2124,7 @@ cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
 cleanup_thread.start()
 
 if __name__ == "__main__":
+   
     print("Starting MCP server (IPC mode)...")
     print(f"GearDesign.exe 경로: {gear_design_exe_path}")
     print(f"세션 타임아웃: {SESSION_TIMEOUT}초")
@@ -2133,140 +2134,140 @@ if __name__ == "__main__":
     def on_progress(message, percentage):
         print(f"  📊 진행: [{percentage:3d}%] {message}")
 
-    # ============================================================
-    # SimpleSizing 전체 워크플로우 테스트
-    # ============================================================
+    # # ============================================================
+    # # SimpleSizing 전체 워크플로우 테스트
+    # # ============================================================
 
-    print("\n" + "="*60)
-    print("SimpleSizing 워크플로우 테스트 시작")
-    print("="*60)
+    # print("\n" + "="*60)
+    # print("SimpleSizing 워크플로우 테스트 시작")
+    # print("="*60)
 
-    # 1. 세션 초기화
-    print("\n[1/8] 세션 초기화...")
-    result = initialize()
+    # # 1. 세션 초기화
+    # print("\n[1/8] 세션 초기화...")
+    # result = initialize()
 
-    if not result.get("success"):
-        print(f"❌ 초기화 실패: {result.get('error')}")
-        exit(1)
+    # if not result.get("success"):
+    #     print(f"❌ 초기화 실패: {result.get('error')}")
+    #     exit(1)
 
-    session_id = result["session_id"]
-    print(f"✅ 세션 생성 완료: {session_id}")
+    # session_id = result["session_id"]
+    # print(f"✅ 세션 생성 완료: {session_id}")
 
-    # 진행 상황 콜백 등록
-    session = get_session(session_id)
-    session.ipc_client.progress_callback = on_progress
+    # # 진행 상황 콜백 등록
+    # session = get_session(session_id)
+    # session.ipc_client.progress_callback = on_progress
 
-    # 2. 기본 데이터 설정 (기어비, 작동조건 등)
-    print("\n[2/8] 기본 기어 데이터 설정...")
-    modify_result = modify_gear_data(
-        "기어비 3, 입력 토크 100 Nm, 입력 회전수 1500 rpm으로 설정해줘",
-        session_id
-    )
-    if modify_result.get("success"):
-        print(f"✅ 데이터 설정 완료")
-        print(f"   변경사항: {modify_result.get('change_summary', 'N/A')}")
-    else:
-        print(f"❌ 데이터 설정 실패: {modify_result.get('error')}")
+    # # 2. 기본 데이터 설정 (기어비, 작동조건 등)
+    # print("\n[2/8] 기본 기어 데이터 설정...")
+    # modify_result = modify_gear_data(
+    #     "기어비 3, 입력 토크 100 Nm, 입력 회전수 1500 rpm으로 설정해줘",
+    #     session_id
+    # )
+    # if modify_result.get("success"):
+    #     print(f"✅ 데이터 설정 완료")
+    #     print(f"   변경사항: {modify_result.get('change_summary', 'N/A')}")
+    # else:
+    #     print(f"❌ 데이터 설정 실패: {modify_result.get('error')}")
 
-    # 3. SimpleSizing 실행
-    print("\n[3/8] SimpleSizing 실행 중...")
-    simplesizing_result = simple_sizing_gearpair(
-        "기어비 3, 저소음 설계를 원해. 모듈은 2~4 사이로 찾아줘. 치폭은 30mm로 해줘.",
-        session_id
-    )
+    # # 3. SimpleSizing 실행
+    # print("\n[3/8] SimpleSizing 실행 중...")
+    # simplesizing_result = simple_sizing_gearpair(
+    #     "기어비 3, 저소음 설계를 원해. 모듈은 2~4 사이로 찾아줘. 치폭은 30mm로 해줘.",
+    #     session_id
+    # )
 
-    if not simplesizing_result.get("success"):
-        print(f"❌ SimpleSizing 실패: {simplesizing_result.get('error')}")
-        exit(1)
+    # if not simplesizing_result.get("success"):
+    #     print(f"❌ SimpleSizing 실패: {simplesizing_result.get('error')}")
+    #     exit(1)
 
-    print(f"✅ SimpleSizing 완료")
-    print(f"   생성된 케이스 수: {simplesizing_result.get('result_rows', 0)}")
+    # print(f"✅ SimpleSizing 완료")
+    # print(f"   생성된 케이스 수: {simplesizing_result.get('result_rows', 0)}")
 
-    # 4. SimpleSizing 결과 조회
-    print("\n[4/8] SimpleSizing 결과 조회...")
-    sizing_results = get_simplesizing_results(session_id, return_all=False, top_n=10)
-    print(sizing_results)
-    if not sizing_results.get("success"):
-        print(f"❌ 결과 조회 실패: {sizing_results.get('error')}")
-        exit(1)
+    # # 4. SimpleSizing 결과 조회
+    # print("\n[4/8] SimpleSizing 결과 조회...")
+    # sizing_results = get_simplesizing_results(session_id, return_all=False, top_n=10)
+    # print(sizing_results)
+    # if not sizing_results.get("success"):
+    #     print(f"❌ 결과 조회 실패: {sizing_results.get('error')}")
+    #     exit(1)
 
-    results_df = sizing_results.get("results", [])
-    print(f"✅ 결과 조회 완료: {len(results_df)}개 케이스")
+    # results_df = sizing_results.get("results", [])
+    # print(f"✅ 결과 조회 완료: {len(results_df)}개 케이스")
 
-    # 결과 표시 (상위 5개, Rank 1 우선)
-    print("\n   [SimpleSizing 결과 - Rank 기준 정렬, PPTE 오름차순]")
-    print("   " + "-"*80)
-    if len(results_df) > 0:
-        import pandas as pd
-        df = pd.DataFrame(results_df)
-        # Rank 1차, PPTE 2차 정렬 (올바른 컬럼명 사용)
-        df_sorted = df.sort_values(['Rank', 'max. PPTE (μm)'], ascending=[True, True])
-        print(df_sorted[['Rank', 'm_n [mm]', 'z1', 'z2', 'max. PPTE (μm)', 'total mass (kg)', 'efficiency (%)']].head(5).to_string(index=True))
-        print("   " + "-"*80)
+    # # 결과 표시 (상위 5개, Rank 1 우선)
+    # print("\n   [SimpleSizing 결과 - Rank 기준 정렬, PPTE 오름차순]")
+    # print("   " + "-"*80)
+    # if len(results_df) > 0:
+    #     import pandas as pd
+    #     df = pd.DataFrame(results_df)
+    #     # Rank 1차, PPTE 2차 정렬 (올바른 컬럼명 사용)
+    #     df_sorted = df.sort_values(['Rank', 'max. PPTE (μm)'], ascending=[True, True])
+    #     print(df_sorted[['Rank', 'm_n [mm]', 'z1', 'z2', 'max. PPTE (μm)', 'total mass (kg)', 'efficiency (%)']].head(5).to_string(index=True))
+    #     print("   " + "-"*80)
 
-        # 5. 첫 번째 케이스 적용 (Rank 1 중 PPTE 최소)
-        # df_sorted의 첫 번째 행의 원본 인덱스 사용
-        selected_original_index = df_sorted.index[0]  # 정렬된 DataFrame의 첫 번째 행의 원본 인덱스
-        print(f"\n[5/8] SimpleSizing 케이스 적용 (원본 index={selected_original_index})...")
-        print(f"   선택된 케이스: Rank={df_sorted.iloc[0]['Rank']}, "
-              f"Module={df_sorted.iloc[0]['m_n [mm]']}, "
-              f"z1={int(df_sorted.iloc[0]['z1'])}, "
-              f"z2={int(df_sorted.iloc[0]['z2'])}, "
-              f"PPTE={df_sorted.iloc[0]['max. PPTE (μm)']:.4f} μm")
+    #     # 5. 첫 번째 케이스 적용 (Rank 1 중 PPTE 최소)
+    #     # df_sorted의 첫 번째 행의 원본 인덱스 사용
+    #     selected_original_index = df_sorted.index[0]  # 정렬된 DataFrame의 첫 번째 행의 원본 인덱스
+    #     print(f"\n[5/8] SimpleSizing 케이스 적용 (원본 index={selected_original_index})...")
+    #     print(f"   선택된 케이스: Rank={df_sorted.iloc[0]['Rank']}, "
+    #           f"Module={df_sorted.iloc[0]['m_n [mm]']}, "
+    #           f"z1={int(df_sorted.iloc[0]['z1'])}, "
+    #           f"z2={int(df_sorted.iloc[0]['z2'])}, "
+    #           f"PPTE={df_sorted.iloc[0]['max. PPTE (μm)']:.4f} μm")
 
-        apply_result = apply_simplesizing_case(selected_original_index, session_id)
+    #     apply_result = apply_simplesizing_case(selected_original_index, session_id)
 
-        if not apply_result.get("success"):
-            print(f"❌ 케이스 적용 실패: {apply_result.get('error')}")
-            exit(1)
+    #     if not apply_result.get("success"):
+    #         print(f"❌ 케이스 적용 실패: {apply_result.get('error')}")
+    #         exit(1)
 
-        print(f"✅ 케이스 적용 완료")
-        print(f"   메시지: {apply_result.get('message')}")
-    else:
-        print("   결과 없음")
-        exit(1)
+    #     print(f"✅ 케이스 적용 완료")
+    #     print(f"   메시지: {apply_result.get('message')}")
+    # else:
+    #     print("   결과 없음")
+    #     exit(1)
 
-    # 6. Geometry 계산
-    print("\n[6/8] Geometry 계산 중...")
-    geo_result = calc_geometry(session_id)
+    # # 6. Geometry 계산
+    # print("\n[6/8] Geometry 계산 중...")
+    # geo_result = calc_geometry(session_id)
 
-    if not geo_result.get("success"):
-        print(f"❌ Geometry 계산 실패: {geo_result.get('error')}")
-        exit(1)
+    # if not geo_result.get("success"):
+    #     print(f"❌ Geometry 계산 실패: {geo_result.get('error')}")
+    #     exit(1)
 
-    print(f"✅ Geometry 계산 완료")
+    # print(f"✅ Geometry 계산 완료")
 
-    # 7. Load Case 계산
-    print("\n[7/8] Load Case 계산 중...")
-    calc_result = calc_load_case(session_id)
+    # # 7. Load Case 계산
+    # print("\n[7/8] Load Case 계산 중...")
+    # calc_result = calc_load_case(session_id)
 
-    if not calc_result.get("success"):
-        print(f"❌ Load Case 계산 실패: {calc_result.get('error')}")
-        exit(1)
+    # if not calc_result.get("success"):
+    #     print(f"❌ Load Case 계산 실패: {calc_result.get('error')}")
+    #     exit(1)
 
-    print(f"✅ Load Case 계산 완료")
-    if calc_result.get("messages"):
-        print(f"   메시지: {calc_result['messages'][:200]}...")
+    # print(f"✅ Load Case 계산 완료")
+    # if calc_result.get("messages"):
+    #     print(f"   메시지: {calc_result['messages'][:200]}...")
 
-    # 8. 최종 결과 요약
-    print("\n[8/8] 최종 결과 요약 조회...")
-    summary = get_allresults_summary(session_id)
+    # # 8. 최종 결과 요약
+    # print("\n[8/8] 최종 결과 요약 조회...")
+    # summary = get_allresults_summary(session_id)
 
-    if not summary.get("success"):
-        print(f"❌ 결과 요약 실패: {summary.get('error')}")
-        exit(1)
+    # if not summary.get("success"):
+    #     print(f"❌ 결과 요약 실패: {summary.get('error')}")
+    #     exit(1)
 
-    print(f"✅ 결과 요약 완료")
-    summary_data = summary.get("summary", {})
-    print("\n   [최종 계산 결과]")
-    print("   " + "-"*80)
-    for key, value in list(summary_data.items())[:10]:
-        print(f"   {key}: {value}")
-    print("   " + "-"*80)
+    # print(f"✅ 결과 요약 완료")
+    # summary_data = summary.get("summary", {})
+    # print("\n   [최종 계산 결과]")
+    # print("   " + "-"*80)
+    # for key, value in list(summary_data.items())[:10]:
+    #     print(f"   {key}: {value}")
+    # print("   " + "-"*80)
 
-    print("\n" + "="*60)
-    print("SimpleSizing 워크플로우 테스트 완료! ✅")
-    print("="*60)
+    # print("\n" + "="*60)
+    # print("SimpleSizing 워크플로우 테스트 완료! ✅")
+    # print("="*60)
 
     # 기존 워크플로우 테스트는 주석 처리
     # responce = modify_gear_data("기어1의 잇수를 20에서 30으로 변경하고, 모듈을 2.5로 설정해줘", session_id)
@@ -2279,4 +2280,4 @@ if __name__ == "__main__":
     # report = get_gear_report(session_id)
     # save_data = save_GearDesignData(session_id)
 
-    # asyncio.run(mcp.run())
+    asyncio.run(mcp.run())
