@@ -174,6 +174,17 @@ Python session.changed_data = updated_config (자동 동기화)
 1. **치폭(Facewidth) 조정**: 증가 → overlap ratio 증가
 2. **헬리컬각(β) 조정**: 증가 → overlap ratio 증가
 
+**⚠️ 설계 제약 및 트레이드오프**:
+- **헬리컬각 제한**: 특별한 요청이 없으면 **25° 미만 권장** (과도한 축방향 하중 방지)
+- **Overlap ratio = 2.0의 단점**:
+  - 치폭/헬리컬각 증가 필요 → **경량화에 불리** (질량 증가)
+  - 헬리컬각 증가 → **효율 저하** (축방향 하중 증가로 인한 마찰 증가)
+- **권장 접근**:
+  - **일반 저소음**: Overlap ratio = **1.0** 목표 (균형잡힌 설계)
+  - **초저소음 우선**: Overlap ratio = **2.0** 목표 (경량/효율 희생 가능)
+  - **경량+저소음**: Overlap ratio = **1.0** 목표 + PPTE 최소화
+  - 헬리컬각 25° 초과 필요 시 → 사용자에게 확인 요청
+
 **저소음 설계 필수 프로세스** (2단계):
 ```
 [1단계: SimpleSizing으로 초기 설계]
@@ -190,16 +201,39 @@ Python session.changed_data = updated_config (자동 동기화)
 6. overlap ratio ≈ 1.0 or 2.0 달성까지 5번 반복
 ```
 
-**LLM 응답 예시**:
+**LLM 응답 예시 1 (초저소음 우선)**:
 ```
 SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
-계산 결과를 확인한 결과 overlap ratio = 1.35입니다.
+계산 결과 overlap ratio = 1.35입니다.
 
-초저소음을 위해 overlap ratio를 2.0에 가깝게 조정하겠습니다:
-- 치폭 30mm → 45mm로 증가
-- 헬리컬각 15° → 20°로 증가
+초저소음 설계를 위해 overlap ratio를 2.0에 가깝게 조정하겠습니다:
+- 치폭 30mm → 50mm로 증가
+- 헬리컬각 15° → 22°로 증가 (25° 미만 유지)
 
-재계산 후 overlap ratio = 1.98로 최적화되었습니다! ✅
+재계산 후 overlap ratio = 1.95로 최적화되었습니다! ✅
+⚠️ 단, 치폭/헬리컬각 증가로 총 질량 1.2kg → 1.5kg, 효율 99.1% → 98.8%로 감소했습니다.
+```
+
+**LLM 응답 예시 2 (경량+저소음 균형)**:
+```
+SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
+계산 결과 overlap ratio = 1.35입니다.
+
+경량화도 고려하여 overlap ratio를 1.0에 가깝게 조정하겠습니다:
+- 치폭 30mm → 25mm로 감소
+- 헬리컬각 15° → 18°로 증가
+
+재계산 후 overlap ratio = 1.02로 최적화되었습니다! ✅
+총 질량 1.2kg → 1.05kg (경량화), 효율 99.1% 유지, PPTE도 우수합니다.
+```
+
+**LLM 응답 예시 3 (헬리컬각 제한 확인)**:
+```
+overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
+⚠️ 권장 한계(25°)를 초과하므로 다음 옵션을 제안합니다:
+1. 헬리컬각 25°, 치폭 증가로 overlap ratio 1.8 달성 (권장)
+2. 사용자 승인 시 헬리컬각 28° 적용
+어느 방향으로 진행할까요?
 ```
 
 ### LLM 응답 템플릿
@@ -353,10 +387,15 @@ SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
 ### 저소음 설계 Overlap Ratio 최적화 (필수!)
 - [ ] SimpleSizing 케이스 적용 후 calc_geometry → calc_load_case 실행
 - [ ] **get_allresults_summary()에서 overlap ratio 확인** (SimpleSizing에는 없음!)
-- [ ] overlap ratio ≠ 1.0 or 2.0인 경우 치폭/헬리컬각 조정
-- [ ] 초저소음: overlap ratio = **2.0** 목표 (1.0보다 유리)
+- [ ] overlap ratio 목표값 결정:
+  - **일반 저소음**: 1.0 목표 (균형)
+  - **초저소음 우선**: 2.0 목표 (경량/효율 희생 가능)
+  - **경량+저소음**: 1.0 목표 + PPTE 최소화
+- [ ] 치폭/헬리컬각 조정 시 **헬리컬각 25° 미만 유지** (특별 요청 없으면)
+- [ ] 헬리컬각 25° 초과 필요 시 사용자에게 확인 요청
 - [ ] 조정 후 calc_geometry → calc_load_case → get_allresults_summary() 재확인
-- [ ] overlap ratio ≈ 1.0 or 2.0 달성까지 반복
+- [ ] 질량, 효율 변화 모니터링 (overlap ratio 2.0은 경량/효율 불리)
+- [ ] overlap ratio ≈ 목표값 달성까지 반복
 
 ### SimpleSizing 결과 부족 시
 - [ ] 결과 0개 또는 소수 → 사용자에게 조건 완화 제안
@@ -374,8 +413,10 @@ SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
 
 1. **워크플로우 선택**: 성능 기준/범위/추상적 표현 → SimpleSizing, 구체적 제원 → 기본
 2. **SimpleSizing 분석**: 반드시 rank 1차 정렬 → Rank 1 중에서 요청 지표 기준 선택
-3. **저소음 설계 (2단계)**:
+3. **저소음 설계 (2단계 + 트레이드오프)**:
    - 1단계: SimpleSizing으로 PPTE 최소 케이스 적용
-   - 2단계: **get_allresults_summary()에서 overlap ratio 확인** → 치폭/헬리컬각 조정 → 반복 (초저소음: 2.0 목표)
+   - 2단계: **get_allresults_summary()에서 overlap ratio 확인** → 치폭/헬리컬각 조정 → 반복
+   - 목표: 일반(1.0) vs 초저소음(2.0, 경량/효율 불리)
+   - 제약: **헬리컬각 25° 미만** 유지 (특별 요청 없으면)
 4. **SimpleSizing 결과 부족**: 모듈 범위 확대/잇수 감소/치폭 조정으로 조건 완화 제안
 5. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 **항상 표로 표시**
