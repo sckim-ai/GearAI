@@ -139,7 +139,7 @@ Python session.changed_data = updated_config (자동 동기화)
 
 **SimpleSizing이 탐색하는 파라미터** (최소/최대 범위 내 조합 생성):
 - **모듈 (m_n)**: 최소값 ~ 최대값 범위
-- **잇수 (z1, z2)**: 최소값 ~ 최대값 범위
+- **잇수 (z_pinion)**: 최소값 ~ 최대값 범위
 
 **SimpleSizing에서 고정되는 파라미터** (입력값 그대로 사용):
 - **치폭 (Facewidth)**: 단일 고정값
@@ -231,139 +231,55 @@ Case 2는 저소음과 경량의 균형점입니다. 어느 케이스를 적용�
 
 #### 저소음 설계 상세 가이드 ⭐
 
-**물림율(Overlap Ratio) 최적화**가 저소음 설계의 핵심:
-- **목표**: Overlap ratio를 정수로, 즉 **1.0 또는 2.0에 가깝게** 설정
-- **초저소음**: Overlap ratio = **2.0**이 1.0보다 유리 (더 부드러운 동력 전달)
-- **⚠️ 중요**: Overlap ratio는 **SimpleSizing 결과에 포함되지 않음** → `get_allresults_summary()`에서만 확인 가능
+**핵심 개념**:
+- **저소음의 핵심**: PPTE(전달오차) 최소화 + Overlap ratio 최적화
+- **Overlap ratio 목표**: **1.0 (권장 0.95-1.05)** 또는 **2.0 (권장 1.95-2.05)**
+  - 초저소음: 2.0 > 1.0 (경량/효율 희생)
+  - 경량+저소음: 1.0 목표
+- **⚠️ 제약**: 헬리컬각 25° 미만 권장 (특별 요청 없으면)
+- **⚠️ SimpleSizing 한계**: Overlap ratio는 SimpleSizing 결과에 없음 → `get_allresults_summary()`에서만 확인 가능
 
-**⚠️ SimpleSizing과 Overlap Ratio의 관계**:
-- SimpleSizing은 치폭/헬리컬각을 **고정값**으로 사용
-- Overlap ratio는 SimpleSizing 결과에 포함되지 않음 → `get_allresults_summary()`에서만 확인 가능
-- **옵션 1**: SimpleSizing 후 치폭/헬리컬각 미세 조정 (모듈/잇수 고정)
-- **옵션 2**: 다양한 치폭/헬리컬각으로 SimpleSizing 여러 번 수행 후 비교
+**프로세스 선택**:
 
-**조정 방법** (apply_simplesizing_case 이후):
-1. **치폭(Facewidth) 조정**: 증가/감소 → overlap ratio 변화
-2. **헬리컬각(β) 조정**: 증가/감소 → overlap ratio 변화
-3. modify_gear_data()로 수정 후 calc_geometry → calc_load_case → get_allresults_summary() 재확인
-
-**⚠️ 설계 제약 및 트레이드오프**:
-- **헬리컬각 제한**: 특별한 요청이 없으면 **25° 미만 권장** (과도한 축방향 하중 방지)
-- **Overlap ratio = 2.0의 단점**:
-  - 과도한 치폭이 적용될 수 있음 → **경량화에 불리** (질량 증가)
-  - 과도한 헬리컬각이 적용될 수 있음 → **효율 저하** (축방향 하중 증가로 인한 마찰 증가)
-- **권장 접근**:
-  - **일반 저소음**: Overlap ratio = **1.0** 목표 (균형잡힌 설계)
-  - **초저소음 우선**: Overlap ratio = **2.0** 목표 (경량/효율 희생 가능)
-  - **경량+저소음**: Overlap ratio = **1.0** 목표 + PPTE 최소화
-  - 헬리컬각 25° 초과 필요 시 → 사용자에게 확인 요청
-
-**저소음 설계 프로세스** (두 가지 접근):
-
-**프로세스 A: 기본 접근** (SimpleSizing 1번 + 이후 미세 조정):
+**[프로세스 A] SimpleSizing 1번 + 미세 조정** (일반적, 빠름):
 ```
-[1단계: SimpleSizing으로 모듈/잇수 결정]
-1. 기본 치폭/헬리컬각으로 SimpleSizing 실행
-2. Rank 1 중 PPTE 최소 케이스 선택
-3. apply_simplesizing_case(row_index)로 적용
-4. calc_geometry() → calc_load_case() 실행
-5. get_allresults_summary()에서 overlap ratio 확인 ⭐
-
-[2단계: Overlap Ratio 미세 조정]
-6. overlap ratio가 1.0 또는 2.0과 차이가 큰 경우:
-   - modify_gear_data()로 치폭/헬리컬각 조정 (모듈/잇수 고정)
-   - calc_geometry() → calc_load_case() 재실행
-   - get_allresults_summary()로 overlap ratio 재확인
-7. overlap ratio ≈ 1.0 or 2.0 달성까지 6번 반복
+1. SimpleSizing 실행 (Rank 1 중 PPTE 최소 케이스 선택)
+2. apply_simplesizing_case() → calc_geometry → calc_load_case
+3. get_allresults_summary()에서 overlap ratio 확인
+4. overlap ratio가 목표(1.0 or 2.0)와 차이 크면:
+   → modify_gear_data()로 치폭/헬리컬각 조정 → 재계산 → 3번 반복
 ```
 
-**프로세스 B: 치폭/헬리컬각 Case Study** (SimpleSizing 여러 번):
+**[프로세스 B] 다양한 치폭/헬리컬각으로 SimpleSizing 여러 번** (최적, 시간 소요):
 ```
-[1단계: 다양한 치폭/헬리컬각으로 SimpleSizing 수행]
-→ 치폭 30mm, 헬리컬각 15° 설정 → SimpleSizing 실행 → 결과 기록 (Case 1)
-→ 치폭 40mm, 헬리컬각 20° 설정 → SimpleSizing 실행 → 결과 기록 (Case 2)
-→ 치폭 50mm, 헬리컬각 25° 설정 → SimpleSizing 실행 → 결과 기록 (Case 3)
-
-[2단계: 모든 케이스 비교 및 최종 선택]
-→ 각 Case의 최적 솔루션 비교 (PPTE, overlap ratio, 질량, 효율 등)
-→ 사용자 요구사항에 가장 적합한 Case 선택
-→ apply_simplesizing_case() 적용
-
-**장점**: 다양한 조합을 체계적으로 비교 가능
-**단점**: SimpleSizing을 여러 번 수행해야 하므로 시간 소요
+1. 치폭/헬리컬각 조합별로 SimpleSizing 수행 (예: 30mm/15°, 40mm/20°, 50mm/25°)
+2. 각 Case의 최적 솔루션 비교 (PPTE, overlap ratio, 질량, 효율)
+3. 사용자 요구에 맞는 Case 선택 → apply_simplesizing_case()
 ```
 
-**권장 사용**:
-- **일반적인 경우**: 프로세스 A (빠르고 효율적)
-- **최적 설계 필요**: 프로세스 B (체계적 비교 가능)
-
-**LLM 응답 예시 (프로세스 A-1: 초저소음 우선)**:
+**LLM 응답 예시 (프로세스 A)**:
 ```
-SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
-계산 결과 overlap ratio = 1.35입니다.
+SimpleSizing 결과 (Rank 1, PPTE 최소):
+- 모듈 3.75, z1=23, z2=94, PPTE=0.82 적용
+- calc 후 overlap ratio = 1.35 확인
 
-초저소음 설계를 위해 overlap ratio를 2.0에 가깝게 조정하겠습니다:
-- 치폭 30mm → 50mm로 증가
-- 헬리컬각 15° → 22°로 증가 (25° 미만 유지)
-
-재계산 후 overlap ratio = 1.95로 최적화되었습니다! ✅
-⚠️ 단, 치폭/헬리컬각 증가로 총 질량 1.2kg → 1.5kg, 효율 99.1% → 98.8%로 감소했습니다.
+초저소음 목표 (overlap ratio → 2.0):
+→ 치폭 30→50mm, 헬리컬각 15→22° 조정
+→ 재계산: overlap ratio = 1.98 ✅
+⚠️ 질량 1.2→1.5kg, 효율 99.1→98.8% 감소
 ```
 
-**LLM 응답 예시 (프로세스 A-2: 경량+저소음 균형)**:
+**LLM 응답 예시 (프로세스 B)**:
 ```
-SimpleSizing에서 Rank 1, PPTE 최소 케이스를 적용했습니다.
-계산 결과 overlap ratio = 1.35입니다.
+치폭/헬리컬각 Case Study 결과:
 
-경량화도 고려하여 overlap ratio를 1.0에 가깝게 조정하겠습니다:
-- 치폭 30mm → 25mm로 감소
-- 헬리컬각 15° → 18°로 증가
+| Case | 치폭 | 헬리컬각 | PPTE | Overlap | 질량 | 효율 | 평가 |
+|------|------|----------|------|---------|------|------|------|
+| 1 | 30mm | 15° | 0.95 | 1.15 | 1.2kg | 99.1% | 경량우수, 저소음보통 |
+| 2 | 40mm | 20° | 0.82 | 1.85 | 1.45kg | 98.9% | ⭐균형 |
+| 3 | 50mm | 25° | 0.78 | 2.02 | 1.68kg | 98.6% | 초저소음, 질량불리 |
 
-재계산 후 overlap ratio = 1.02로 최적화되었습니다! ✅
-총 질량 1.2kg → 1.05kg (경량화), 효율 99.1% 유지, PPTE도 우수합니다.
-```
-
-**LLM 응답 예시 (프로세스 A-3: 헬리컬각 제한 확인)**:
-```
-overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
-⚠️ 권장 한계(25°)를 초과하므로 다음 옵션을 제안합니다:
-1. 헬리컬각 25°, 치폭 증가로 overlap ratio 1.8 달성 (권장)
-2. 사용자 승인 시 헬리컬각 28° 적용
-어느 방향으로 진행할까요?
-```
-
-**LLM 응답 예시 (프로세스 B: 치폭/헬리컬각 Case Study)**:
-```
-초저소음 설계를 위해 다양한 치폭/헬리컬각 조합으로 SimpleSizing을 수행하겠습니다.
-
-[Case 1: 치폭 30mm, 헬리컬각 15°]
-SimpleSizing 결과:
-- 최적 케이스(Rank 1, PPTE 최소): 모듈 3.75, z1=23, z2=94
-- PPTE: 0.95, overlap ratio: 1.15, total mass: 1.2kg, efficiency: 99.1%
-
-[Case 2: 치폭 40mm, 헬리컬각 20°]
-SimpleSizing 결과:
-- 최적 케이스(Rank 1, PPTE 최소): 모듈 3.5, z1=24, z2=101
-- PPTE: 0.82, overlap ratio: 1.85, total mass: 1.45kg, efficiency: 98.9%
-
-[Case 3: 치폭 50mm, 헬리컬각 25°]
-SimpleSizing 결과:
-- 최적 케이스(Rank 1, PPTE 최소): 모듈 3.25, z1=26, z2=108
-- PPTE: 0.78, overlap ratio: 2.02, total mass: 1.68kg, efficiency: 98.6%
-
-**종합 분석**:
-| Case | PPTE | Overlap Ratio | 질량 | 효율 | 평가 |
-|------|------|---------------|------|------|------|
-| 1 | 0.95 | 1.15 | 1.2kg | 99.1% | 경량/효율 우수, 저소음 보통 |
-| 2 | 0.82 | 1.85 | 1.45kg | 98.9% | ⭐ 균형잡힌 설계 |
-| 3 | 0.78 | 2.02 | 1.68kg | 98.6% | 초저소음, 질량/효율 불리 |
-
-**추천**: Case 2 (치폭 40mm, 헬리컬각 20°)
-- overlap ratio ≈ 2.0에 가까워 초저소음 설계
-- 질량과 효율의 희생이 Case 3보다 적음
-- PPTE도 충분히 낮음
-
-적용하시겠습니까?
+추천: Case 2 (overlap≈2.0, PPTE우수, 질량/효율 타협 적절)
 ```
 
 ### SimpleSizing 결과 활용 시 주의사항 ⚠️
