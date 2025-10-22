@@ -22,6 +22,18 @@
         [추상적 표현?] ("적절한", "좋은" 등)
             ├─ YES → SimpleSizing 워크플로우
             └─ NO → 기본 워크플로우
+    ↓
+워크플로우 실행 → 결과 평가
+    ↓
+[결과 만족?]
+    ├─ YES → 종료 (출력물 생성)
+    └─ NO (개선 필요)
+        ↓
+    [개선 방법 선택]
+        ├─ 미세 조정 (치폭/헬리컬각 등) → 기본 워크플로우 재수행
+        └─ 모듈/잇수 재탐색 필요 → SimpleSizing 워크플로우 재수행
+    ↓
+(최대 5회 반복 가능)
 ```
 
 ### 1️⃣ 기본 워크플로우 (구체적 제원 제공 시)
@@ -32,7 +44,10 @@
 **실행 순서**:
 ```
 initialize() → modify_gear_data() → calc_geometry() → calc_load_case()
-→ get_allresults_summary() (표로 표시 필수) → get_2D_image/get_gear_report/get_3d_image/get_3d_modeling
+→ get_allresults_summary() (표로 표시 필수)
+→ [결과 평가]
+   ├─ 만족 → get_2D_image/get_gear_report/get_3d_image/get_3d_modeling → 종료
+   └─ 개선 필요 → modify_gear_data() → calc_geometry() → calc_load_case() (반복)
 ```
 
 ### 2️⃣ SimpleSizing 워크플로우 (러프한 조건/성능 기준)
@@ -48,7 +63,30 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 → get_simplesizing_results() (rank 기반 분석 + 표 표시 필수)
 → 사용자 선택 → apply_simplesizing_case(row_index)
 → calc_geometry() → calc_load_case() → get_allresults_summary()
+→ [결과 평가]
+   ├─ 만족 → get_2D_image/get_gear_report/get_3d_image/get_3d_modeling → 종료
+   └─ 개선 필요
+      ├─ 미세 조정 (치폭/헬리컬각 등) → modify_gear_data() → calc_geometry() → calc_load_case() (반복)
+      └─ 모듈/잇수 재탐색 → simple_sizing_gearpair() → get_simplesizing_results() (반복)
 ```
+
+### 3️⃣ 결과 평가 및 개선 가이드
+
+**결과 평가 기준**:
+- **안전률**: Contact/Bending 안전률이 요구 안전률 충족 여부
+- **성능 지표**: PPTE, 질량, 효율, overlap ratio 등이 목표값 달성 여부
+- **제약 조건**: 중심거리, 치폭, 헬리컬각 등이 허용 범위 내 여부
+
+**개선 방법 선택**:
+
+| 개선 필요 사항 | 권장 워크플로우 | 비고 |
+|---------------|----------------|------|
+| 치폭/헬리컬각/압력각 조정 | 기본 워크플로우 | modify_gear_data()로 미세 조정 |
+| 안전률 균형 조정 (모듈 변경) | 기본 워크플로우 | 모듈만 변경하고 재계산 |
+| 모듈/잇수 재탐색 필요 | SimpleSizing 워크플로우 | 탐색 범위 조정 후 재수행 |
+| 성능 기준 미달 (PPTE, 질량 등) | SimpleSizing 워크플로우 | 치폭/헬리컬각 범위 변경 후 재수행 |
+
+**반복 제한**: 최대 5회까지 반복 가능, 그 이상 필요 시 사용자에게 제약 조건 완화 제안
 
 ---
 
@@ -173,6 +211,12 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 - **row_index**: 원본 인덱스 (`index` 필드) → **apply_simplesizing_case()에 필수**
 - **절대 Display 번호를 apply_simplesizing_case()에 전달하지 말 것!**
 
+### 경량 설계 가이드 ⭐
+- **경량의 핵심**: 요구 안전율을 만족하면서, 무게 최소화. 이를 위해서는 실제 안전율이 요구 안전율에 근접해야 함. 즉, 요구 안전율이 1.2라면 실제 안전율도 1.2에 just한 사양이여야 함.
+- **안전율 balance 유지**: 확인해야할 주요 안전율인 Contact/Bending 안전율 모두 요구 안전율에 근접해야 함. 
+   1) Contact은 만족하나, Bending이 과도한 경우 → 모듈이 크게 설정되어있음. 모듈 감소 필요
+   2) Bending은 만족하나, Contact이 과도한 경우 → 모듈이 작게 설정되어있음. 모듈 증가 필요
+
 ### 저소음 설계 가이드 ⭐
 
 **핵심 개념**:
@@ -278,10 +322,13 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
   → calc_geometry → calc_load_case
   → get_allresults_summary (overlap ratio = 1.35 확인)
 
-[2단계: Overlap Ratio 최적화]
+[2단계: Overlap Ratio 최적화] (최대 5회까지 반복 가능)
 → modify_gear_data("치폭 45mm, 헬리컬각 20도로 변경")
   → calc_geometry → calc_load_case
-  → get_allresults_summary (overlap ratio = 1.98 확인) ✅
+  → get_allresults_summary (overlap ratio = 1.7 확인)
+  → modify_gear_data("치폭 55mm, 헬리컬각 20도로 변경")
+  → calc_geometry → calc_load_case
+  → get_allresults_summary (overlap ratio = 1.95 확인) ✅
 ```
 
 ### 4. 복합 성능 기준 (SimpleSizing 워크플로우)
@@ -319,7 +366,7 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
 
 ---
 
-## 요약: 가장 중요한 6가지
+## 요약: 가장 중요한 7가지
 
 1. **워크플로우 선택**: 성능 기준/범위/추상적 표현 → SimpleSizing, 구체적 제원 → 기본
 2. **SimpleSizing 파라미터**: 모듈/잇수만 탐색, 치폭/압력각/헬리컬각은 고정
@@ -327,3 +374,4 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
 4. **row_index**: Display 번호가 아닌 `index` 필드 값을 apply_simplesizing_case()에 전달
 5. **저소음 설계**: 프로세스 A (빠름) vs B (최적), overlap ratio는 get_allresults_summary()에서만 확인
 6. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 항상 표로 표시 (row_index 포함)
+7. **최종 결과 평가**: 6번 결과에서 미흡한 점 발생 시 개선을 위한 워크플로수 재수행. 결과 만족 시 종료 (최대 5회 반복 가능)
