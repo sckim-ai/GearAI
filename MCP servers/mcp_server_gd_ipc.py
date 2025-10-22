@@ -1748,6 +1748,9 @@ def get_simplesizing_results(session_id: str, return_all: bool = False, top_n: i
             if not return_all and top_n > 0:
                 df = df.head(top_n)
 
+            # row index를 컬럼으로 추가
+            df = df.reset_index()
+
             # DataFrame을 dict로 변환 (records 형태)
             results_dict = df.to_dict('records')
 
