@@ -104,8 +104,9 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
   - 이전 대화 기반 요구사항 요약하여 입력
 - **`get_simplesizing_results(session_id, return_all=False, top_n=100)`**: 결과 조회
   - **반드시 rank 기반 분석 후 표로 표시**
+  - 반환 구조: 각 결과에 `index` (원본 row_index) 포함
 - **`apply_simplesizing_case(row_index, session_id)`**: 선택한 케이스 적용
-  - row_index는 0부터 시작 (get_simplesizing_results의 results 인덱스)
+  - **row_index는 원본 DataFrame의 인덱스** (get_simplesizing_results 결과의 `index` 필드 값)
   - **UI 더블클릭과 동일한 로직 사용** (SimpleSizingCase 클래스 공통화)
   - 자동으로 updated_config를 반환하여 session.changed_data 동기화
   - 적용 후 calc_geometry → calc_load_case 필수
@@ -236,7 +237,61 @@ overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
 어느 방향으로 진행할까요?
 ```
 
-### LLM 응답 템플릿
+### SimpleSizing 결과 활용 시 주의사항 ⚠️
+
+#### row_index vs display_order 명확화
+
+**핵심**: SimpleSizing 결과를 rank/지표로 정렬하면 **표시 순서와 원본 인덱스가 달라집니다**!
+
+**get_simplesizing_results() 반환 구조**:
+```json
+{
+  "results": [
+    {"index": 45, "module": 3.75, "z1": 23, "z2": 94, "rank": 1, "PPTE": 0.82, ...},
+    {"index": 5, "module": 4.0, "z1": 21, "z2": 86, "rank": 1, "PPTE": 0.95, ...},
+    {"index": 102, "module": 3.5, "z1": 24, "z2": 101, "rank": 1, "PPTE": 1.12, ...}
+  ]
+}
+```
+
+**LLM 추천 프로세스** (3단계):
+1. **SimpleSizing 결과표 작성** (rank → 성능 지표 순 정렬, display_order는 1부터 시작)
+2. **추천 케이스 지정** 시 **반드시 index 필드 값을 명시**:
+```
+추천: display_order 1번 케이스
+  - **row_index: 45** ← apply_simplesizing_case()에 사용할 값
+  - 모듈: 3.75mm, z1=23, z2=94
+  - rank: 1, PPTE: 0.82 (최소), S_H=1.74, S_F=5.73
+```
+3. **apply_simplesizing_case(row_index=45, session_id)** 실행
+
+#### LLM 응답 템플릿 (SimpleSizing)
+
+**필수 형식**:
+```
+SimpleSizing 결과 (rank + [성능 지표] 기준 정렬):
+
+| Display | row_index | 모듈 | z1 | z2 | Rank | [성능 지표] | [보조 지표1] | [보조 지표2] | 평가 |
+|---------|-----------|------|----|----|------|-------------|--------------|--------------|------|
+| 1 | 45 | 3.75 | 23 | 94 | 1 | 0.82 | 1.74 | 5.73 | ⭐ 추천 |
+| 2 | 5 | 4.0 | 21 | 86 | 1 | 0.95 | 1.61 | 5.48 | - |
+| 3 | 102 | 3.5 | 24 | 101 | 1 | 1.12 | 1.68 | 5.92 | - |
+
+**분석**: Rank 1 중 display_order 1번(row_index 45)이 PPTE 최소로 저소음에 최적
+**추천**: display_order 1번 케이스
+  - row_index: 45
+  - 모듈: 3.75mm, z1=23, z2=94
+  - rank: 1, PPTE: 0.82, S_H=1.74, S_F=5.73
+
+→ apply_simplesizing_case(row_index=45, session_id) 실행 예정
+```
+
+**주의사항**:
+- **Display**: 표에서의 순서 (1, 2, 3, ...) → 사용자와 소통용
+- **row_index**: 원본 DataFrame 인덱스 (`index` 필드) → **apply_simplesizing_case()에 필수**
+- **절대 Display 번호를 apply_simplesizing_case()에 전달하지 말 것!**
+
+### LLM 응답 템플릿 (일반)
 
 **단일 성능 기준**:
 ```
@@ -282,15 +337,16 @@ overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
 요청: "기어비 3, 모듈 2~4 사이로 찾아줘"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank+지표 기준 표 표시)
-  → 사용자에게 추천 (예: "3번 케이스 추천합니다")
+  → 사용자에게 추천 (예: "display_order 1번 케이스(row_index=45) 추천")
   → 사용자 선택 확인
-  → apply_simplesizing_case(row_index=3) ← row_index는 표의 인덱스 (0부터 시작)
+  → apply_simplesizing_case(row_index=45) ← results의 "index" 필드 값 사용
   → calc_geometry → calc_load_case → get_allresults_summary
 ```
 
 **apply_simplesizing_case 예시**:
-- 표에서 4번째 행(index=3) 선택 시: `apply_simplesizing_case(3, session_id)`
+- SimpleSizing 결과 중 Display 1번(index=45) 선택 시: `apply_simplesizing_case(45, session_id)`
 - 자동으로 UI와 동일한 로직으로 mainForm 업데이트 및 config 동기화
+- **주의**: Display 번호가 아닌 `index` 필드 값(원본 row_index)을 사용!
 
 ### 3. 저소음 설계 (SimpleSizing + Overlap Ratio 최적화)
 ```
@@ -299,8 +355,8 @@ overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
 [1단계: SimpleSizing]
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (rank ↑ → PPTE ↑ 정렬, 표 표시)
-  → Rank 1 중 PPTE 최소 케이스 선택 (예: 0번)
-  → apply_simplesizing_case(row_index=0)
+  → Rank 1 중 PPTE 최소 케이스 선택 (예: Display 1번, index=45)
+  → apply_simplesizing_case(row_index=45)
   → calc_geometry → calc_load_case
   → get_allresults_summary (overlap ratio 확인) ⭐
 
@@ -317,9 +373,9 @@ overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
 요청: "경량+저소음, 기어비 4"
 → initialize → modify_gear_data → simple_sizing_gearpair
   → get_simplesizing_results (Rank 1 필터링 → total mass + PPTE 비교)
-  → 트레이드오프 설명 (예: "1번은 경량 우선, 5번은 저소음 우선, 3번은 균형")
+  → 트레이드오프 설명 (예: "Display 1번(index=12)은 경량 우선, Display 2번(index=78)은 저소음 우선, Display 3번(index=34)은 균형")
   → 사용자 선택 확인
-  → apply_simplesizing_case(row_index=3) → calc_geometry → calc_load_case
+  → apply_simplesizing_case(row_index=34) → calc_geometry → calc_load_case
 ```
 
 ---
@@ -369,11 +425,13 @@ overlap ratio 2.0 달성을 위해 헬리컬각 28°가 필요합니다.
 - [ ] session_id 모든 함수에 전달
 - [ ] calc_geometry → calc_load_case 순서
 - [ ] SimpleSizing: simple_sizing_gearpair → get_simplesizing_results → 추천 → 사용자 선택 확인 → apply_simplesizing_case(row_index)
+- [ ] **apply_simplesizing_case()에는 results의 `index` 필드 값(row_index) 전달** (Display 번호 아님!)
 - [ ] apply_simplesizing_case 후 반드시 calc_geometry → calc_load_case 실행
 
 ### 결과 표시 (필수!)
 - [ ] get_allresults_summary() → **마크다운 표**
-- [ ] get_simplesizing_results() → **rank 기반 분석 + 표**
+- [ ] get_simplesizing_results() → **rank 기반 분석 + 표 (Display 순서 + row_index 컬럼 포함)**
+- [ ] SimpleSizing 표에 **Display**와 **row_index** 컬럼 반드시 포함
 - [ ] calc_load_case() 메시지 전달
 
 ### SimpleSizing 성능 분석 (핵심!)
