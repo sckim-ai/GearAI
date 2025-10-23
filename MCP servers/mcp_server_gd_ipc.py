@@ -247,6 +247,36 @@ class GearDesignIPC:
         }
         return self._send_command(command)
 
+    def calculate_facewidth_for_ep_beta(
+        self,
+        target_overlap_ratio: float,
+        helix_angle_deg: float,
+        normal_module: float
+    ) -> Dict[str, any]:
+        """목표 겹침비율(εβ)을 달성하기 위한 치폭 계산"""
+        command = {
+            "action": "calculate_facewidth_for_ep_beta",
+            "target_overlap_ratio": target_overlap_ratio,
+            "helix_angle_deg": helix_angle_deg,
+            "normal_module": normal_module
+        }
+        return self._send_command(command)
+
+    def calculate_helixangle_for_ep_beta(
+        self,
+        target_overlap_ratio: float,
+        face_width: float,
+        normal_module: float
+    ) -> Dict[str, any]:
+        """목표 겹침비율(εβ)을 달성하기 위한 헬릭스각 계산"""
+        command = {
+            "action": "calculate_helixangle_for_ep_beta",
+            "target_overlap_ratio": target_overlap_ratio,
+            "face_width": face_width,
+            "normal_module": normal_module
+        }
+        return self._send_command(command)
+
     def stop(self):
         """프로세스 종료"""
         if self.process:
@@ -1913,6 +1943,180 @@ def apply_simplesizing_case(row_index: int, session_id: str) -> dict:
         return {
             "success": False,
             "error": f"케이스 적용 중 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def calculate_facewidth_for_ep_beta(
+    target_overlap_ratio: float,
+    helix_angle_deg: float,
+    normal_module: float,
+    session_id: str
+) -> dict:
+    """
+    목표 겹침비율(εβ)을 달성하기 위한 치폭(Face Width)을 계산합니다.
+
+    헬리컬 기어에서 겹침비율(εβ)은 소음과 진동 성능에 중요한 영향을 미칩니다.
+    이 함수는 원하는 겹침비율을 달성하기 위해 필요한 치폭을 계산합니다.
+
+    계산 공식:
+        εβ = (b × sin(β)) / (π × mn)
+        따라서, b = (εβ × π × mn) / sin(β)
+
+    Args:
+        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 1.0 이상 권장 (저소음: 1.2~1.5)
+        helix_angle_deg (float): 헬릭스각(β) [도]. 0이 아닌 값이어야 함
+        normal_module (float): 법선 모듈(mn) [mm]. 0보다 큰 값
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
+
+    Returns:
+        dict: 계산 결과
+            - 성공 시: {
+                "success": True,
+                "face_width": 계산된_치폭(mm),
+                "inputs": {입력값_정보},
+                "session_id": "세션ID"
+              }
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - 헬릭스각이 0에 가까우면 계산이 불가능합니다 (spur gear에는 적용 불가)
+        - 겹침비율이 클수록 더 큰 치폭이 필요합니다
+        - 계산된 치폭이 기어 크기에 비해 과도하게 크거나 작을 수 있으므로 검증이 필요합니다
+
+    Example:
+        # εβ = 1.3, β = 25°, mn = 2.5mm일 때 필요한 치폭 계산
+        result = calculate_facewidth_for_ep_beta(1.3, 25.0, 2.5, session_id)
+        # result["face_width"] ≈ 24.2mm
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    try:
+        response = session.ipc_client.calculate_facewidth_for_ep_beta(
+            target_overlap_ratio,
+            helix_angle_deg,
+            normal_module
+        )
+
+        if response.get("success", False):
+            return {
+                "success": True,
+                "face_width": response.get("face_width"),
+                "inputs": response.get("inputs"),
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": response.get("error", "Unknown error"),
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"치폭 계산 중 오류: {str(e)}",
+            "session_id": session.session_id
+        }
+
+@mcp.tool()
+def calculate_helixangle_for_ep_beta(
+    target_overlap_ratio: float,
+    face_width: float,
+    normal_module: float,
+    session_id: str
+) -> dict:
+    """
+    목표 겹침비율(εβ)을 달성하기 위한 헬릭스각(β)을 계산합니다.
+
+    헬리컬 기어에서 겹침비율(εβ)은 소음과 진동 성능에 중요한 영향을 미칩니다.
+    이 함수는 주어진 치폭에서 원하는 겹침비율을 달성하기 위해 필요한 헬릭스각을 계산합니다.
+
+    계산 공식:
+        εβ = (b × sin(β)) / (π × mn)
+        따라서, β = arcsin((εβ × π × mn) / b)
+
+    Args:
+        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 1.0 이상 권장 (저소음: 1.2~1.5)
+        face_width (float): 치폭(b) [mm]. 0보다 큰 값
+        normal_module (float): 법선 모듈(mn) [mm]. 0보다 큰 값
+        session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
+
+    Returns:
+        dict: 계산 결과
+            - 성공 시: {
+                "success": True,
+                "helix_angle_deg": 계산된_헬릭스각(도),
+                "inputs": {입력값_정보},
+                "session_id": "세션ID"
+              }
+            - 실패 시: {"success": False, "error": "오류 메시지", "session_id": "세션ID"}
+
+    Note:
+        - sin(β)의 범위는 [-1, 1]이므로, 계산 불가능한 조합이 있을 수 있습니다
+        - 치폭이 너무 작거나 목표 겹침비율이 너무 크면 계산이 불가능합니다
+        - 일반적인 헬릭스각 범위는 15°~35° 입니다
+
+    Example:
+        # εβ = 1.3, b = 25mm, mn = 2.5mm일 때 필요한 헬릭스각 계산
+        result = calculate_helixangle_for_ep_beta(1.3, 25.0, 2.5, session_id)
+        # result["helix_angle_deg"] ≈ 23.5°
+    """
+    try:
+        session = get_session(session_id)
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "session_id": session_id
+        }
+
+    if not session.is_initialized:
+        return {
+            "success": False,
+            "error": "초기화되지 않음. initialize() 함수를 먼저 호출하세요.",
+            "session_id": session.session_id
+        }
+
+    try:
+        response = session.ipc_client.calculate_helixangle_for_ep_beta(
+            target_overlap_ratio,
+            face_width,
+            normal_module
+        )
+
+        if response.get("success", False):
+            return {
+                "success": True,
+                "helix_angle_deg": response.get("helix_angle_deg"),
+                "inputs": response.get("inputs"),
+                "session_id": session.session_id
+            }
+        else:
+            return {
+                "success": False,
+                "error": response.get("error", "Unknown error"),
+                "session_id": session.session_id
+            }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"헬릭스각 계산 중 오류: {str(e)}",
             "session_id": session.session_id
         }
 
