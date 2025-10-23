@@ -309,16 +309,14 @@ Safety Factor Evaluation (Required: S_H=1.2, S_F=1.2, S_MP=1.0):
 - Actual: S_H=2.1 (excessive, 1.75× required), S_F=5.3 (excessive, 4.4× required), S_MP=0.85 (insufficient)
 - Evaluation: Contact/Bending safety factors excessive → Overweight design (needs improvement)
 - Micropitting: Below required but ignore (cannot improve, reference only)
-- Action: Bending more excessive, prioritize module decrease (4.0 → 3.5mm)
 
-After improvement:
-- Actual: S_H=1.7, S_F=3.8, S_MP=0.75 (still excessive, Micropitting further decreased)
-- Evaluation: Contact/Bending still excessive, ignore Micropitting
-- Additional action: Further decrease module (3.5 → 3.0mm)
+Step 1 Action: Bending more excessive, prioritize module decrease (4.0 → 2.5mm)
+ → Adjust module with modify_gear_data() → Recalculate
+ → Result: S_H=0.9, S_F=3.0, S_H insufficient but S_F has high margin → Decrease module then increase teeth (maintain gear ratio, center distance)
 
-Final:
-- Actual: S_H=1.3, S_F=1.6, S_MP=0.65
-- Evaluation: Contact/Bending appropriate ✅, Micropitting insufficient but acceptable
+Step 2 Action: Bending more excessive, prioritize module decrease (4.0 → 2.0mm, increase teeth)
+ → Adjust module/teeth with modify_gear_data() → Recalculate
+ → Result: S_H=1.2, S_F=1.7, S_MP=0.65, Contact/Bending appropriate ✅, Micropitting insufficient but acceptable
 ```
 
 ### Low-Noise Design Guide ⭐

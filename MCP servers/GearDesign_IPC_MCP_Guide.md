@@ -308,16 +308,14 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 - 실제: S_H=2.1 (과도, 요구값의 1.75배), S_F=5.3 (과도, 요구값의 4.4배), S_MP=0.85 (미달)
 - 평가: Contact/Bending 안전률 과도 → 과중량 설계 (개선 필요)
 - Micropitting: 요구값 미달이지만 무시 (개선 불가, 참고만)
-- 조치: Bending이 더 과도하므로 모듈 감소 우선 (4.0 → 3.5mm)
 
-개선 후:
-- 실제: S_H=1.7, S_F=3.8, S_MP=0.75 (여전히 과도, Micropitting 추가 하락)
-- 평가: Contact/Bending 여전히 과도, Micropitting은 무시
-- 추가 조치: 모듈 추가 감소 (3.5 → 3.0mm)
+1단계 조치: Bending이 더 과도하므로 모듈 감소 우선 (4.0 → 2.5mm)
+ → modify_gear_data()로 모듈 조정 → 재계산 
+ → 결과: S_H=0.9, S_F=3.0, S_H가 부족하지만 S_F가 margin이 높음 → 모듈 감소 후 잇수 증가 (기어비, 중심거리 유지)
 
-최종:
-- 실제: S_H=1.3, S_F=1.6, S_MP=0.65
-- 평가: Contact/Bending 적정 ✅, Micropitting 미달이지만 허용
+2단계 조치: Bending이 더 과도하므로 모듈 감소 우선 (4.0 → 2.0mm, 잇수 증가)
+ → modify_gear_data()로 모듈/잇수 조정 → 재계산 
+ → 결과: S_H=1.2, S_F=1.7, S_MP=0.65, Contact/Bending 적정 ✅, Micropitting 미달이지만 허용
 ```
 
 ### 저소음 설계 가이드 ⭐
