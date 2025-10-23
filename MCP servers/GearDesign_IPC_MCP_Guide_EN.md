@@ -273,12 +273,15 @@ SimpleSizing Results (sorted by rank + PPTE):
 **Core Concept**:
 - **Lightweight essence**: Minimize weight while satisfying required safety factor → Actual safety factor should be **1.0~1.3× required value**
 - **⚠️ Excessive condition**: If safety factor is **1.2× required or more**, needs improvement (overweight)
+- **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F) safety factors**, Micropitting(S_MP) is for reference only
+  - Micropitting below required safety factor is acceptable (often impossible to improve)
+  - Contact/Bending optimization is the key to lightweighting
 
 **[Process A] SimpleSizing once + Fine-tuning** (Common, fast):
 ```
 1. Run SimpleSizing (select minimum mass case among Rank 1)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
-3. Check both S_H, S_F in get_allresults_summary()
+3. Check S_H(Contact), S_F(Bending) in get_allresults_summary() (S_MP for reference only)
 4. If S_H, S_F are 1.2× target safety factor or more:
    → Adjust module/facewidth/teeth (maintain gear ratio) with modify_gear_data() → Recalculate → Repeat up to 5 times
 ```
@@ -292,22 +295,30 @@ SimpleSizing Results (sorted by rank + PPTE):
 | S_H=2.0, S_F=5.0 | Excessive (Needs improvement) | Need to decrease module/facewidth (overweight) |
 | S_H=1.2, S_F=3.5 | Imbalanced (Needs improvement) | Bending excessive → Decrease module |
 | S_H=2.5, S_F=1.6 | Imbalanced (Needs improvement) | Contact excessive → Increase module |
+| S_H=1.25, S_F=1.60, S_MP=0.8 | Appropriate ✅ | Micropitting insufficient but OK (reference only) |
 
 **Safety Factor Balance Adjustment**:
 1. **Contact appropriate, only Bending excessive** → Decrease module
 2. **Bending appropriate, only Contact excessive** → Increase module
 3. **Both excessive** → Decrease both module and facewidth
+4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
 
 **LLM Response Example**:
 ```
-Safety Factor Evaluation (Required: S_H=1.2, S_F=1.2):
-- Actual: S_H=2.1 (excessive, 1.75× required), S_F=5.3 (excessive, 4.4× required)
-- Evaluation: Safety factor excessive → Overweight design (needs improvement)
+Safety Factor Evaluation (Required: S_H=1.2, S_F=1.2, S_MP=1.0):
+- Actual: S_H=2.1 (excessive, 1.75× required), S_F=5.3 (excessive, 4.4× required), S_MP=0.85 (insufficient)
+- Evaluation: Contact/Bending safety factors excessive → Overweight design (needs improvement)
+- Micropitting: Below required but ignore (cannot improve, reference only)
 - Action: Bending more excessive, prioritize module decrease (4.0 → 3.5mm)
 
 After improvement:
-- Actual: S_H=1.7, S_F=3.8 (still excessive)
+- Actual: S_H=1.7, S_F=3.8, S_MP=0.75 (still excessive, Micropitting further decreased)
+- Evaluation: Contact/Bending still excessive, ignore Micropitting
 - Additional action: Further decrease module (3.5 → 3.0mm)
+
+Final:
+- Actual: S_H=1.3, S_F=1.6, S_MP=0.65
+- Evaluation: Contact/Bending appropriate ✅, Micropitting insufficient but acceptable
 ```
 
 ### Low-Noise Design Guide ⭐
@@ -582,6 +593,7 @@ Request: "Gear ratio 3, find module between 2~4"
 4. **row_index**: Pass `index` field value (NOT Display number) to apply_simplesizing_case()
 5. **3-Level Result Evaluation**: Insufficient(NG) / Appropriate(OK) / **Excessive(Needs improvement)**
    - **Lightweight**: Safety factor 1.2× required or more is excessive (overweight)
+   - **Safety Factor Focus**: Optimize ONLY Contact(S_H), Bending(S_F), **Micropitting(S_MP) for reference only** (acceptable even if insufficient)
    - **Low-noise**: Overlap ratio beyond target value (1.0 or 2.0) ±0.05 is inappropriate
 6. **Low-Noise Design**:
    - Process A (manual adjustment, trial-and-error) vs A2 (calculation-based, accurate ⭐) vs B (Case Study, optimal)

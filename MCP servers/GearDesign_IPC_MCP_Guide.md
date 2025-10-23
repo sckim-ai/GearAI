@@ -272,14 +272,17 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 **핵심 개념**:
 - **경량의 핵심**: 요구 안전율을 만족하면서 무게 최소화 → 실제 안전율이 요구값의 **1.0~1.3배 이내**여야 함
 - **⚠️ 과도 조건**: 안전율이 요구값의 **1.2배 이상**이면 개선 필요 (과중량)
+- **⚠️ 중요**: **Contact(S_H)와 Bending(S_F) 안전율에만 집중**, Micropitting(S_MP)은 참고만 할 것
+  - Micropitting은 요구 안전율 미달해도 허용 (개선 불가능한 경우 많음)
+  - Contact/Bending 최적화가 경량화의 핵심
 
 **[프로세스 A] SimpleSizing 1번 + 미세 조정** (일반적, 빠름):
 ```
 1. SimpleSizing 실행 (Rank 1 중 중량 최소 케이스 선택)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
-3. get_allresults_summary()에서 S_H, S_F 모두 확인
+3. get_allresults_summary()에서 S_H(Contact), S_F(Bending) 확인 (S_MP는 참고만)
 4. S_H, S_F가 목표 안전율 대비 1.2배 이상 크면:
-   → modify_gear_data()로 모듈/치폭/잇수(기어비 유지 한) 조정 → 재계산 → 최대 5번 반복
+   → modify_gear_data()로 모듈/치폭/잇수(기어비 유지) 조정 → 재계산 → 최대 5번 반복
 ```
 
 **안전률 평가 기준** (요구 안전율 S_H=1.2, S_F=1.5 예시):
@@ -291,22 +294,30 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 | S_H=2.0, S_F=5.0 | 과도 (개선 필요) | 모듈/치폭 감소 필요 (과중량) |
 | S_H=1.2, S_F=3.5 | 불균형 (개선 필요) | Bending 과도 → 모듈 감소 |
 | S_H=2.5, S_F=1.6 | 불균형 (개선 필요) | Contact 과도 → 모듈 증가 |
+| S_H=1.25, S_F=1.60, S_MP=0.8 | 적정 ✅ | Micropitting 미달이지만 OK (참고만) |
 
 **안전률 균형 조정**:
 1. **Contact은 적정, Bending만 과도** → 모듈 감소
 2. **Bending은 적정, Contact만 과도** → 모듈 증가
 3. **둘 다 과도** → 모듈/치폭 모두 감소
+4. **Micropitting 미달** → 무시 (Contact/Bending에만 집중)
 
 **LLM 응답 예시**:
 ```
-안전률 평가 (요구: S_H=1.2, S_F=1.2):
-- 실제: S_H=2.1 (과도, 요구값의 1.75배), S_F=5.3 (과도, 요구값의 4.4배)
-- 평가: 안전률 과도 → 과중량 설계 (개선 필요)
+안전률 평가 (요구: S_H=1.2, S_F=1.2, S_MP=1.0):
+- 실제: S_H=2.1 (과도, 요구값의 1.75배), S_F=5.3 (과도, 요구값의 4.4배), S_MP=0.85 (미달)
+- 평가: Contact/Bending 안전률 과도 → 과중량 설계 (개선 필요)
+- Micropitting: 요구값 미달이지만 무시 (개선 불가, 참고만)
 - 조치: Bending이 더 과도하므로 모듈 감소 우선 (4.0 → 3.5mm)
 
 개선 후:
-- 실제: S_H=1.7, S_F=3.8 (여전히 과도)
+- 실제: S_H=1.7, S_F=3.8, S_MP=0.75 (여전히 과도, Micropitting 추가 하락)
+- 평가: Contact/Bending 여전히 과도, Micropitting은 무시
 - 추가 조치: 모듈 추가 감소 (3.5 → 3.0mm)
+
+최종:
+- 실제: S_H=1.3, S_F=1.6, S_MP=0.65
+- 평가: Contact/Bending 적정 ✅, Micropitting 미달이지만 허용
 ```
 
 ### 저소음 설계 가이드 ⭐
@@ -457,6 +468,7 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
 4. **row_index**: Display 번호가 아닌 `index` 필드 값을 apply_simplesizing_case()에 전달
 5. **결과 평가 3단계**: 미달(NG) / 적정(OK) / **과도(개선 필요)**
    - **경량**: 안전률이 요구값의 1.2배 이상이면 과도 (과중량)
+   - **안전률 집중**: Contact(S_H), Bending(S_F)만 최적화, **Micropitting(S_MP)은 참고만** (미달해도 허용)
    - **저소음**: Overlap ratio가 목표값(1.0 또는 2.0) ±0.05 벗어나면 부적정
 6. **저소음 설계**:
    - 프로세스 A (수동 조정, 시행착오) vs A2 (계산 기반, 정확 ⭐) vs B (Case Study, 최적)
