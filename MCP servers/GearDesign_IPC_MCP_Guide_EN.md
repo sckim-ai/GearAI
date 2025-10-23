@@ -268,252 +268,208 @@ SimpleSizing Results (sorted by rank + PPTE):
 - **row_index**: Original index (`index` field) → **REQUIRED for apply_simplesizing_case()**
 - **Never pass Display number to apply_simplesizing_case()!**
 
-### Lightweight Design Guide ⭐
+### Optimal Gear Design Guide ⭐
 
 **Core Concept**:
-- **Lightweight essence**: Minimize weight while satisfying required safety factor → Actual safety factor should be **1.0~1.3× required value**
-- **⚠️ Excessive condition**: If safety factor is **1.2× required or more**, needs improvement (overweight)
-- **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F) safety factors**, Micropitting(S_MP) is for reference only
-  - Micropitting below required safety factor is acceptable (often impossible to improve)
-  - Contact/Bending optimization is the key to lightweighting
+- **Optimal gear**: Simultaneously achieving Lightweight + High Efficiency + Low Noise
+- **3-stage process**: 1) Lightweight design first → 2) Low-noise design → 3) High efficiency verification
+- **⚠️ Trade-off management**: Minimize impact on other performance indicators at each stage
 
-**[Process A] SimpleSizing once + Fine-tuning** (Common, fast):
+**Overall Process Flow**:
 ```
-1. Run SimpleSizing (select minimum mass case among Rank 1)
+[Stage 1] Lightweight Design (Safety Factor Optimization)
+  → Adjust Contact/Bending safety factors to 1.0~1.3× required values
+  → Micropitting is for reference only (insufficient allowed)
+
+[Stage 2] Low-Noise Design (Overlap Ratio Optimization)
+  → Achieve target overlap ratio (1.0 or 2.0)
+  → Adjust helix angle/facewidth (minimize efficiency impact)
+
+[Stage 3] High Efficiency Verification
+  → Check efficiency and judge trade-offs
+  → Consider readjustment if efficiency decrease > 5%
+```
+
+---
+
+#### Stage 1: Lightweight Design (Safety Factor Optimization)
+
+**Objective**: Optimize Contact(S_H), Bending(S_F) safety factors to **1.0~1.3× required values**
+
+**Core Principles**:
+- **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F)**, Micropitting(S_MP) is for reference only
+- Micropitting below required safety factor is acceptable (often impossible to improve)
+- If safety factors are **1.2× required or more**, excessive (needs improvement)
+
+**SimpleSizing-based Process**:
+```
+1. Run SimpleSizing (select minimum PPTE or minimum mass case among Rank 1)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
 3. Check S_H(Contact), S_F(Bending) in get_allresults_summary() (S_MP for reference only)
-4. If S_H, S_F are 1.2× target safety factor or more:
-   → Adjust module/facewidth/teeth (maintain gear ratio) with modify_gear_data() → Recalculate → Repeat up to 5 times
+4. Evaluate and adjust safety factors (repeat up to 5 times):
+   - If S_H, S_F are 1.2× required or more → Decrease module/facewidth
+   - If S_H, S_F are below required → Increase module/facewidth
+   - If imbalanced → Adjust module + teeth (maintain gear ratio/center distance)
 ```
 
 **Safety Factor Evaluation Criteria** (Example with required S_H=1.2, S_F=1.5):
 
 | Actual Safety Factor | Evaluation | Action |
 |---------------------|------------|--------|
-| S_H=1.1, S_F=1.1 | Insufficient | Need to increase module or facewidth |
-| S_H=1.25, S_F=1.60 | Appropriate ✅ | Lightweight optimization achieved |
-| S_H=2.0, S_F=5.0 | Excessive (Needs improvement) | Need to decrease module/facewidth (overweight) |
+| S_H=1.1, S_F=1.1 | Insufficient | Increase module or facewidth |
+| S_H=1.25, S_F=1.60 | Appropriate ✅ | Stage 1 complete → Proceed to Stage 2 |
+| S_H=2.0, S_F=5.0 | Excessive (Needs improvement) | Decrease module/facewidth (overweight) |
 | S_H=1.2, S_F=3.5 | Imbalanced (Needs improvement) | Bending excessive → Decrease module |
 | S_H=2.5, S_F=1.6 | Imbalanced (Needs improvement) | Contact excessive → Increase module |
-| S_H=1.25, S_F=1.60, S_MP=0.8 | Appropriate ✅ | Micropitting insufficient but OK (reference only) |
+| S_H=1.25, S_F=1.60, S_MP=0.8 | Appropriate ✅ | Micropitting insufficient but OK |
 
 **Safety Factor Balance Adjustment**:
-1. **Contact appropriate, only Bending excessive** → Decrease module
-2. **Bending appropriate, only Contact excessive** → Increase module
-3. **Both excessive** → Decrease both module and facewidth
+1. **Contact appropriate, Bending excessive** → Decrease module
+2. **Bending appropriate, Contact excessive** → Increase module
+3. **Both excessive** → Decrease module/facewidth
 4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
 
-**LLM Response Example**:
-```
-Safety Factor Evaluation (Required: S_H=1.2, S_F=1.2, S_MP=1.0):
-- Actual: S_H=2.1 (excessive, 1.75× required), S_F=5.3 (excessive, 4.4× required), S_MP=0.85 (insufficient)
-- Evaluation: Contact/Bending safety factors excessive → Overweight design (needs improvement)
-- Micropitting: Below required but ignore (cannot improve, reference only)
+---
 
-Step 1 Action: Bending more excessive, prioritize module decrease (4.0 → 2.5mm)
- → Adjust module with modify_gear_data() → Recalculate
- → Result: S_H=0.9, S_F=3.0, S_H insufficient but S_F has high margin → Decrease module then increase teeth (maintain gear ratio, center distance)
+#### Stage 2: Low-Noise Design (Overlap Ratio Optimization)
 
-Step 2 Action: Bending more excessive, prioritize module decrease (4.0 → 2.0mm, increase teeth)
- → Adjust module/teeth with modify_gear_data() → Recalculate
- → Result: S_H=1.2, S_F=1.7, S_MP=0.65, Contact/Bending appropriate ✅, Micropitting insufficient but acceptable
-```
+**Objective**: Adjust overlap ratio close to **1.0** or **2.0** (maintain lightweight/efficiency)
 
-### Low-Noise Design Guide ⭐
-
-**Core Concept**:
-- **Low-noise essence**: Minimize PPTE (transmission error) + Optimize overlap ratio
-- **Overlap ratio target**: **1.0** or **2.0** (closer to integer is better)
-  - Ultra-low noise: 2.0 superior to 1.0 (sacrifices lightweight/efficiency)
-  - Lightweight + low noise: Prioritize 1.0
-- **⚠️ Constraint**: Helix angle < 25° recommended
-- **⚠️ SimpleSizing limitation**: Overlap ratio not in SimpleSizing results → Only visible in `get_allresults_summary()`
+**Core Principles**:
+- **Lightweight + low-noise**: Prioritize overlap ratio 1.0
+- **Ultra-low noise**: Target overlap ratio 2.0 (sacrifices some lightweight/efficiency)
+- **⚠️ Constraint**: Helix angle < 25° recommended (consider efficiency and axial load)
 
 **Overlap Ratio Evaluation Criteria**:
 
 | Overlap ratio | Target 1.0 Evaluation | Target 2.0 Evaluation | Action |
 |--------------|----------------------|----------------------|--------|
-| 0.95~1.05 | Appropriate ✅ | Inappropriate | Target 1.0: Satisfied |
-| 1.95~2.05 | Inappropriate | Appropriate ✅ | Target 2.0: Satisfied |
-| 1.20~1.80 | Inappropriate (Needs improvement) | Inappropriate (Needs improvement) | Need to adjust closer to 1.0 or 2.0 |
-| 1.35 | Inappropriate (Needs improvement) | Inappropriate (Needs improvement) | Middle value: Choose 1.0 or 2.0 then adjust |
+| 0.95~1.05 | Appropriate ✅ | Inappropriate | Target 1.0: Stage 2 complete → Proceed to Stage 3 |
+| 1.95~2.05 | Inappropriate | Appropriate ✅ | Target 2.0: Stage 2 complete → Proceed to Stage 3 |
+| 1.20~1.80 | Inappropriate (Needs improvement) | Inappropriate (Needs improvement) | Choose 1.0 or 2.0 then adjust |
 
-**Adjustment Method**
-
-**Calculation-based Facewidth/Helix Angle Adjustment** (Accurate, Recommended ⭐)
+**Calculation-based Adjustment Method** (Accurate, Recommended ⭐):
 ```
 1. Check current overlap ratio, minimum facewidth, module in get_allresults_summary()
 2. Call calculate_helixangle_for_ep_beta(target_overlap, facewidth, module, session_id)
-3-1. If returned helix angle < 25° -> Apply with modify_gear_data()
-3-2. If returned helix angle ≥ 25° -> Call calculate_facewidth_for_ep_beta(target_overlap, 25, module, session_id) -> Apply returned facewidth and 25° helix angle with modify_gear_data()
+3-1. If returned helix angle < 25° → Adjust helix angle only with modify_gear_data()
+3-2. If returned helix angle ≥ 25° → calculate_facewidth_for_ep_beta(target_overlap, 25, module)
+     → Adjust with modify_gear_data() using helix angle 25° + calculated facewidth
 4. calc_geometry() → calc_load_case() → get_allresults_summary() recheck
+5. Re-verify safety factors: Check if S_H, S_F are still within appropriate range
+   - If safety factor insufficient → Return to Stage 1 (readjust module)
 ```
 
 **⚠️ Cautions**:
-- Helix angle < 25° recommended (consider efficiency and axial load)
-- Excessive facewidth increases mass and cost
-- Verify calculated values are applicable with constraints
+- Helix angle increase decreases efficiency (typically 1~3%)
+- Facewidth increase increases mass and cost
+- **Safety factor re-verification required**: Facewidth/helix angle changes may affect safety factors
 
-**LLM Response Example (Case 1: Helix angle < 25°, adjust helix angle only)**:
+---
+
+#### Stage 3: High Efficiency Verification and Trade-off Judgment
+
+**Objective**: Check efficiency and evaluate balance with lightweight/low-noise
+
+**Efficiency Evaluation Criteria**:
 ```
+1. Check Efficiency in get_allresults_summary()
+2. Calculate change rate vs baseline efficiency:
+   - Efficiency decrease < 2%: Acceptable ✅ (Optimal gear achieved)
+   - Efficiency decrease 2~5%: Caution (explain trade-off to user)
+   - Efficiency decrease > 5%: Readjustment recommended (review helix angle/facewidth)
+```
+
+**Trade-off Judgment Criteria**:
+
+| Efficiency Decrease | Lightweight Achieved | Low-noise Achieved | Recommended Action |
+|-------------------|---------------------|-------------------|-------------------|
+| < 2% | ✅ | ✅ | Optimal gear achieved ✅ (Design complete) |
+| 2~5% | ✅ | ✅ | User confirmation needed (explain trade-off) |
+| > 5% | ✅ | ✅ | Readjustment recommended (consider changing overlap ratio to 1.0) |
+| > 5% | ✅ | ❌ | Consider relaxing low-noise target |
+
+**LLM Response Example (Efficiency decrease > 5%)**:
+```
+Efficiency Evaluation:
+- Efficiency after Stage 1: 99.2%
+- Efficiency after Stage 2: 93.5% (5.7% decrease ⚠️)
+- Cause: Applied helix angle 25° + facewidth 50mm to achieve overlap ratio 2.0
+
+Trade-off Analysis:
+- Lightweight: S_H=1.25, S_F=1.60 (Appropriate ✅)
+- Low-noise: Overlap ratio = 2.02 (Appropriate ✅)
+- Efficiency: 93.5% (5.7% decrease ⚠️, readjustment recommended)
+
+Readjustment Proposal:
+1. Change overlap ratio target from 2.0 → 1.0
+2. Recalculate helix angle/facewidth → Efficiency improvement expected
+3. User confirmation: Choose between ultra-low noise (overlap 2.0) vs high efficiency (overlap 1.0)
+```
+
+---
+
+#### Complete LLM Response Example for Optimal Gear Design
+
+```
+Request: "Lightweight + low-noise gear, gear ratio 3, overlap ratio 1.0 design"
+
+=== Stage 1: Lightweight Design (Safety Factor Optimization) ===
+
+SimpleSizing Results (Rank 1, minimum PPTE):
+- Module 3.75, z1=23, z2=94 applied
+
+Safety Factor Evaluation (Required: S_H=1.2, S_F=1.2):
+- Actual: S_H=2.1, S_F=5.3, S_MP=0.85
+- Evaluation: Contact/Bending excessive (needs improvement), Micropitting insufficient but ignore
+
+Adjustment 1: Decrease module (3.75 → 2.5mm)
+→ Result: S_H=0.9, S_F=3.0 (S_H insufficient)
+
+Adjustment 2: Module 2.0mm + increase teeth (z1=29, z2=117)
+→ Result: S_H=1.2, S_F=1.7 (Appropriate ✅)
+→ Efficiency: 99.2%, Mass: 1.2kg
+
+Stage 1 complete ✅ → Proceed to Stage 2
+
+=== Stage 2: Low-Noise Design (Overlap Ratio Optimization) ===
+
 Overlap Ratio Evaluation (Target: 1.0):
-- Actual: 0.75 (inappropriate, 0.25 short of target 1.0)
-- Current: Minimum facewidth 30mm, helix angle 15°, normal module 2.5mm
+- Actual: 0.75 (inappropriate)
+- Current: Minimum facewidth 30mm, helix angle 15°, normal module 2.0mm
 
-Step 1: Calculate required helix angle with current facewidth
-→ calculate_helixangle_for_ep_beta(1.0, 30.0, 2.5, session_id)
-→ Result: Required helix angle = 19.8° (< 25° ✅)
+Calculation-based Adjustment:
+→ calculate_helixangle_for_ep_beta(1.0, 30.0, 2.0, session_id)
+→ Required helix angle = 19.5° (< 25° ✅)
+→ modify_gear_data("change helix angle to 19.5 degrees")
+→ Recalculation result: Overlap ratio = 1.00 ✅
 
-Step 2: Apply by adjusting helix angle only
-→ modify_gear_data("change helix angle to 19.8 degrees")
-→ calc_geometry() → calc_load_case() → get_allresults_summary()
-→ Final: overlap ratio = 1.00 ✅ (Target achieved in 1 adjustment!)
+Safety Factor Re-verification:
+- S_H=1.18, S_F=1.65 (Still appropriate ✅)
+- Efficiency: 98.9% (0.3% decrease)
 
-⚠️ Slight efficiency decrease expected due to helix angle increase (99.2% → 98.9%)
-```
+Stage 2 complete ✅ → Proceed to Stage 3
 
-**LLM Response Example (Case 2: Helix angle ≥ 25°, fix helix angle at 25° + increase facewidth)**:
-```
-Overlap Ratio Evaluation (Target: 2.0):
-- Actual: 1.35 (inappropriate, 0.65 short of target 2.0)
-- Current: Minimum facewidth 30mm, helix angle 20°, normal module 2.5mm
+=== Stage 3: High Efficiency Verification and Trade-off Judgment ===
 
-Step 1: Calculate required helix angle with current facewidth
-→ calculate_helixangle_for_ep_beta(2.0, 30.0, 2.5, session_id)
-→ Result: Required helix angle = 31.2° (≥ 25° ⚠️)
+Efficiency Evaluation:
+- Efficiency after Stage 1: 99.2%
+- Efficiency after Stage 2: 98.9%
+- Efficiency decrease: 0.3% (< 2%, acceptable ✅)
 
-Step 2: Fix helix angle at 25° and recalculate required facewidth
-→ calculate_facewidth_for_ep_beta(2.0, 25.0, 2.5, session_id)
-→ Result: Required facewidth = 37.2mm
+Final Result:
+┌─────────────────────────────────────────┐
+│ Optimal Gear Design Complete ✅          │
+├─────────────────────────────────────────┤
+│ Lightweight: S_H=1.18, S_F=1.65 (OK)    │
+│ Low-noise: Overlap ratio = 1.00 (OK)    │
+│ High Efficiency: 98.9% (0.3% drop, OK)  │
+│ Mass: 1.2kg                             │
+│ Module: 2.0mm, z1=29, z2=117            │
+│ Facewidth: 30mm, Helix angle: 19.5°    │
+└─────────────────────────────────────────┘
 
-Step 3: Apply helix angle 25° + facewidth 37.2mm
-→ modify_gear_data("change helix angle to 25 degrees, facewidth to 37.2mm")
-→ calc_geometry() → calc_load_case() → get_allresults_summary()
-→ Final: overlap ratio = 2.00 ✅ (Target achieved in 1 adjustment!)
-
-⚠️ Mass increase due to facewidth increase (1.2kg → 1.4kg), slight efficiency decrease (99.1% → 98.8%)
-```
-
-**[Process A] SimpleSizing once + Manual fine-tuning** (Fast, trial-and-error):
-```
-1. Run SimpleSizing (select minimum PPTE case among Rank 1)
-2. apply_simplesizing_case() → calc_geometry → calc_load_case
-3. Check overlap ratio in get_allresults_summary()
-4. If overlap ratio differs significantly from target (1.0 or 2.0):
-   → Manually adjust facewidth/helix angle with modify_gear_data() → Recalculate → Repeat up to 5 times
-   (e.g., gradually increase facewidth 30→40→50mm)
-```
-
-**[Process A2] SimpleSizing once + Calculation-based adjustment** (Fast, accurate, ⭐ Recommended):
-```
-1. Run SimpleSizing (select minimum PPTE case among Rank 1)
-2. apply_simplesizing_case() → calc_geometry → calc_load_case
-3. Check overlap ratio, minimum facewidth, module in get_allresults_summary()
-4. If overlap ratio differs significantly from target (1.0 or 2.0):
-   → Call calculate_helixangle_for_ep_beta(target, facewidth, module)
-   → If returned helix angle < 25°: Adjust helix angle only
-   → If returned helix angle ≥ 25°: Call calculate_facewidth_for_ep_beta(target, 25, module) then adjust facewidth+helix angle
-   → calc_geometry → calc_load_case → get_allresults_summary() recheck
-   (Target achieved in 1 adjustment)
-```
-
-**[Process B] Facewidth/Helix Angle Case Study** (Optimal, time-consuming):
-```
-1. Calculate facewidth/helix angle combinations for target overlap ratio:
-   - Case 1: Fix helix angle 15° → calculate_facewidth_for_ep_beta(target, 15°, estimated_module)
-   - Case 2: Fix helix angle 20° → calculate_facewidth_for_ep_beta(target, 20°, estimated_module)
-   - Case 3: Fix facewidth 30mm → calculate_helixangle_for_ep_beta(target, 30mm, estimated_module)
-   (estimated_module: mid-value of search range or user-specified value)
-
-2. Run SimpleSizing for each case:
-   → modify_gear_data("facewidth X, helix angle Y")
-   → simple_sizing_gearpair() → get_simplesizing_results()
-   → Select minimum PPTE case among Rank 1 and record performance
-
-3. Compare all cases (PPTE, overlap ratio, mass, efficiency, safety factor)
-
-4. Select case matching user requirements:
-   → apply_simplesizing_case() → calc_geometry → calc_load_case
-   → get_allresults_summary() for final verification
-```
-
-**LLM Response Example (Process A: Manual adjustment)**:
-```
-SimpleSizing Results (Rank 1, minimum PPTE):
-- Module 3.75, z1=23, z2=94 applied
-- After calc: overlap ratio = 1.35 confirmed
-
-Ultra-low noise target (overlap ratio → 2.0):
-→ Adjust facewidth 30→50mm
-→ Recalculate: overlap ratio = 2.3
-→ Adjust facewidth 50→45mm
-→ Recalculate: overlap ratio = 1.96 ✅ (3 trial-and-error attempts)
-⚠️ Mass 1.2→1.5kg, efficiency 99.1→98.9% decrease
-```
-
-**LLM Response Example (Process A2-Case1: Helix angle < 25°, ⭐ Recommended)**:
-```
-SimpleSizing Results (Rank 1, minimum PPTE):
-- Module 3.75, z1=23, z2=94 applied
-- After calc: overlap ratio = 0.85, minimum facewidth 30mm, helix angle 15°, normal module 2.5mm
-
-Low-noise target (overlap ratio → 1.0):
-
-Step 1: Calculate required helix angle with current facewidth
-→ calculate_helixangle_for_ep_beta(1.0, 30.0, 2.5, session_id)
-→ Result: Required helix angle = 19.8° (< 25° ✅)
-
-Step 2: Apply by adjusting helix angle only
-→ modify_gear_data("change helix angle to 19.8 degrees")
-→ calc_geometry → calc_load_case → get_allresults_summary()
-→ Final: overlap ratio = 1.00 ✅ (Target achieved in 1 adjustment!)
-
-⚠️ Slight efficiency decrease due to helix angle increase (99.2% → 99.0%)
-```
-
-**LLM Response Example (Process A2-Case2: Helix angle ≥ 25°, ⭐ Recommended)**:
-```
-SimpleSizing Results (Rank 1, minimum PPTE):
-- Module 3.75, z1=23, z2=94 applied
-- After calc: overlap ratio = 1.35, minimum facewidth 30mm, helix angle 20°, normal module 2.5mm
-
-Ultra-low noise target (overlap ratio → 2.0):
-
-Step 1: Calculate required helix angle with current facewidth
-→ calculate_helixangle_for_ep_beta(2.0, 30.0, 2.5, session_id)
-→ Result: Required helix angle = 31.2° (≥ 25° ⚠️)
-
-Step 2: Fix helix angle at 25° and recalculate required facewidth
-→ calculate_facewidth_for_ep_beta(2.0, 25.0, 2.5, session_id)
-→ Result: Required facewidth = 37.2mm
-
-Step 3: Apply helix angle 25° + facewidth 37.2mm
-→ modify_gear_data("change helix angle to 25 degrees, facewidth to 37.2mm")
-→ calc_geometry → calc_load_case → get_allresults_summary()
-→ Final: overlap ratio = 2.00 ✅ (Target achieved in 1 adjustment!)
-
-⚠️ Mass increase due to facewidth increase (1.2kg → 1.4kg), slight efficiency decrease (99.1% → 98.8%)
-```
-
-**LLM Response Example (Process B: Facewidth/Helix Angle Case Study)**:
-```
-Target overlap ratio = 2.0, estimated module = 3.0mm (mid-value of search range)
-
-Facewidth/helix angle combination calculations:
-→ Case 1 (fix β=15°): calculate_facewidth_for_ep_beta(2.0, 15, 3.0) = 72.7mm
-→ Case 2 (fix β=20°): calculate_facewidth_for_ep_beta(2.0, 20, 3.0) = 55.2mm
-→ Case 3 (fix b=40mm): calculate_helixangle_for_ep_beta(2.0, 40, 3.0) = 28.1°
-
-SimpleSizing execution results:
-
-| Case | Facewidth | Helix | Module | z1 | z2 | PPTE | Overlap | Mass | Efficiency | Evaluation |
-|------|-----------|-------|--------|----|-----|------|---------|------|------------|------------|
-| 1 | 72.7mm | 15° | 3.25 | 22 | 90 | 0.89 | 2.01 | 1.85kg | 99.2% | Heavy |
-| 2 | 55.2mm | 20° | 3.50 | 23 | 94 | 0.82 | 1.98 | 1.52kg | 98.9% | ⭐Balanced |
-| 3 | 40.0mm | 28.1° | 3.75 | 21 | 86 | 0.78 | 2.05 | 1.38kg | 98.3% | Light, efficiency poor |
-
-Recommendation: Case 2 (overlap≈2.0 achieved, excellent PPTE, appropriate mass/efficiency trade-off)
-→ Execute apply_simplesizing_case(row_index=45)
+→ Output generation: get_2D_image, get_gear_report available
 ```
 
 ### When SimpleSizing Results Insufficient
@@ -553,7 +509,7 @@ Request: "Gear ratio 3, find module between 2~4"
   → get_simplesizing_results (display as table sorted by rank+metric)
   → Recommend to user (Display 1, row_index=45)
   → apply_simplesizing_case(row_index=45)
-  → Apply Lightweight Design Guide or Low-Noise Design Guide
+  → Apply Optimal Gear Design Guide (3 stages: Lightweight → Low-noise → Efficiency)
   → calc_geometry → calc_load_case → get_allresults_summary
 ```
 
@@ -589,13 +545,15 @@ Request: "Gear ratio 3, find module between 2~4"
 2. **SimpleSizing Parameters**: Only explores module/teeth, facewidth/pressure angle/helix angle are fixed
 3. **Performance Analysis**: Always primary sort by rank → Select based on requested metric among Rank 1
 4. **row_index**: Pass `index` field value (NOT Display number) to apply_simplesizing_case()
-5. **3-Level Result Evaluation**: Insufficient(NG) / Appropriate(OK) / **Excessive(Needs improvement)**
-   - **Lightweight**: Safety factor 1.2× required or more is excessive (overweight)
-   - **Safety Factor Focus**: Optimize ONLY Contact(S_H), Bending(S_F), **Micropitting(S_MP) for reference only** (acceptable even if insufficient)
-   - **Low-noise**: Overlap ratio beyond target value (1.0 or 2.0) ±0.05 is inappropriate
-6. **Low-Noise Design**:
-   - Process A (manual adjustment, trial-and-error) vs A2 (calculation-based, accurate ⭐) vs B (Case Study, optimal)
+5. **Optimal Gear Design 3-Stage Process**:
+   - **Stage 1 (Lightweight)**: Optimize safety factors to 1.0~1.3× required (Contact/Bending only, ignore Micropitting)
+   - **Stage 2 (Low-noise)**: Adjust overlap ratio to 1.0 or 2.0 (calculation-based method recommended ⭐)
+   - **Stage 3 (Efficiency)**: Verify efficiency decrease and judge trade-offs (< 2%: ignore, 2~5%: consider adjustment, > 5%: redesign)
+6. **Safety Factor Evaluation**:
+   - Contact(S_H), Bending(S_F) are optimization targets
+   - **Micropitting(S_MP) for reference only** (acceptable even if insufficient)
+   - 3-level result evaluation: Insufficient(NG) / Appropriate(OK, 1.0~1.3×) / Excessive(Needs improvement, > 1.3×)
+7. **Low-Noise Design Tools**:
+   - **Recommend calculation-based adjustment**: calculate_helixangle_for_ep_beta() → branch at 25° → calculate_facewidth_for_ep_beta()
    - Overlap ratio only visible in get_allresults_summary()
-   - **Recommend calculation-based adjustment**: Use calculate_facewidth_for_ep_beta() or calculate_helixangle_for_ep_beta()
-7. **Result Display**: Always display get_allresults_summary() and get_simplesizing_results() as tables (include row_index)
-8. **Iterative Improvement**: Re-run improvement workflow when insufficient/excessive (up to 5 iterations)
+8. **Result Display and Iteration**: Always display get_allresults_summary() and get_simplesizing_results() as tables, iterate up to 5 times when insufficient/excessive
