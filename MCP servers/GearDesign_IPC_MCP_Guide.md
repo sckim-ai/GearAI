@@ -164,6 +164,16 @@ initialize() → modify_gear_data(기본설정) → simple_sizing_gearpair()
 - **`get_3d_modeling(session_id)`**: 3D 모델 (STEP)
 - **`get_gear_report(session_id)`**: 설계 보고서 (PDF)
 
+### 저소음 설계 최적화 도구
+- **`calculate_facewidth_for_ep_beta(target_overlap_ratio, helix_angle_deg, normal_module, session_id)`**:
+  - 목표 겹침비율(εβ)을 달성하기 위한 치폭(b) 계산
+  - 계산식: b = (εβ × π × mn) / sin(β)
+  - 예시: εβ=1.3, β=25°, mn=2.5 → b ≈ 24.2mm
+- **`calculate_helixangle_for_ep_beta(target_overlap_ratio, face_width, normal_module, session_id)`**:
+  - 목표 겹침비율(εβ)을 달성하기 위한 헬릭스각(β) 계산
+  - 계산식: β = arcsin((εβ × π × mn) / b)
+  - 예시: εβ=1.3, b=25mm, mn=2.5 → β ≈ 23.5°
+
 ### SimpleSizing
 - **`simple_sizing_gearpair(user_message, session_id)`**: 다양한 조합 계산
 - **`get_simplesizing_results(session_id, return_all=False, top_n=100)`**: 결과 조회
@@ -318,11 +328,34 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 | 1.20~1.80 | 부적정 (개선 필요) | 부적정 (개선 필요) | 1.0 또는 2.0에 가깝게 조정 필요 |
 | 1.35 | 부적정 (개선 필요) | 부적정 (개선 필요) | 중간값: 1.0 또는 2.0 중 선택 후 조정 |
 
-**조정 방법**:
+**조정 방법** (3가지):
+
+**방법 1: 수동 조정** (시행착오)
 - **Overlap ratio 증가**: 치폭 증가 또는 헬리컬각 증가
 - **Overlap ratio 감소**: 치폭 감소 또는 헬리컬각 감소
 
-**LLM 응답 예시**:
+**방법 2: 계산 기반 치폭 조정** (정확, 권장 ⭐)
+```
+1. get_allresults_summary()에서 현재 overlap ratio, 헬릭스각, 모듈 확인
+2. calculate_facewidth_for_ep_beta(목표_overlap, 헬릭스각, 모듈, session_id) 호출
+3. 반환된 치폭을 modify_gear_data()로 적용
+4. calc_geometry() → calc_load_case() → get_allresults_summary() 재확인
+```
+
+**방법 3: 계산 기반 헬릭스각 조정** (치폭 고정 시)
+```
+1. get_allresults_summary()에서 현재 overlap ratio, 치폭, 모듈 확인
+2. calculate_helixangle_for_ep_beta(목표_overlap, 치폭, 모듈, session_id) 호출
+3. 반환된 헬릭스각을 modify_gear_data()로 적용
+4. calc_geometry() → calc_load_case() → get_allresults_summary() 재확인
+```
+
+**⚠️ 주의**:
+- 헬릭스각은 25° 미만 권장 (효율 및 축하중 고려)
+- 치폭이 너무 크면 질량 및 비용 증가
+- 계산된 값이 실제 적용 가능한지 제약조건 확인 필요
+
+**LLM 응답 예시 (방법 1: 수동 조정)**:
 ```
 Overlap ratio 평가 (목표: 2.0):
 - 실제: 1.35 (부적정, 목표 2.0에서 0.65 차이)
@@ -337,50 +370,132 @@ Overlap ratio 평가 (목표: 2.0):
 - 실제: 2.05 (적정 ✅, 목표값 ±0.05 이내)
 ```
 
-**[프로세스 A] SimpleSizing 1번 + 미세 조정** (일반적, 빠름):
+**LLM 응답 예시 (방법 2: 계산 기반 치폭 조정, 권장 ⭐)**:
+```
+Overlap ratio 평가 (목표: 2.0):
+- 실제: 1.35 (부적정, 목표 2.0에서 0.65 차이)
+- 현재: 치폭 30mm, 헬릭스각 20°, 법선모듈 2.5mm
+
+정확한 치폭 계산:
+→ calculate_facewidth_for_ep_beta(2.0, 20.0, 2.5, session_id)
+→ 결과: 필요 치폭 = 45.8mm
+
+적용:
+→ modify_gear_data("치폭 45.8mm로 변경")
+→ calc_geometry() → calc_load_case() → get_allresults_summary()
+→ 최종 overlap ratio = 2.00 ✅ (1회 조정으로 목표 달성)
+```
+
+**LLM 응답 예시 (방법 3: 계산 기반 헬릭스각 조정, 치폭 제약 시)**:
+```
+Overlap ratio 평가 (목표: 1.0, 치폭은 30mm 고정):
+- 실제: 0.75 (부적정, 목표 1.0에서 0.25 부족)
+- 현재: 치폭 30mm, 헬릭스각 15°, 법선모듈 2.5mm
+
+정확한 헬릭스각 계산:
+→ calculate_helixangle_for_ep_beta(1.0, 30.0, 2.5, session_id)
+→ 결과: 필요 헬릭스각 = 19.8°
+
+적용:
+→ modify_gear_data("헬릭스각 19.8도로 변경")
+→ calc_geometry() → calc_load_case() → get_allresults_summary()
+→ 최종 overlap ratio = 1.00 ✅ (1회 조정으로 목표 달성)
+
+⚠️ 헬릭스각이 19.8°로 증가하여 효율 약간 감소 예상 (99.2% → 98.9%)
+```
+
+**[프로세스 A] SimpleSizing 1번 + 수동 미세 조정** (빠름, 시행착오):
 ```
 1. SimpleSizing 실행 (Rank 1 중 PPTE 최소 케이스 선택)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
 3. get_allresults_summary()에서 overlap ratio 확인
 4. overlap ratio가 목표(1.0 or 2.0)와 차이 크면:
-   → modify_gear_data()로 치폭/헬리컬각 조정 → 재계산 → 최대 5번 반복
+   → modify_gear_data()로 치폭/헬리컬각 수동 조정 → 재계산 → 최대 5번 반복
+   (예: 치폭 30→40→50mm로 점진적 증가)
 ```
 
-**[프로세스 B] 치폭/헬리컬각 Case Study + 미세 조정** (최적, 시간 소요):
+**[프로세스 A2] SimpleSizing 1번 + 계산 기반 조정** (빠름, 정확, ⭐ 권장):
 ```
-1. 치폭/헬리컬각 조합별로 SimpleSizing 수행 (예: 30mm/15°, 40mm/20°, 50mm/25°)
-2. 각 Case의 최적 솔루션 비교 (PPTE, overlap ratio, 질량, 효율)
-3. 사용자 요구에 맞는 Case 선택 → apply_simplesizing_case() → calc_geometry → calc_load_case
-4. get_allresults_summary()에서 overlap ratio 확인
-5. overlap ratio가 목표(1.0 or 2.0)와 차이 크면:
-   → modify_gear_data()로 치폭/헬리컬각 조정 → 재계산 → 최대 5번 반복
+1. SimpleSizing 실행 (Rank 1 중 PPTE 최소 케이스 선택)
+2. apply_simplesizing_case() → calc_geometry → calc_load_case
+3. get_allresults_summary()에서 overlap ratio, 헬릭스각, 모듈, 치폭 확인
+4. overlap ratio가 목표(1.0 or 2.0)와 차이 크면:
+   → calculate_facewidth_for_ep_beta() 또는 calculate_helixangle_for_ep_beta() 호출
+   → 계산된 값을 modify_gear_data()로 적용
+   → calc_geometry → calc_load_case → get_allresults_summary() 재확인
+   (일반적으로 1~2회 반복으로 목표 달성)
 ```
 
-**LLM 응답 예시 (프로세스 A)**:
+**[프로세스 B] 치폭/헬리컬각 Case Study** (최적, 시간 소요):
+```
+1. 목표 overlap ratio에 맞는 치폭/헬리컬각 조합 계산:
+   - Case 1: 헬릭스각 15° 고정 → calculate_facewidth_for_ep_beta(목표, 15°, 예상모듈)
+   - Case 2: 헬릭스각 20° 고정 → calculate_facewidth_for_ep_beta(목표, 20°, 예상모듈)
+   - Case 3: 치폭 30mm 고정 → calculate_helixangle_for_ep_beta(목표, 30mm, 예상모듈)
+   (예상모듈: 탐색 범위의 중간값 또는 사용자 지정값)
+
+2. 각 Case별로 SimpleSizing 수행:
+   → modify_gear_data("치폭 X, 헬릭스각 Y")
+   → simple_sizing_gearpair() → get_simplesizing_results()
+   → Rank 1 중 PPTE 최소 케이스 선택 및 성능 기록
+
+3. 모든 Case 비교 (PPTE, overlap ratio, 질량, 효율, 안전률)
+
+4. 사용자 요구에 맞는 Case 선택:
+   → apply_simplesizing_case() → calc_geometry → calc_load_case
+   → get_allresults_summary()에서 최종 검증
+```
+
+**LLM 응답 예시 (프로세스 A: 수동 조정)**:
 ```
 SimpleSizing 결과 (Rank 1, PPTE 최소):
 - 모듈 3.75, z1=23, z2=94 적용
 - calc 후 overlap ratio = 1.35 확인
 
 초저소음 목표 (overlap ratio → 2.0):
-→ 치폭 30→50mm, 헬리컬각 15→22° 조정
+→ 치폭 30→50mm 조정
 → 재계산: overlap ratio = 2.3
-→ 치폭 50→40mm, 헬리컬각 22→20° 조정
-→ 재계산: overlap ratio = 1.96 ✅
-⚠️ 질량 1.2→1.5kg, 효율 99.1→98.8% 감소
+→ 치폭 50→45mm 조정
+→ 재계산: overlap ratio = 1.96 ✅ (3회 시행착오)
+⚠️ 질량 1.2→1.5kg, 효율 99.1→98.9% 감소
 ```
 
-**LLM 응답 예시 (프로세스 B)**:
+**LLM 응답 예시 (프로세스 A2: 계산 기반 조정, ⭐ 권장)**:
 ```
-치폭/헬리컬각 Case Study 결과:
+SimpleSizing 결과 (Rank 1, PPTE 최소):
+- 모듈 3.75, z1=23, z2=94 적용
+- calc 후: overlap ratio = 1.35, 헬릭스각 20°, 법선모듈 2.5mm, 치폭 30mm
 
-| Case | 치폭 | 헬리컬각 | PPTE | Overlap | 질량 | 효율 | 평가 |
-|------|------|----------|------|---------|------|------|------|
-| 1 | 30mm | 15° | 0.95 | 1.15 | 1.2kg | 99.1% | 경량우수, 저소음보통 |
-| 2 | 40mm | 20° | 0.82 | 1.85 | 1.45kg | 98.9% | ⭐균형 |
-| 3 | 50mm | 25° | 0.78 | 2.02 | 1.68kg | 98.6% | 초저소음, 질량불리 |
+초저소음 목표 (overlap ratio → 2.0):
+→ calculate_facewidth_for_ep_beta(2.0, 20.0, 2.5, session_id)
+→ 계산 결과: 필요 치폭 = 45.8mm
 
-추천: Case 2 (overlap≈2.0, PPTE우수, 질량/효율 타협 적절)
+적용 및 재계산:
+→ modify_gear_data("치폭 45.8mm로 변경")
+→ calc_geometry → calc_load_case
+→ 최종: overlap ratio = 2.00 ✅ (1회 조정으로 목표 달성!)
+⚠️ 질량 1.2→1.5kg, 효율 99.1→98.9% 감소
+```
+
+**LLM 응답 예시 (프로세스 B: 치폭/헬리컬각 Case Study)**:
+```
+목표 overlap ratio = 2.0, 예상 모듈 = 3.0mm (탐색 범위 중간값)
+
+치폭/헬리컬각 조합 계산:
+→ Case 1 (β=15° 고정): calculate_facewidth_for_ep_beta(2.0, 15, 3.0) = 72.7mm
+→ Case 2 (β=20° 고정): calculate_facewidth_for_ep_beta(2.0, 20, 3.0) = 55.2mm
+→ Case 3 (b=40mm 고정): calculate_helixangle_for_ep_beta(2.0, 40, 3.0) = 28.1°
+
+SimpleSizing 수행 결과:
+
+| Case | 치폭 | 헬리컬각 | 모듈 | z1 | z2 | PPTE | Overlap | 질량 | 효율 | 평가 |
+|------|------|----------|------|----|----|------|---------|------|------|------|
+| 1 | 72.7mm | 15° | 3.25 | 22 | 90 | 0.89 | 2.01 | 1.85kg | 99.2% | 중량 불리 |
+| 2 | 55.2mm | 20° | 3.50 | 23 | 94 | 0.82 | 1.98 | 1.52kg | 98.9% | ⭐균형 |
+| 3 | 40.0mm | 28.1° | 3.75 | 21 | 86 | 0.78 | 2.05 | 1.38kg | 98.3% | 경량, 효율 불리 |
+
+추천: Case 2 (overlap≈2.0 달성, PPTE 우수, 질량/효율 타협 적절)
+→ apply_simplesizing_case(row_index=45) 실행
 ```
 
 ### SimpleSizing 결과 부족 시 대응
@@ -424,6 +539,8 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
 ```
 
 ### 3. 저소음 설계 (SimpleSizing + Overlap Ratio 최적화)
+
+**방법 1: 수동 조정 (시행착오)**
 ```
 요청: "저소음 기어, 기어비 3, 초저소음으로 설계해줘"
 
@@ -436,12 +553,33 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
   → get_allresults_summary (overlap ratio = 1.35 확인)
 
 [2단계: Overlap Ratio 최적화] (최대 5회까지 반복 가능)
-→ modify_gear_data("치폭 45mm, 헬리컬각 20도로 변경")
+→ modify_gear_data("치폭 45mm로 변경")
   → calc_geometry → calc_load_case
   → get_allresults_summary (overlap ratio = 1.7 확인)
-  → modify_gear_data("치폭 55mm, 헬리컬각 20도로 변경")
+  → modify_gear_data("치폭 50mm로 변경")
   → calc_geometry → calc_load_case
   → get_allresults_summary (overlap ratio = 1.95 확인) ✅
+```
+
+**방법 2: 계산 기반 조정 (정확, ⭐ 권장)**
+```
+요청: "저소음 기어, 기어비 3, overlap ratio 2.0으로 설계해줘"
+
+[1단계: SimpleSizing]
+→ initialize → modify_gear_data → simple_sizing_gearpair
+  → get_simplesizing_results (rank ↑ → PPTE ↑ 정렬)
+  → Rank 1 중 PPTE 최소 선택 (Display 1번, row_index=45)
+  → apply_simplesizing_case(row_index=45)
+  → calc_geometry → calc_load_case
+  → get_allresults_summary
+     (overlap ratio = 1.35, 헬릭스각 20°, 법선모듈 2.5mm, 치폭 30mm 확인)
+
+[2단계: Overlap Ratio 정확 계산 및 적용]
+→ calculate_facewidth_for_ep_beta(2.0, 20.0, 2.5, session_id)
+  → 계산 결과: 필요 치폭 = 45.8mm
+→ modify_gear_data("치폭 45.8mm로 변경")
+  → calc_geometry → calc_load_case
+  → get_allresults_summary (overlap ratio = 2.00 확인) ✅ (1회 조정으로 목표 달성!)
 ```
 
 ### 4. 복합 성능 기준 (SimpleSizing 워크플로우)
@@ -488,6 +626,9 @@ SimpleSizing 결과가 0건입니다. 현재 조건(모듈 2~2.5, z_min=20)이 �
 5. **결과 평가 3단계**: 미달(NG) / 적정(OK) / **과도(개선 필요)**
    - **경량**: 안전률이 요구값의 1.2배 이상이면 과도 (과중량)
    - **저소음**: Overlap ratio가 목표값(1.0 또는 2.0) ±0.05 벗어나면 부적정
-6. **저소음 설계**: 프로세스 A (빠름) vs B (최적), overlap ratio는 get_allresults_summary()에서만 확인
+6. **저소음 설계**:
+   - 프로세스 A (수동 조정, 시행착오) vs A2 (계산 기반, 정확 ⭐) vs B (Case Study, 최적)
+   - Overlap ratio는 get_allresults_summary()에서만 확인
+   - **계산 기반 조정 권장**: calculate_facewidth_for_ep_beta() 또는 calculate_helixangle_for_ep_beta() 사용
 7. **결과 표시**: get_allresults_summary()와 get_simplesizing_results()는 항상 표로 표시 (row_index 포함)
 8. **반복 개선**: 미달/과도 시 개선 워크플로우 재수행 (최대 5회 반복 가능)
