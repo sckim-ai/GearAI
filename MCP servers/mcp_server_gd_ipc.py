@@ -1954,7 +1954,7 @@ def calculate_facewidth_for_ep_beta(
     session_id: str
 ) -> dict:
     """
-    목표 겹침비율(εβ)을 달성하기 위한 치폭(Face Width)을 계산합니다.
+    목표 겹침비율, overlap ratio, (εβ)을 달성하기 위한 치폭(Face Width)을 계산합니다.
 
     헬리컬 기어에서 겹침비율(εβ)은 소음과 진동 성능에 중요한 영향을 미칩니다.
     이 함수는 원하는 겹침비율을 달성하기 위해 필요한 치폭을 계산합니다.
@@ -1964,8 +1964,8 @@ def calculate_facewidth_for_ep_beta(
         따라서, b = (εβ × π × mn) / sin(β)
 
     Args:
-        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 1.0 이상 권장 (저소음: 1.2~1.5)
-        helix_angle_deg (float): 헬릭스각(β) [도]. 0이 아닌 값이어야 함
+        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 정수비인 1.0 또는 2.0 권장 (저소음: 0.95~1.0 또는 1.95~2.05)
+        helix_angle_deg (float): 헬릭스각(β) [deg]. 0이 아닌 값이어야 함
         normal_module (float): 법선 모듈(mn) [mm]. 0보다 큰 값
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
 
@@ -2041,7 +2041,7 @@ def calculate_helixangle_for_ep_beta(
     session_id: str
 ) -> dict:
     """
-    목표 겹침비율(εβ)을 달성하기 위한 헬릭스각(β)을 계산합니다.
+    목표 겹침비율, overlap ratio, (εβ)을 달성하기 위한 헬릭스각(β)을 계산합니다.
 
     헬리컬 기어에서 겹침비율(εβ)은 소음과 진동 성능에 중요한 영향을 미칩니다.
     이 함수는 주어진 치폭에서 원하는 겹침비율을 달성하기 위해 필요한 헬릭스각을 계산합니다.
@@ -2051,7 +2051,7 @@ def calculate_helixangle_for_ep_beta(
         따라서, β = arcsin((εβ × π × mn) / b)
 
     Args:
-        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 1.0 이상 권장 (저소음: 1.2~1.5)
+        target_overlap_ratio (float): 목표 겹침비율(εβ). 일반적으로 정수비인 1.0 또는 2.0 권장 (저소음: 0.95~1.0 또는 1.95~2.05)
         face_width (float): 치폭(b) [mm]. 0보다 큰 값
         normal_module (float): 법선 모듈(mn) [mm]. 0보다 큰 값
         session_id (str): 세션 ID (initialize()으로 생성된 ID 필수)
@@ -2060,7 +2060,7 @@ def calculate_helixangle_for_ep_beta(
         dict: 계산 결과
             - 성공 시: {
                 "success": True,
-                "helix_angle_deg": 계산된_헬릭스각(도),
+                "helix_angle_deg": 계산된_헬릭스각(deg),
                 "inputs": {입력값_정보},
                 "session_id": "세션ID"
               }

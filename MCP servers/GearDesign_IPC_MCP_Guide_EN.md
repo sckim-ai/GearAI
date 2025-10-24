@@ -326,14 +326,14 @@ SimpleSizing Results (sorted by rank + PPTE):
 **Safety Factor Balance Adjustment**:
 1. **Contact appropriate, Bending excessive** → Decrease module
 2. **Bending appropriate, Contact excessive** → Increase module
-3. **Both excessive** → Decrease module/facewidth
+3. **Both excessive** → Reduced center distance and tooth width through tooth number adjustment
 4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
 
 ---
 
-#### Stage 2: Low-Noise Design (Overlap Ratio Optimization)
+#### Stage 2: Low-Noise Design (PPTE Optimization)
 
-**Objective**: Adjust overlap ratio close to **1.0** or **2.0** (maintain lightweight/efficiency)
+**Objective**: PPTE(peak-to-peak transmission error) minimizate by adjust overlap ratio close to **1.0** or **2.0** (maintain lightweight/efficiency)
 
 **Core Principles**:
 - **Lightweight + low-noise**: Prioritize overlap ratio 1.0

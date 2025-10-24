@@ -325,14 +325,14 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 **안전률 균형 조정**:
 1. **Contact 적정, Bending 과도** → 모듈 감소
 2. **Bending 적정, Contact 과도** → 모듈 증가
-3. **둘 다 과도** → 모듈/치폭 감소
+3. **둘 다 과도** → 잇수 조정을 통한 중심거리 감소, 치폭 감소
 4. **Micropitting 미달** → 무시 (Contact/Bending에만 집중)
 
 ---
 
 #### 2단계: 저소음 설계 (Overlap Ratio 최적화)
 
-**목표**: Overlap ratio를 **1.0** 또는 **2.0**에 가깝게 조정 (경량/효율 유지)
+**목표**: Overlap ratio를 **1.0** 또는 **2.0**에 가깝게 조정하여 전달오차(PPTE) 최소화 (경량/효율 유지)
 
 **핵심 원칙**:
 - **경량+저소음**: Overlap ratio 1.0 우선 목표
