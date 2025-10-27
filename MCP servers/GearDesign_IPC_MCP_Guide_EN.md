@@ -294,26 +294,32 @@ SimpleSizing Results (sorted by rank + PPTE):
 
 #### Stage 1: Lightweight Design (Safety Factor Optimization)
 
-**Objective**: Optimize Contact(S_H), Bending(S_F) safety factors to **1.0~1.3× required values**
+**Objective**: Optimize Contact(S_H), Bending(S_F) safety factors to **1.0~1.3× required values** through the following 2-step design process
 
 **Core Principles**:
 - **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F)**, Micropitting(S_MP) is for reference only
 - Micropitting below required safety factor is acceptable (often impossible to improve)
 - If safety factors are **1.2× required or more**, excessive (needs improvement)
 
-**SimpleSizing-based Process**:
+**1. SimpleSizing-based Process Execution**:
 ```
 1. Run SimpleSizing (select minimum PPTE or minimum mass case among Rank 1)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
 3. Check S_H(Contact), S_F(Bending) in get_allresults_summary() (S_MP for reference only)
-4. Evaluate and adjust safety factors (repeat up to 5 times):
-   - If S_H, S_F are 1.2× required or more → Decrease module/facewidth
-   - If S_H, S_F are below required → Increase module/facewidth
-   - If imbalanced → Adjust module + teeth (maintain gear ratio/center distance)
+4. Evaluate safety factors and re-run SimpleSizing if needed (adjust min/max module, facewidth following principles below):
+   - If S_H, S_F are 1.2× required or more → Decrease min/max module. May adjust facewidth if needed → Re-run SimpleSizing
+   - If S_H, S_F are below required → Increase min/max module. May adjust facewidth if needed → Re-run SimpleSizing
+   - If both S_H, S_F are within 1.0~1.2× required safety factors → Satisfied
 ```
 
-**Safety Factor Evaluation Criteria** (Example with required S_H=1.2, S_F=1.5):
+**2. Manual Safety Factor Balance Adjustment**:
+1. **Contact appropriate, Bending excessive** → Decrease module
+2. **Bending appropriate, Contact excessive** → Increase module
+3. **Both excessive** → Reduce center distance through teeth adjustment, decrease facewidth
+4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
 
+
+**Safety Factor Evaluation Criteria Example** (Required safety factors S_H=1.2, S_F=1.5 example):
 | Actual Safety Factor | Evaluation | Action |
 |---------------------|------------|--------|
 | S_H=1.1, S_F=1.1 | Insufficient | Increase module or facewidth |
@@ -322,12 +328,6 @@ SimpleSizing Results (sorted by rank + PPTE):
 | S_H=1.2, S_F=3.5 | Imbalanced (Needs improvement) | Bending excessive → Decrease module |
 | S_H=2.5, S_F=1.6 | Imbalanced (Needs improvement) | Contact excessive → Increase module |
 | S_H=1.25, S_F=1.60, S_MP=0.8 | Appropriate ✅ | Micropitting insufficient but OK |
-
-**Safety Factor Balance Adjustment**:
-1. **Contact appropriate, Bending excessive** → Decrease module
-2. **Bending appropriate, Contact excessive** → Increase module
-3. **Both excessive** → Reduced center distance and tooth width through tooth number adjustment
-4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
 
 ---
 

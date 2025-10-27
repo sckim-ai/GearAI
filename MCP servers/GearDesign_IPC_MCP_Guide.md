@@ -293,26 +293,32 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 
 #### 1단계: 경량 설계 (안전율 최적화)
 
-**목표**: Contact(S_H), Bending(S_F) 안전율을 요구값의 **1.0~1.3배** 범위로 최적화
+**목표**: Contact(S_H), Bending(S_F) 안전율을 요구값의 **1.0~1.3배** 범위로 최적화하기 위해 아래의 2단계 설계 수행
 
 **핵심 원칙**:
 - **⚠️ 중요**: **Contact(S_H)와 Bending(S_F)에만 집중**, Micropitting(S_MP)은 참고만
 - Micropitting은 요구 안전율 미달해도 허용 (개선 불가능한 경우 많음)
 - 안전율이 요구값의 **1.2배 이상**이면 과도 (개선 필요)
 
-**SimpleSizing 기반 프로세스**:
+**1. SimpleSizing 기반 프로세스 수행**:
 ```
 1. SimpleSizing 실행 (Rank 1 중 PPTE 최소 또는 중량 최소 케이스 선택)
 2. apply_simplesizing_case() → calc_geometry → calc_load_case
 3. get_allresults_summary()에서 S_H(Contact), S_F(Bending) 확인 (S_MP는 참고만)
-4. 안전율 평가 및 조정 (최대 5회 반복):
-   - S_H, S_F가 요구값의 1.2배 이상 → 모듈/치폭 감소
-   - S_H, S_F가 요구값 미만 → 모듈/치폭 증가
-   - 불균형 시 → 모듈 조정 + 잇수 조정 (기어비/중심거리 유지)
+4. 안전율 평가 후 필요 시 SimpleSizing 재실행 (아래의 원칙에 따라 최소/최대 모듈, 치폭 조정)
+   - S_H, S_F가 요구값의 1.2배 이상 → 최소/최대 모듈 감소. 때에 따라 치폭 조정 가능 → SimpleSizing 재실행
+   - S_H, S_F가 요구값 대비 미달 → 최소/최대 모듈 증가. 때에 따라 치폭 조정 가능 → SimpleSizing 재실행
+   - S_H, S_F가 모두 요구 안전율 대비 1.0~1.2배 사이 → 만족
 ```
 
-**안전률 평가 기준** (요구 안전율 S_H=1.2, S_F=1.5 예시):
+**2. 수동 안전률 균형 조정**:
+1. **Contact 적정, Bending 과도** → 모듈 감소
+2. **Bending 적정, Contact 과도** → 모듈 증가
+3. **둘 다 과도** → 잇수 조정을 통한 중심거리 감소, 치폭 감소
+4. **Micropitting 미달** → 무시 (Contact/Bending에만 집중)
 
+
+**안전률 평가 기준 예시** (요구 안전율 S_H=1.2, S_F=1.5 예시):
 | 실제 안전률 | 평가 | 조치 |
 |-----------|------|------|
 | S_H=1.1, S_F=1.1 | 미달 | 모듈 증가 또는 치폭 증가 |
@@ -321,12 +327,6 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 | S_H=1.2, S_F=3.5 | 불균형 (개선 필요) | Bending 과도 → 모듈 감소 |
 | S_H=2.5, S_F=1.6 | 불균형 (개선 필요) | Contact 과도 → 모듈 증가 |
 | S_H=1.25, S_F=1.60, S_MP=0.8 | 적정 ✅ | Micropitting 미달이지만 OK |
-
-**안전률 균형 조정**:
-1. **Contact 적정, Bending 과도** → 모듈 감소
-2. **Bending 적정, Contact 과도** → 모듈 증가
-3. **둘 다 과도** → 잇수 조정을 통한 중심거리 감소, 치폭 감소
-4. **Micropitting 미달** → 무시 (Contact/Bending에만 집중)
 
 ---
 
