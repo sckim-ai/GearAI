@@ -277,7 +277,7 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 **전체 프로세스 플로우**:
 ```
 [1단계] 경량 설계 (안전율 최적화)
-  → Contact/Bending 안전율을 요구값의 1.0~1.3배로 조정
+  → Contact/Bending 안전율을 요구값의 1.0~1.3배로 조정. PPTE는 이 단계에서 고려하지 않음 (2단계에서 Overlap으로 조정함)
   → Micropitting은 참고만 (미달 허용)
 
 [2단계] 저소음 설계 (Overlap Ratio 최적화)
@@ -296,9 +296,10 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 **목표**: Contact(S_H), Bending(S_F) 안전율을 요구값의 **1.0~1.3배** 범위로 최적화하기 위해 아래의 2단계 설계 수행
 
 **핵심 원칙**:
-- **⚠️ 중요**: **Contact(S_H)와 Bending(S_F)에만 집중**, Micropitting(S_MP)은 참고만
+- **⚠️ 중요**: **Contact(S_H)와 Bending(S_F)에만 집중**
 - Micropitting은 요구 안전율 미달해도 허용 (개선 불가능한 경우 많음)
 - 안전율이 요구값의 **1.2배 이상**이면 과도 (개선 필요)
+- SimpleSizing 후 Rank 1 중 S_H와 S_F, 무게/효율만 고려하여 최적 대상을 선정할 것. (PPTE는 고려대상 아님)
 
 **1. SimpleSizing 기반 프로세스 수행**:
 ```
@@ -312,7 +313,7 @@ SimpleSizing 결과 (rank + PPTE 기준 정렬):
 ```
 
 **2. 수동 안전률 균형 조정**:
-1. **Contact 적정, Bending 과도** → 모듈 감소
+1. **Contact 적정, Bending 과도** → 모듈 감소 (참고. Bending 안전율을 0.25만큼 줄이려면 모듈도 0.25 줄여야 함)
 2. **Bending 적정, Contact 과도** → 모듈 증가
 3. **둘 다 과도** → 잇수 조정을 통한 중심거리 감소, 치폭 감소
 4. **Micropitting 미달** → 무시 (Contact/Bending에만 집중)

@@ -278,7 +278,7 @@ SimpleSizing Results (sorted by rank + PPTE):
 **Overall Process Flow**:
 ```
 [Stage 1] Lightweight Design (Safety Factor Optimization)
-  → Adjust Contact/Bending safety factors to 1.0~1.3× required values
+  → Adjust Contact/Bending safety factors to 1.0~1.3× required values. PPTE is not considered at this stage (adjusted via Overlap in Stage 2)
   → Micropitting is for reference only (insufficient allowed)
 
 [Stage 2] Low-Noise Design (Overlap Ratio Optimization)
@@ -297,9 +297,10 @@ SimpleSizing Results (sorted by rank + PPTE):
 **Objective**: Optimize Contact(S_H), Bending(S_F) safety factors to **1.0~1.3× required values** through the following 2-step design process
 
 **Core Principles**:
-- **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F)**, Micropitting(S_MP) is for reference only
+- **⚠️ Important**: **Focus ONLY on Contact(S_H) and Bending(S_F)**
 - Micropitting below required safety factor is acceptable (often impossible to improve)
 - If safety factors are **1.2× required or more**, excessive (needs improvement)
+- After SimpleSizing, select the optimal case from Rank 1 considering only S_H, S_F, weight/efficiency. (PPTE is not a consideration)
 
 **1. SimpleSizing-based Process Execution**:
 ```
@@ -313,7 +314,7 @@ SimpleSizing Results (sorted by rank + PPTE):
 ```
 
 **2. Manual Safety Factor Balance Adjustment**:
-1. **Contact appropriate, Bending excessive** → Decrease module
+1. **Contact appropriate, Bending excessive** → Decrease module (Note: To reduce Bending safety factor by 0.25, module must also be reduced by 0.25)
 2. **Bending appropriate, Contact excessive** → Increase module
 3. **Both excessive** → Reduce center distance through teeth adjustment, decrease facewidth
 4. **Micropitting insufficient** → Ignore (Focus on Contact/Bending only)
