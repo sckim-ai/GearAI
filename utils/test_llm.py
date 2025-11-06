@@ -28,14 +28,12 @@ def test_detect_provider():
     print("\n=== 프로바이더 자동 감지 테스트 ===")
 
     test_cases = [
-        ("gpt-4o", "openai"),
-        ("gpt-4o-mini", "openai"),
-        ("gpt-3.5-turbo", "openai"),
-        ("o1-preview", "openai"),
-        ("claude-3-5-sonnet-20241022", "anthropic"),
-        ("claude-3-opus-20240229", "anthropic"),
-        ("gemini-1.5-pro", "google"),
-        ("gemini-1.5-flash", "google"),
+        ("gpt-5", "openai"),
+        ("gpt-5-mini", "openai"),
+        ("gpt-5-nano", "openai"),
+        ("claude-sonnet-4-5-20250929", "anthropic"),
+        ("claude-haiku-4-5-20251001", "anthropic"),
+        ("gemini-2.5-flash", "google"),
     ]
 
     for model, expected_provider in test_cases:
@@ -86,7 +84,7 @@ def test_llm_call_anthropic():
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Say 'Hello from Claude!' and nothing else."}
             ],
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             temperature=0.1
         )
         print(f"✅ 응답: {response}")
@@ -112,7 +110,7 @@ def test_llm_call_google():
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": "Say 'Hello from Gemini!' and nothing else."}
             ],
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             temperature=0.1
         )
         print(f"✅ 응답: {response}")
@@ -186,7 +184,7 @@ def test_llm_call_stream_google():
             prompt=[
                 {"role": "user", "content": "Say hello."}
             ],
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             temperature=0.7
         ):
             print(chunk, end="", flush=True)
@@ -264,7 +262,7 @@ async def test_llm_call_async_google():
             prompt=[
                 {"role": "user", "content": "Say 'Async Gemini works!' and nothing else."}
             ],
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             temperature=0.1,
             stream=False
         ):

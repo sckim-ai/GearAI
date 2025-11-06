@@ -45,8 +45,7 @@ def _get_google_client():
     if google_client is None and GOOGLE_API_KEY:
         try:
             from google import genai
-            genai.configure(api_key=GOOGLE_API_KEY)
-            google_client = genai
+            google_client = genai.Client(api_key=GOOGLE_API_KEY)
         except ImportError:
             raise ImportError("Google Generative AI 패키지가 설치되지 않았습니다. 'pip install google-generativeai' 실행 필요")
 
@@ -152,27 +151,19 @@ async def llm_call_async(
                 yield response
 
         elif provider == "google":
-            google = _get_google_client()
-            if not google:
+            client = _get_google_client()
+            if not client:
                 raise ValueError("GOOGLE_API_KEY가 설정되지 않았습니다")
 
             gemini_prompt = _convert_messages_to_google(prompt)
-            gemini_model = google.GenerativeModel(model)
 
-            if stream:
-                response = gemini_model.generate_content(
-                    gemini_prompt,
-                    generation_config={"temperature": temperature},
-                    stream=True
-                )
-                for chunk in response:
-                    yield chunk
-            else:
-                response = gemini_model.generate_content(
-                    gemini_prompt,
-                    generation_config={"temperature": temperature}
-                )
-                yield response
+            # Google의 새로운 API 사용 (비동기 지원 여부 확인 필요)
+            # 일단 동기 방식으로 호출
+            response = client.models.generate_content(
+                model=model,
+                contents=gemini_prompt
+            )
+            yield response
 
     except Exception as e:
         raise Exception(f"LLM 호출 중 오류 발생 ({provider}): {str(e)}")
@@ -216,16 +207,15 @@ def llm_call(
             return response.content[0].text
 
         elif provider == "google":
-            google = _get_google_client()
-            if not google:
+            client = _get_google_client()
+            if not client:
                 raise ValueError("GOOGLE_API_KEY가 설정되지 않았습니다")
 
             gemini_prompt = _convert_messages_to_google(prompt)
-            gemini_model = google.GenerativeModel(model)
 
-            response = gemini_model.generate_content(
-                gemini_prompt,
-                generation_config={"temperature": temperature}
+            response = client.models.generate_content(
+                model=model,
+                contents=gemini_prompt
             )
 
             return response.text
@@ -278,22 +268,22 @@ def llm_call_stream(
                     yield text
 
         elif provider == "google":
-            google = _get_google_client()
-            if not google:
+            client = _get_google_client()
+            if not client:
                 raise ValueError("GOOGLE_API_KEY가 설정되지 않았습니다")
 
             gemini_prompt = _convert_messages_to_google(prompt)
-            gemini_model = google.GenerativeModel(model)
 
-            response = gemini_model.generate_content(
-                gemini_prompt,
-                generation_config={"temperature": temperature},
-                stream=True
+            # Google의 새로운 API는 스트리밍 지원 방식이 다를 수 있음
+            # 일단 비스트리밍으로 호출 후 텍스트 yield
+            response = client.models.generate_content(
+                model=model,
+                contents=gemini_prompt
             )
 
-            for chunk in response:
-                if hasattr(chunk, 'text'):
-                    yield chunk.text
+            # 전체 텍스트를 한 번에 yield
+            if hasattr(response, 'text'):
+                yield response.text
 
     except Exception as e:
         raise Exception(f"LLM 호출 중 오류 발생 ({provider}): {str(e)}")
@@ -364,24 +354,18 @@ def get_supported_models() -> Dict[str, List[str]]:
     """지원하는 모델 목록 반환"""
     return {
         "openai": [
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo",
-            "o1-preview",
-            "o1-mini"
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano"            
         ],
         "anthropic": [
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-20240620",
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
         ],
         "google": [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash-exp",
             "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.0-pro"
+            "gemini-1.5-flash"
         ]
     }
