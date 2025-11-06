@@ -189,22 +189,47 @@ session_id_gear1 = result['session_id']
 print(f"GearSet_1st 세션 생성: {session_id_gear1[:8]}")
 ```
 
-#### 3.2.2: Simple Sizing 실행
+#### 3.2.2: 작동조건 설정 (필수!)
+
+SimpleSizing 실행 **전에** 작동조건을 먼저 설정해야 합니다.
 
 ```python
-# 사용자 요청 메시지 작성
-user_request = f"""
+# 작동조건 설정 메시지 작성
+operation_condition = f"""
 기어비: {gear_ratio_1st}
 입력 토크: {input_torque_1st} Nm
 입력 속도: {input_speed_1st} rpm
 요구 수명: {life_hours} hr
 작동 온도: {operating_temp} °C
-설계 우선순위: 경량화 및 저소음
 """
+
+# modify_gear_data로 작동조건 반영
+result = modify_gear_data(
+    user_message=operation_condition,
+    session_id=session_id_gear1
+)
+
+if result.get('success'):
+    print("✅ 작동조건 설정 완료")
+else:
+    print(f"❌ 오류: {result.get('error')}")
+```
+
+**중요**:
+- `modify_gear_data`는 기어 데이터의 작동조건(LoadConditions) 항목을 설정합니다
+- 이 단계를 건너뛰면 SimpleSizing이 잘못된 조건으로 수행됩니다
+
+#### 3.2.3: Simple Sizing 실행
+
+작동조건이 설정된 후 SimpleSizing을 실행합니다.
+
+```python
+# SimpleSizing 설계 우선순위 메시지
+sizing_request = "설계 우선순위: 경량화 및 저소음"
 
 # Simple Sizing 실행
 result = simple_sizing_gearpair(
-    user_message=user_request,
+    user_message=sizing_request,
     session_id=session_id_gear1
 )
 
@@ -214,9 +239,11 @@ else:
     print(f"❌ 오류: {result['error']}")
 ```
 
-**중요**: `simple_sizing_gearpair`는 LLM을 활용하여 사용자 요청을 파싱하고 SimpleSizing 입력 파라미터를 자동 설정합니다.
+**중요**:
+- `simple_sizing_gearpair`는 설계 우선순위(경량화, 저소음 등)를 파싱하여 SimpleSizing 범위를 조정합니다
+- 작동조건은 이미 3.2.2에서 설정되었으므로 여기서는 설계 전략만 전달합니다
 
-#### 3.2.3: SimpleSizing 결과 조회
+#### 3.2.4: SimpleSizing 결과 조회
 
 ```python
 # 상위 20개 케이스 조회 (Rank 기준 정렬)
@@ -252,7 +279,7 @@ if results['success']:
 - `Rank`가 낮을수록 우수한 설계 (1이 최고)
 - Rank는 안전계수, PPTE, 무게를 종합 평가한 점수
 
-#### 3.2.4: 케이스 선택 및 적용
+#### 3.2.5: 케이스 선택 및 적용
 
 ```python
 # 사용자에게 선택 옵션 제시 또는 자동 선택
@@ -278,7 +305,7 @@ else:
     print(f"❌ 오류: {apply_result['error']}")
 ```
 
-#### 3.2.5: 상세 검증 계산 (선택사항)
+#### 3.2.6: 상세 검증 계산 (선택사항)
 
 ```python
 # 적용된 케이스로 상세 계산 수행
@@ -295,7 +322,7 @@ if calc_result['success']:
         print(f"⚠️ 경고 메시지: {messages['warnings']}")
 ```
 
-#### 3.2.6: 이미지 저장 및 세션 정리
+#### 3.2.7: 이미지 저장 및 세션 정리
 
 ```python
 # 2D/3D 이미지 저장
@@ -315,18 +342,21 @@ GearSet_2nd도 동일한 프로세스를 반복합니다:
 result = initialize()
 session_id_gear2 = result['session_id']
 
-# 2단 작동조건
-user_request_2nd = f"""
+# 작동조건 설정 (필수!)
+operation_condition_2nd = f"""
 기어비: {gear_ratio_2nd}
 입력 토크: {input_torque_2nd} Nm
 입력 속도: {input_speed_2nd} rpm
 요구 수명: {life_hours} hr
 작동 온도: {operating_temp} °C
-설계 우선순위: 경량화 및 저소음
 """
 
-# Simple Sizing 실행
-result = simple_sizing_gearpair(user_request_2nd, session_id_gear2)
+result = modify_gear_data(operation_condition_2nd, session_id_gear2)
+print("✅ GearSet_2nd 작동조건 설정 완료")
+
+# SimpleSizing 실행
+sizing_request_2nd = "설계 우선순위: 경량화 및 저소음"
+result = simple_sizing_gearpair(sizing_request_2nd, session_id_gear2)
 
 # 결과 조회
 results = get_simplesizing_results(session_id_gear2, False, 20)
@@ -853,17 +883,22 @@ print("\n[Phase 3-1] GearSet_1st Simple Sizing 시작...")
 result = initialize()  # mcp_server_gd_ipc
 session_id_gear1 = result['session_id']
 
-user_request_1st = f"""
+# Step 1: 작동 조건 반영 (modify_gear_data)
+operation_condition_1st = f"""
 기어비: {gear_ratio_1st}
 입력 토크: {input_torque_1st} Nm
 입력 속도: {input_speed_1st} rpm
 요구 수명: {life_hours} hr
 작동 온도: {operating_temp} °C
-설계 우선순위: 경량화 및 저소음
 """
 
-# SimpleSizing 실행
-result = simple_sizing_gearpair(user_request_1st, session_id_gear1)
+result = modify_gear_data(operation_condition_1st, session_id_gear1)
+print(f"작동 조건 반영 완료: {result['message']}")
+
+# Step 2: SimpleSizing 실행 (설계 우선순위만 전달)
+sizing_request_1st = "설계 우선순위: 경량화 및 저소음"
+
+result = simple_sizing_gearpair(sizing_request_1st, session_id_gear1)
 print(f"SimpleSizing 완료: {result['result_rows']}개 케이스")
 
 # 결과 조회
@@ -893,16 +928,22 @@ print("\n[Phase 3-2] GearSet_2nd Simple Sizing 시작...")
 result = initialize()
 session_id_gear2 = result['session_id']
 
-user_request_2nd = f"""
+# Step 1: 작동 조건 반영 (modify_gear_data)
+operation_condition_2nd = f"""
 기어비: {gear_ratio_2nd}
 입력 토크: {input_torque_2nd} Nm
 입력 속도: {input_speed_2nd} rpm
 요구 수명: {life_hours} hr
 작동 온도: {operating_temp} °C
-설계 우선순위: 경량화 및 저소음
 """
 
-result = simple_sizing_gearpair(user_request_2nd, session_id_gear2)
+result = modify_gear_data(operation_condition_2nd, session_id_gear2)
+print(f"작동 조건 반영 완료: {result['message']}")
+
+# Step 2: SimpleSizing 실행 (설계 우선순위만 전달)
+sizing_request_2nd = "설계 우선순위: 경량화 및 저소음"
+
+result = simple_sizing_gearpair(sizing_request_2nd, session_id_gear2)
 results = get_simplesizing_results(session_id_gear2, False, 20)
 best_case_2nd = results['results'][0]
 

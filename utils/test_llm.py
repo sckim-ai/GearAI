@@ -157,7 +157,7 @@ def test_llm_call_stream_anthropic():
             prompt=[
                 {"role": "user", "content": "Count from 1 to 3."}
             ],
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             temperature=0.7
         ):
             print(chunk, end="", flush=True)
@@ -233,7 +233,7 @@ async def test_llm_call_async_anthropic():
             prompt=[
                 {"role": "user", "content": "Say 'Async Claude works!' and nothing else."}
             ],
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             temperature=0.1,
             stream=False
         ):

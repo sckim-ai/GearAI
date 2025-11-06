@@ -673,7 +673,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
     # LLM 프롬프트 구성
     system_prompt = """
 # 역할
-당신은 기어 설계 JSON 데이터 수정 전문가입니다.
+당신은 기어 설계 JSON 데이터 수정 전문가입니다. 
 
 # 목적
 사용자의 자연어 요청을 분석하여 기어 설계 JSON 데이터의 필요한 값만 정확히 변경합니다.
@@ -739,6 +739,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
     - 토크 단위: "Nm" (예: "50Nm", "200Nm" 등)
 
 ## 5. 출력 형식
+- JSON만 출력하고 다른 텍스트는 절대 포함하지 마세요
 - **표준 JSON 형식** (중첩 구조 포함)
 - **변경된 항목만** 포함
 - 상위 경로를 포함한 Key 이름은 원본과 정확히 일치
@@ -764,7 +765,7 @@ def modify_gear_data(user_message: str, session_id: str) -> dict:
 
     try:
         # LLM 호출하여 변경데이터 추출
-        response = llm_call(prompt=prompt, model="gpt-5-mini")
+        response = llm_call(prompt=prompt, model="claude-haiku-4-5-20251001")
         modified_data = remove_code_block_llm(response)
         modified_data = json.loads(modified_data)
 
@@ -1614,8 +1615,11 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
         system_prompt = """
 # 역할
 당신은 기어쌍의 simple sizing을 위한 설계 JSON 데이터 수정 전문가입니다.
+
 # 목적
 사용자의 자연어 요청을 분석하여 기어 설계 JSON 데이터의 필요한 값만 정확히 변경합니다.
+응답 시 JSON만 출력하고 다른 텍스트는 절대 포함하지 마세요.
+
 # 입력 데이터 구조 이해
 1. **메타데이터**: Key가 '$'로 시작 (예: "$Normal Module", "$z1")
    - 메타데이터는 해당 값의 의미/단위를 설명합니다
@@ -1628,6 +1632,7 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
    - **치폭 (Facewidth)**: 단일 고정값
    - **압력각 (α_n)**: 단일 고정값
    - **헬리컬각 (β)**: 단일 고정값
+
 # 수정 규칙
 ## 1. 변경 대상 식별
 - 사용자 요청을 분석하여 변경해야 할 정확한 Key를 찾습니다
@@ -1637,6 +1642,7 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
 - **변경된 항목만** 포함
 - Key 이름은 원본과 정확히 일치
 - Value는 적절한 데이터 타입 (숫자는 number, 문자는 string)
+
 # 출력 예시
 ```json
 {
@@ -1653,7 +1659,7 @@ def simple_sizing_gearpair(user_message: str, session_id: str) -> dict:
         ]
 
         ## LLM 호출하여 변경데이터 추출
-        llm_response = llm_call(prompt=prompt, model="gpt-5-mini")
+        llm_response = llm_call(prompt=prompt, model="claude-haiku-4-5-20251001")
         modified_data = remove_code_block_llm(llm_response)
         modified_data = json.loads(modified_data)
 
