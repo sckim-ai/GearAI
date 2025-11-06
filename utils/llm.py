@@ -44,7 +44,7 @@ def _get_google_client():
 
     if google_client is None and GOOGLE_API_KEY:
         try:
-            import google.generativeai as genai
+            from google import genai
             genai.configure(api_key=GOOGLE_API_KEY)
             google_client = genai
         except ImportError:
@@ -101,6 +101,53 @@ def _convert_messages_to_google(messages: List[Dict[str, str]]) -> str:
             combined_prompt += f"Assistant: {content}\n\n"
 
     return combined_prompt.strip()
+
+def extract_text_from_openai(response: Any) -> str:
+    """OpenAI 응답 객체에서 텍스트 추출"""
+    if hasattr(response, 'choices') and len(response.choices) > 0:
+        return response.choices[0].message.content
+    return ""
+
+def extract_text_from_anthropic(response: Any) -> str:
+    """Anthropic 응답 객체에서 텍스트 추출"""
+    if hasattr(response, 'content') and len(response.content) > 0:
+        return response.content[0].text
+    return ""
+
+def extract_text_from_google(response: Any) -> str:
+    """Google 응답 객체에서 텍스트 추출"""
+    if hasattr(response, 'text'):
+        return response.text
+    return ""
+
+def extract_text_from_chunk_openai(chunk: Any) -> Optional[str]:
+    """OpenAI 스트리밍 청크에서 텍스트 추출"""
+    if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+        if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+            return chunk.choices[0].delta.content
+    return None
+
+def extract_text_from_chunk_anthropic(chunk: Any) -> Optional[str]:
+    """Anthropic 스트리밍 청크에서 텍스트 추출"""
+    # Anthropic stream은 이미 text_stream으로 처리됨
+    return str(chunk) if chunk else None
+
+def extract_text_from_chunk_google(chunk: Any) -> Optional[str]:
+    """Google 스트리밍 청크에서 텍스트 추출"""
+    if hasattr(chunk, 'text'):
+        return chunk.text
+    return None
+
+def extract_text(response: Any, provider: str) -> str:
+    """프로바이더에 관계없이 응답 객체에서 텍스트 추출"""
+    if provider == "openai":
+        return extract_text_from_openai(response)
+    elif provider == "anthropic":
+        return extract_text_from_anthropic(response)
+    elif provider == "google":
+        return extract_text_from_google(response)
+    else:
+        return str(response)
 
 async def llm_call_async(
     prompt: List[Dict[str, str]],
