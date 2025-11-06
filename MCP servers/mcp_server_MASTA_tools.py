@@ -3797,475 +3797,477 @@ except Exception as e:
             "session_id": session_id
         }
     
-
-
 if __name__ == "__main__":
-    print("=" * 80)
-    print("MASTA Tools MCP Server - 통합 테스트 모드")
-    print("=" * 80)
-
-    # 1. 초기화
-    print("\n[1단계] MASTA 초기화")
-    print("-" * 80)
-    init_result = masta_initialize()
-    print(f"초기화 결과: {init_result['success']}")
-
-    if not init_result['success']:
-        print(f"오류: {init_result.get('error')}")
-        exit(1)
-
-    session_id = init_result['session_id']
-    print(f"세션 ID: {session_id[:8]}...")
-
-    # ========== 축(Shaft) 테스트 ==========
-    print("\n" + "=" * 80)
-    print("축(Shaft) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
-    print("=" * 80)
-
-    # 2. 축 생성
-    print("\n[2-1] 축 생성")
-    shaft_result = create_shaft(
-        session_id=session_id,
-        shaft_name="TestShaft_1",
-        length=160,
-        position_x=0,
-        position_y=0,
-        position_z=0
-    )
-    print(f"[OK] 축 생성: {shaft_result['shaft_variable']}")
-    print(f"결과: {shaft_result}")
-
-    # 3. 축 제원 변경
-    print("\n[2-2] 축 제원 변경")
-    update_shaft_result = update_shaft_specs(
-        session_id=session_id,
-        shaft_variable=shaft_result['shaft_variable'],
-        length=200,
-        outer_diameter=50,
-        bore_diameter=10
-    )
-    print(f"[OK] 축 제원 변경 완료")
-    print(f"결과: {update_shaft_result}")
-
-    # 4. 축 이동
-    print("\n[2-3] 축 위치 변경")
-    move_shaft_result = move_shaft(
-        session_id=session_id,
-        shaft_variable=shaft_result['shaft_variable'],
-        position_x=10,
-        position_y=5,
-        position_z=0
-    )
-    print(f"[OK] 축 위치 변경 완료")
-    print(f"결과: {move_shaft_result}")
-
-    # 5. 축 삭제
-    print("\n[2-4] 축 삭제")
-    delete_shaft_result = delete_component(
-        session_id=session_id,
-        component_name=shaft_result['shaft_variable']
-    )
-    print(f"[OK] 축 삭제 완료")
-    print(f"결과: {delete_shaft_result}")
-
-    status_after_shaft = get_session_status(session_id)
-    print(f"→ 축 삭제 후 컴포넌트 수: {status_after_shaft['component_count']}")
-
-    # ========== 기어(Gear) 테스트 ==========
-    print("\n" + "=" * 80)
-    print("기어(Gear) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
-    print("=" * 80)
-
-    # 기어 테스트를 위해 축 2개 재생성
-    print("\n[3-0] 기어 장착용 축 생성")
-    shaft1_result = create_shaft(
-        session_id=session_id,
-        shaft_name="GearShaft_1",
-        length=160,
-        position_x=0,
-        position_y=0,
-        position_z=0
-    )
-    shaft2_result = create_shaft(
-        session_id=session_id,
-        shaft_name="GearShaft_2",
-        length=140,
-        position_x=90,
-        position_y=31.618,
-        position_z=0
-    )
-    print(f"[OK] 축 2개 생성: {shaft1_result['shaft_variable']}, {shaft2_result['shaft_variable']}")
-    print(f"결과 1: {shaft1_result}")
-    print(f"결과 2: {shaft2_result}")
-
-    # 6. 기어 쌍 생성
-    print("\n[3-1] 기어 쌍 생성")
-    gear_result = create_gear_pair(
-        session_id=session_id,
-        gear_pair_name="test_gear_pair",
-        center_distance=45,
-        pinion_teeth=20,
-        wheel_teeth=40,
-        normal_module=2.0,
-        helix_angle=0.0,
-        pressure_angle=20.0
-    )
-    print(f"[OK] 기어 쌍 생성: {gear_result['gear_pair_name']}")
-    print(f"결과: {gear_result}")
-
-    # 7. 기어 제원 변경
-    print("\n[3-2] 기어 제원 변경")
-    update_gear_result = update_gear_specs(
-        session_id=session_id,
-        gear_pair_name=gear_result['gear_pair_name'],
-        normal_module=2.5,
-        pinion_teeth=22,
-        wheel_teeth=44,
-        pinion_face_width=25.0,
-        wheel_face_width=25.0,
-        pinion_profile_shift=0.3,
-        wheel_profile_shift=0.2
-    )
-    print(f"[OK] 기어 제원 변경 완료")
-    print(f"결과: {update_gear_result}")
-
-    # 8. 기어 장착
-    print("\n[3-3] 기어 축에 장착")
-    mount_gear_result = mount_gear_on_shaft(
-        session_id=session_id,
-        gear_pair_name=gear_result['gear_pair_name'],
-        pinion_shaft_name=shaft1_result['shaft_variable'],
-        wheel_shaft_name=shaft2_result['shaft_variable'],
-        pinion_position=80,
-        wheel_position=70
-    )
-    print(f"[OK] 기어 장착 완료")
-    print(f"결과: {mount_gear_result}")
-
-    # 9. 기어 위치 변경 (재장착)
-    print("\n[3-4] 기어 위치 변경 (재장착)")
-    remount_gear_result = mount_gear_on_shaft(
-        session_id=session_id,
-        gear_pair_name=gear_result['gear_pair_name'],
-        pinion_shaft_name=shaft1_result['shaft_variable'],
-        wheel_shaft_name=shaft2_result['shaft_variable'],
-        pinion_position=100,
-        wheel_position=90
-    )
-    print(f"[OK] 기어 위치 변경 완료")
-    print(f"결과: {remount_gear_result}")
-
-    # 9-1. 기어 해제 테스트
-    print("\n[3-4-1] 기어 해제 (unmount)")
-    unmount_gear_result = unmount_gear(
-        session_id=session_id,
-        gear_pair_name=gear_result['gear_pair_name']
-    )
-    print(f"[OK] 기어 해제 완료")
-    print(f"결과: {unmount_gear_result}")
-
-    # 9-2. 기어 재장착 테스트
-    print("\n[3-4-2] 기어 재장착")
-    remount_gear_result2 = mount_gear_on_shaft(
-        session_id=session_id,
-        gear_pair_name=gear_result['gear_pair_name'],
-        pinion_shaft_name=shaft1_result['shaft_variable'],
-        wheel_shaft_name=shaft2_result['shaft_variable'],
-        pinion_position=50,
-        wheel_position=45
-    )
-    print(f"[OK] 기어 재장착 완료")
-    print(f"결과: {remount_gear_result2}")
-
-    # 9-3. 기어 모델 파일 저장 (자동 파일명)
-    print("\n[3-5] 기어 모델 MASTA 파일 저장 (자동 파일명)")
-    save_gear_result = save_masta_file(
-        session_id=session_id
-    )
-    print(f"[OK] 기어 모델 파일 저장 완료")
-    print(f"결과: {save_gear_result}")
-
-    # 10. 기어 삭제
-    print("\n[3-5] 기어 삭제")
-    delete_gear_result = delete_component(
-        session_id=session_id,
-        component_name=gear_result['gear_pair_name']
-    )
-    print(f"[OK] 기어 삭제 완료")
-    print(f"결과: {delete_gear_result}")
-
-    status_after_gear = get_session_status(session_id)
-    print(f"→ 기어 삭제 후 컴포넌트 수: {status_after_gear['component_count']}")
-
-    # ========== 베어링(Bearing) 테스트 ==========
-    print("\n" + "=" * 80)
-    print("베어링(Bearing) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
-    print("=" * 80)
-
-    # 10. 베어링 생성 (자동 선택)
-    print("\n[4-1] 베어링 생성 (미장착)")
-    bearing_result = create_bearing(
-        session_id=session_id,
-        bearing_name="test_bearing",
-        auto_select_by_diameter=30
-    )
-    print(f"[OK] 베어링 생성: {bearing_result['bearing_name']}")
-    print(f"결과: {bearing_result}")
-
-    # 10-1. 베어링 장착
-    print("\n[4-1-1] 베어링 축에 장착")
-    shaft_name = shaft1_result['shaft_info']['name']
-    bearing_mount_result = mount_bearing(
-        session_id=session_id,
-        bearing_name="test_bearing",
-        shaft_name=shaft_name,
-        position=40.0
-    )
-    if bearing_mount_result.get("success"):
-        print(f"[OK] 베어링 장착: {bearing_mount_result['shaft_name']} at {bearing_mount_result['position']}mm")
-    else:
-        print(f"[ERROR] 베어링 장착 실패: {bearing_mount_result.get('error')}")
-    print(f"결과: {bearing_mount_result}")
-
-    # 11. 베어링 제원 변경 (update_bearing_specs 사용)
-    print("\n[4-2] 베어링 제원 변경 (designation 변경)")
-    bearing_update_result = update_bearing_specs(
-        session_id=session_id,
-        bearing_name=bearing_result['bearing_name'],
-        designation="6208"  # 자동 선택된 형번 -> 6208로 변경
-    )
-    print(f"[OK] 베어링 제원 변경 완료 (6208)")
-    print(f"결과: {bearing_update_result}")
-
-    # 12. 베어링 위치 변경 (mount_bearing 재사용)
-    print("\n[4-3] 베어링 위치 변경 (40mm -> 80mm)")
-    bearing_move_result = mount_bearing(
-        session_id=session_id,
-        bearing_name="test_bearing",
-        shaft_name=shaft_name,
-        position=80.0
-    )
-    print(f"[OK] 베어링 위치 변경: {bearing_move_result['position']}mm")
-    print(f"결과: {bearing_move_result}")
-
-    # 12-1. move_bearing (deprecated) 테스트
-    print("\n[4-3-1] move_bearing (deprecated) 테스트")
-    bearing_move_result2 = move_bearing(
-        session_id=session_id,
-        bearing_name=bearing_result['bearing_name'],
-        position=60.0  # 80 -> 60으로 이동
-    )
-    print(f"[OK] move_bearing 완료: {bearing_move_result2.get('new_position')}mm")
-    if 'deprecated_warning' in bearing_move_result2:
-        print(f"⚠ {bearing_move_result2['deprecated_warning']}")
-    print(f"결과: {bearing_move_result2}")
-
-    # 12-2. 베어링 해제 테스트
-    print("\n[4-3-2] 베어링 해제 (unmount)")
-    bearing_unmount_result = unmount_bearing(
-        session_id=session_id,
-        bearing_name="test_bearing"
-    )
-    print(f"[OK] 베어링 해제 완료")
-    print(f"결과: {bearing_unmount_result}")
-
-    # 12-3. 베어링 재장착 테스트
-    print("\n[4-3-3] 베어링 재장착 (30mm)")
-    bearing_remount_result = mount_bearing(
-        session_id=session_id,
-        bearing_name="test_bearing",
-        shaft_name=shaft_name,
-        position=30.0
-    )
-    print(f"[OK] 베어링 재장착: {bearing_remount_result['position']}mm")
-    print(f"결과: {bearing_remount_result}")
-
-    # 12-4. 베어링 포함 모델 파일 저장 (지정 파일명)
-    print("\n[4-4] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
-    save_bearing_result = save_masta_file(
-        session_id=session_id,
-        file_name="gear_with_bearing_model"
-    )
-    print(f"[OK] 베어링 포함 모델 파일 저장 완료")
-    print(f"결과: {save_bearing_result}")
-
-    # 13. 베어링 삭제
-    print("\n[4-4] 베어링 삭제")
-    delete_bearing_result = delete_component(
-        session_id=session_id,
-        component_name=bearing_result['bearing_name']
-    )
-    print(f"[OK] 베어링 삭제 완료")
-    print(f"결과: {delete_bearing_result}")
-
-    status_after_bearing = get_session_status(session_id)
-    print(f"→ 베어링 삭제 후 컴포넌트 수: {status_after_bearing['component_count']}")
-
-    # ========== Power Load 테스트 ==========
-    print("\n" + "=" * 80)
-    print("Power Load 테스트: 생성 → 장착 → 해제 → 재장착 → 삭제")
-    print("=" * 80)
-
-    # Power Load 생성
-    print("\n[5-1] Input Power Load 생성")
-    input_pl_result = create_power_load(
-        session_id=session_id,
-        power_load_name="Input_Power_Load"
-    )
-    print(f"[OK] Input Power Load 생성: {input_pl_result['power_load_name']}")
-    print(f"결과: {input_pl_result}")
-
-    print("\n[5-2] Output Power Load 생성")
-    output_pl_result = create_power_load(
-        session_id=session_id,
-        power_load_name="Output_Power_Load"
-    )
-    print(f"[OK] Output Power Load 생성: {output_pl_result['power_load_name']}")
-    print(f"결과: {output_pl_result}")
-
-    # Power Load 장착
-    print("\n[5-3] Power Load 축에 장착")
-    mount_input_pl_result = mount_power_load(
-        session_id=session_id,
-        power_load_name="Input_Power_Load",
-        shaft_name=shaft1_result['shaft_info']['name'],
-        position=30.0
-    )
-    print(f"[OK] Input Power Load 장착 완료")
-    print(f"결과: {mount_input_pl_result}")
-
-    mount_output_pl_result = mount_power_load(
-        session_id=session_id,
-        power_load_name="Output_Power_Load",
-        shaft_name=shaft2_result['shaft_info']['name'],
-        position=70.0
-    )
-    print(f"[OK] Output Power Load 장착 완료")
-    print(f"결과: {mount_output_pl_result}")
-
-    # ========== Load Case 테스트 ==========
-    print("\n" + "=" * 80)
-    print("Load Case 테스트: 생성 → 변경 → 삭제")
-    print("=" * 80)
-
-    # Load Case 생성 (첫 번째)
-    print("\n[6-1] Load Case 1 생성 (150Nm, 3000rpm)")
-    lc1_result = create_load_case(
-        session_id=session_id,
-        case_name="LC_150Nm_3000rpm",
-        torque=150.0,
-        speed=3000.0,
-        duration=1.0,
-        include_efficiency=True
-    )
-    print(f"[OK] Load Case 1 생성 완료")
-    print(f"결과: {lc1_result}")
-
-    # Load Case 생성 (두 번째)
-    print("\n[6-2] Load Case 2 생성 (200Nm, 4000rpm)")
-    lc2_result = create_load_case(
-        session_id=session_id,
-        case_name="LC_200Nm_4000rpm",
-        torque=200.0,
-        speed=4000.0,
-        duration=2.0,
-        include_efficiency=True
-    )
-    print(f"[OK] Load Case 2 생성 완료")
-    print(f"결과: {lc2_result}")
-
-    # Load Case 생성 (세 번째)
-    print("\n[6-3] Load Case 3 생성 (250Nm, 5000rpm)")
-    lc3_result = create_load_case(
-        session_id=session_id,
-        case_name="LC_250Nm_5000rpm",
-        torque=250.0,
-        speed=5000.0,
-        duration=1.5,
-        include_efficiency=False
-    )
-    print(f"[OK] Load Case 3 생성 완료")
-    print(f"결과: {lc3_result}")
-
-    # Load Case 변경 테스트 (2번 인덱스 변경)
-    print("\n[6-4] Load Case 2 (인덱스 1) 변경 (토크 220Nm으로 변경)")
-    update_lc_result = update_load_case(
-        session_id=session_id,
-        case_index=1,
-        torque=220.0,
-        case_name="LC_220Nm_4000rpm_modified"
-    )
-    print(f"[OK] Load Case 2 변경 완료")
-    print(f"결과: {update_lc_result}")
-
-    # Load Case 삭제 테스트 (3번째 삭제)
-    print("\n[6-5] Load Case 3 (인덱스 2) 삭제")
-    delete_lc_result = delete_load_case(
-        session_id=session_id,
-        case_index=2
-    )
-    print(f"[OK] Load Case 3 삭제 완료")
-    print(f"결과: {delete_lc_result}")
-
-    # 존재하지 않는 Load Case 변경 시도 (에러 테스트)
-    print("\n[6-6] 존재하지 않는 Load Case (인덱스 5) 변경 시도 (에러 테스트)")
-    error_update_result = update_load_case(
-        session_id=session_id,
-        case_index=5,
-        torque=300.0
-    )
-    if not error_update_result.get('success'):
-        print(f"[예상된 에러] {error_update_result.get('error')}")
-    print(f"결과: {error_update_result}")
-
-    # Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)
-    print("\n[6-7] Load Case 1개만 남을 때까지 삭제")
-    # 현재 2개 남음 (인덱스 0, 1), 인덱스 1 삭제
-    delete_lc2_result = delete_load_case(
-        session_id=session_id,
-        case_index=1
-    )
-    print(f"[OK] Load Case 삭제 완료 (1개 남음)")
-    print(f"결과: {delete_lc2_result}")
-
-    print("\n[6-8] Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)")
-    error_delete_result = delete_load_case(
-        session_id=session_id,
-        case_index=0
-    )
-    if not error_delete_result.get('success'):
-        print(f"[예상된 에러] {error_delete_result.get('error')}")
-    print(f"결과: {error_delete_result}")
-
-    # Load Case 포함 모델 저장
-    print("\n[6-9] Load Case 포함 모델 MASTA 파일 저장")
-    save_lc_result = save_masta_file(
-        session_id=session_id,
-        file_name="full_model_with_load_cases"
-    )
-    print(f"[OK] Load Case 포함 모델 저장 완료")
-    print(f"결과: {save_lc_result}")
-
-    # ========== 최종 정리 ==========
-    print("\n" + "=" * 80)
-    print("최종 세션 정리")
-    print("=" * 80)
-
-    # 14. 최종 세션 상태 확인
-    print("\n[7-1] 최종 세션 상태 확인")
-    final_status = get_session_status(session_id)
-    print(f"→ 최종 컴포넌트 수: {final_status['component_count']}")
-    print(f"결과: {final_status}")
-
-    # # 15. 세션 정리
-    # print("\n[7-2] 세션 정리")
-    # cleanup_result = cleanup_session(session_id)
-    # print(f"[OK] 세션 정리 완료: {cleanup_result['success']}")
-    # print(f"결과: {cleanup_result}")
-
-    print("\n" + "=" * 80)
-    print("전체 테스트 완료!")
-    print("=" * 80)
-
     # 서버 실행 (필요시 주석 해제)
-    # mcp.run()
+    mcp.run()
+
+# if __name__ == "__main__":
+#     print("=" * 80)
+#     print("MASTA Tools MCP Server - 통합 테스트 모드")
+#     print("=" * 80)
+
+#     # 1. 초기화
+#     print("\n[1단계] MASTA 초기화")
+#     print("-" * 80)
+#     init_result = masta_initialize()
+#     print(f"초기화 결과: {init_result['success']}")
+
+#     if not init_result['success']:
+#         print(f"오류: {init_result.get('error')}")
+#         exit(1)
+
+#     session_id = init_result['session_id']
+#     print(f"세션 ID: {session_id[:8]}...")
+
+#     # ========== 축(Shaft) 테스트 ==========
+#     print("\n" + "=" * 80)
+#     print("축(Shaft) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
+#     print("=" * 80)
+
+#     # 2. 축 생성
+#     print("\n[2-1] 축 생성")
+#     shaft_result = create_shaft(
+#         session_id=session_id,
+#         shaft_name="TestShaft_1",
+#         length=160,
+#         position_x=0,
+#         position_y=0,
+#         position_z=0
+#     )
+#     print(f"[OK] 축 생성: {shaft_result['shaft_variable']}")
+#     print(f"결과: {shaft_result}")
+
+#     # 3. 축 제원 변경
+#     print("\n[2-2] 축 제원 변경")
+#     update_shaft_result = update_shaft_specs(
+#         session_id=session_id,
+#         shaft_variable=shaft_result['shaft_variable'],
+#         length=200,
+#         outer_diameter=50,
+#         bore_diameter=10
+#     )
+#     print(f"[OK] 축 제원 변경 완료")
+#     print(f"결과: {update_shaft_result}")
+
+#     # 4. 축 이동
+#     print("\n[2-3] 축 위치 변경")
+#     move_shaft_result = move_shaft(
+#         session_id=session_id,
+#         shaft_variable=shaft_result['shaft_variable'],
+#         position_x=10,
+#         position_y=5,
+#         position_z=0
+#     )
+#     print(f"[OK] 축 위치 변경 완료")
+#     print(f"결과: {move_shaft_result}")
+
+#     # 5. 축 삭제
+#     print("\n[2-4] 축 삭제")
+#     delete_shaft_result = delete_component(
+#         session_id=session_id,
+#         component_name=shaft_result['shaft_variable']
+#     )
+#     print(f"[OK] 축 삭제 완료")
+#     print(f"결과: {delete_shaft_result}")
+
+#     status_after_shaft = get_session_status(session_id)
+#     print(f"→ 축 삭제 후 컴포넌트 수: {status_after_shaft['component_count']}")
+
+#     # ========== 기어(Gear) 테스트 ==========
+#     print("\n" + "=" * 80)
+#     print("기어(Gear) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
+#     print("=" * 80)
+
+#     # 기어 테스트를 위해 축 2개 재생성
+#     print("\n[3-0] 기어 장착용 축 생성")
+#     shaft1_result = create_shaft(
+#         session_id=session_id,
+#         shaft_name="GearShaft_1",
+#         length=160,
+#         position_x=0,
+#         position_y=0,
+#         position_z=0
+#     )
+#     shaft2_result = create_shaft(
+#         session_id=session_id,
+#         shaft_name="GearShaft_2",
+#         length=140,
+#         position_x=90,
+#         position_y=31.618,
+#         position_z=0
+#     )
+#     print(f"[OK] 축 2개 생성: {shaft1_result['shaft_variable']}, {shaft2_result['shaft_variable']}")
+#     print(f"결과 1: {shaft1_result}")
+#     print(f"결과 2: {shaft2_result}")
+
+#     # 6. 기어 쌍 생성
+#     print("\n[3-1] 기어 쌍 생성")
+#     gear_result = create_gear_pair(
+#         session_id=session_id,
+#         gear_pair_name="test_gear_pair",
+#         center_distance=45,
+#         pinion_teeth=20,
+#         wheel_teeth=40,
+#         normal_module=2.0,
+#         helix_angle=0.0,
+#         pressure_angle=20.0
+#     )
+#     print(f"[OK] 기어 쌍 생성: {gear_result['gear_pair_name']}")
+#     print(f"결과: {gear_result}")
+
+#     # 7. 기어 제원 변경
+#     print("\n[3-2] 기어 제원 변경")
+#     update_gear_result = update_gear_specs(
+#         session_id=session_id,
+#         gear_pair_name=gear_result['gear_pair_name'],
+#         normal_module=2.5,
+#         pinion_teeth=22,
+#         wheel_teeth=44,
+#         pinion_face_width=25.0,
+#         wheel_face_width=25.0,
+#         pinion_profile_shift=0.3,
+#         wheel_profile_shift=0.2
+#     )
+#     print(f"[OK] 기어 제원 변경 완료")
+#     print(f"결과: {update_gear_result}")
+
+#     # 8. 기어 장착
+#     print("\n[3-3] 기어 축에 장착")
+#     mount_gear_result = mount_gear_on_shaft(
+#         session_id=session_id,
+#         gear_pair_name=gear_result['gear_pair_name'],
+#         pinion_shaft_name=shaft1_result['shaft_variable'],
+#         wheel_shaft_name=shaft2_result['shaft_variable'],
+#         pinion_position=80,
+#         wheel_position=70
+#     )
+#     print(f"[OK] 기어 장착 완료")
+#     print(f"결과: {mount_gear_result}")
+
+#     # 9. 기어 위치 변경 (재장착)
+#     print("\n[3-4] 기어 위치 변경 (재장착)")
+#     remount_gear_result = mount_gear_on_shaft(
+#         session_id=session_id,
+#         gear_pair_name=gear_result['gear_pair_name'],
+#         pinion_shaft_name=shaft1_result['shaft_variable'],
+#         wheel_shaft_name=shaft2_result['shaft_variable'],
+#         pinion_position=100,
+#         wheel_position=90
+#     )
+#     print(f"[OK] 기어 위치 변경 완료")
+#     print(f"결과: {remount_gear_result}")
+
+#     # 9-1. 기어 해제 테스트
+#     print("\n[3-4-1] 기어 해제 (unmount)")
+#     unmount_gear_result = unmount_gear(
+#         session_id=session_id,
+#         gear_pair_name=gear_result['gear_pair_name']
+#     )
+#     print(f"[OK] 기어 해제 완료")
+#     print(f"결과: {unmount_gear_result}")
+
+#     # 9-2. 기어 재장착 테스트
+#     print("\n[3-4-2] 기어 재장착")
+#     remount_gear_result2 = mount_gear_on_shaft(
+#         session_id=session_id,
+#         gear_pair_name=gear_result['gear_pair_name'],
+#         pinion_shaft_name=shaft1_result['shaft_variable'],
+#         wheel_shaft_name=shaft2_result['shaft_variable'],
+#         pinion_position=50,
+#         wheel_position=45
+#     )
+#     print(f"[OK] 기어 재장착 완료")
+#     print(f"결과: {remount_gear_result2}")
+
+#     # 9-3. 기어 모델 파일 저장 (자동 파일명)
+#     print("\n[3-5] 기어 모델 MASTA 파일 저장 (자동 파일명)")
+#     save_gear_result = save_masta_file(
+#         session_id=session_id
+#     )
+#     print(f"[OK] 기어 모델 파일 저장 완료")
+#     print(f"결과: {save_gear_result}")
+
+#     # 10. 기어 삭제
+#     print("\n[3-5] 기어 삭제")
+#     delete_gear_result = delete_component(
+#         session_id=session_id,
+#         component_name=gear_result['gear_pair_name']
+#     )
+#     print(f"[OK] 기어 삭제 완료")
+#     print(f"결과: {delete_gear_result}")
+
+#     status_after_gear = get_session_status(session_id)
+#     print(f"→ 기어 삭제 후 컴포넌트 수: {status_after_gear['component_count']}")
+
+#     # ========== 베어링(Bearing) 테스트 ==========
+#     print("\n" + "=" * 80)
+#     print("베어링(Bearing) 테스트: 생성 → 제원 변경 → 이동 → 삭제")
+#     print("=" * 80)
+
+#     # 10. 베어링 생성 (자동 선택)
+#     print("\n[4-1] 베어링 생성 (미장착)")
+#     bearing_result = create_bearing(
+#         session_id=session_id,
+#         bearing_name="test_bearing",
+#         auto_select_by_diameter=30
+#     )
+#     print(f"[OK] 베어링 생성: {bearing_result['bearing_name']}")
+#     print(f"결과: {bearing_result}")
+
+#     # 10-1. 베어링 장착
+#     print("\n[4-1-1] 베어링 축에 장착")
+#     shaft_name = shaft1_result['shaft_info']['name']
+#     bearing_mount_result = mount_bearing(
+#         session_id=session_id,
+#         bearing_name="test_bearing",
+#         shaft_name=shaft_name,
+#         position=40.0
+#     )
+#     if bearing_mount_result.get("success"):
+#         print(f"[OK] 베어링 장착: {bearing_mount_result['shaft_name']} at {bearing_mount_result['position']}mm")
+#     else:
+#         print(f"[ERROR] 베어링 장착 실패: {bearing_mount_result.get('error')}")
+#     print(f"결과: {bearing_mount_result}")
+
+#     # 11. 베어링 제원 변경 (update_bearing_specs 사용)
+#     print("\n[4-2] 베어링 제원 변경 (designation 변경)")
+#     bearing_update_result = update_bearing_specs(
+#         session_id=session_id,
+#         bearing_name=bearing_result['bearing_name'],
+#         designation="6208"  # 자동 선택된 형번 -> 6208로 변경
+#     )
+#     print(f"[OK] 베어링 제원 변경 완료 (6208)")
+#     print(f"결과: {bearing_update_result}")
+
+#     # 12. 베어링 위치 변경 (mount_bearing 재사용)
+#     print("\n[4-3] 베어링 위치 변경 (40mm -> 80mm)")
+#     bearing_move_result = mount_bearing(
+#         session_id=session_id,
+#         bearing_name="test_bearing",
+#         shaft_name=shaft_name,
+#         position=80.0
+#     )
+#     print(f"[OK] 베어링 위치 변경: {bearing_move_result['position']}mm")
+#     print(f"결과: {bearing_move_result}")
+
+#     # 12-1. move_bearing (deprecated) 테스트
+#     print("\n[4-3-1] move_bearing (deprecated) 테스트")
+#     bearing_move_result2 = move_bearing(
+#         session_id=session_id,
+#         bearing_name=bearing_result['bearing_name'],
+#         position=60.0  # 80 -> 60으로 이동
+#     )
+#     print(f"[OK] move_bearing 완료: {bearing_move_result2.get('new_position')}mm")
+#     if 'deprecated_warning' in bearing_move_result2:
+#         print(f"⚠ {bearing_move_result2['deprecated_warning']}")
+#     print(f"결과: {bearing_move_result2}")
+
+#     # 12-2. 베어링 해제 테스트
+#     print("\n[4-3-2] 베어링 해제 (unmount)")
+#     bearing_unmount_result = unmount_bearing(
+#         session_id=session_id,
+#         bearing_name="test_bearing"
+#     )
+#     print(f"[OK] 베어링 해제 완료")
+#     print(f"결과: {bearing_unmount_result}")
+
+#     # 12-3. 베어링 재장착 테스트
+#     print("\n[4-3-3] 베어링 재장착 (30mm)")
+#     bearing_remount_result = mount_bearing(
+#         session_id=session_id,
+#         bearing_name="test_bearing",
+#         shaft_name=shaft_name,
+#         position=30.0
+#     )
+#     print(f"[OK] 베어링 재장착: {bearing_remount_result['position']}mm")
+#     print(f"결과: {bearing_remount_result}")
+
+#     # 12-4. 베어링 포함 모델 파일 저장 (지정 파일명)
+#     print("\n[4-4] 베어링 포함 모델 MASTA 파일 저장 (지정 파일명)")
+#     save_bearing_result = save_masta_file(
+#         session_id=session_id,
+#         file_name="gear_with_bearing_model"
+#     )
+#     print(f"[OK] 베어링 포함 모델 파일 저장 완료")
+#     print(f"결과: {save_bearing_result}")
+
+#     # 13. 베어링 삭제
+#     print("\n[4-4] 베어링 삭제")
+#     delete_bearing_result = delete_component(
+#         session_id=session_id,
+#         component_name=bearing_result['bearing_name']
+#     )
+#     print(f"[OK] 베어링 삭제 완료")
+#     print(f"결과: {delete_bearing_result}")
+
+#     status_after_bearing = get_session_status(session_id)
+#     print(f"→ 베어링 삭제 후 컴포넌트 수: {status_after_bearing['component_count']}")
+
+#     # ========== Power Load 테스트 ==========
+#     print("\n" + "=" * 80)
+#     print("Power Load 테스트: 생성 → 장착 → 해제 → 재장착 → 삭제")
+#     print("=" * 80)
+
+#     # Power Load 생성
+#     print("\n[5-1] Input Power Load 생성")
+#     input_pl_result = create_power_load(
+#         session_id=session_id,
+#         power_load_name="Input_Power_Load"
+#     )
+#     print(f"[OK] Input Power Load 생성: {input_pl_result['power_load_name']}")
+#     print(f"결과: {input_pl_result}")
+
+#     print("\n[5-2] Output Power Load 생성")
+#     output_pl_result = create_power_load(
+#         session_id=session_id,
+#         power_load_name="Output_Power_Load"
+#     )
+#     print(f"[OK] Output Power Load 생성: {output_pl_result['power_load_name']}")
+#     print(f"결과: {output_pl_result}")
+
+#     # Power Load 장착
+#     print("\n[5-3] Power Load 축에 장착")
+#     mount_input_pl_result = mount_power_load(
+#         session_id=session_id,
+#         power_load_name="Input_Power_Load",
+#         shaft_name=shaft1_result['shaft_info']['name'],
+#         position=30.0
+#     )
+#     print(f"[OK] Input Power Load 장착 완료")
+#     print(f"결과: {mount_input_pl_result}")
+
+#     mount_output_pl_result = mount_power_load(
+#         session_id=session_id,
+#         power_load_name="Output_Power_Load",
+#         shaft_name=shaft2_result['shaft_info']['name'],
+#         position=70.0
+#     )
+#     print(f"[OK] Output Power Load 장착 완료")
+#     print(f"결과: {mount_output_pl_result}")
+
+#     # ========== Load Case 테스트 ==========
+#     print("\n" + "=" * 80)
+#     print("Load Case 테스트: 생성 → 변경 → 삭제")
+#     print("=" * 80)
+
+#     # Load Case 생성 (첫 번째)
+#     print("\n[6-1] Load Case 1 생성 (150Nm, 3000rpm)")
+#     lc1_result = create_load_case(
+#         session_id=session_id,
+#         case_name="LC_150Nm_3000rpm",
+#         torque=150.0,
+#         speed=3000.0,
+#         duration=1.0,
+#         include_efficiency=True
+#     )
+#     print(f"[OK] Load Case 1 생성 완료")
+#     print(f"결과: {lc1_result}")
+
+#     # Load Case 생성 (두 번째)
+#     print("\n[6-2] Load Case 2 생성 (200Nm, 4000rpm)")
+#     lc2_result = create_load_case(
+#         session_id=session_id,
+#         case_name="LC_200Nm_4000rpm",
+#         torque=200.0,
+#         speed=4000.0,
+#         duration=2.0,
+#         include_efficiency=True
+#     )
+#     print(f"[OK] Load Case 2 생성 완료")
+#     print(f"결과: {lc2_result}")
+
+#     # Load Case 생성 (세 번째)
+#     print("\n[6-3] Load Case 3 생성 (250Nm, 5000rpm)")
+#     lc3_result = create_load_case(
+#         session_id=session_id,
+#         case_name="LC_250Nm_5000rpm",
+#         torque=250.0,
+#         speed=5000.0,
+#         duration=1.5,
+#         include_efficiency=False
+#     )
+#     print(f"[OK] Load Case 3 생성 완료")
+#     print(f"결과: {lc3_result}")
+
+#     # Load Case 변경 테스트 (2번 인덱스 변경)
+#     print("\n[6-4] Load Case 2 (인덱스 1) 변경 (토크 220Nm으로 변경)")
+#     update_lc_result = update_load_case(
+#         session_id=session_id,
+#         case_index=1,
+#         torque=220.0,
+#         case_name="LC_220Nm_4000rpm_modified"
+#     )
+#     print(f"[OK] Load Case 2 변경 완료")
+#     print(f"결과: {update_lc_result}")
+
+#     # Load Case 삭제 테스트 (3번째 삭제)
+#     print("\n[6-5] Load Case 3 (인덱스 2) 삭제")
+#     delete_lc_result = delete_load_case(
+#         session_id=session_id,
+#         case_index=2
+#     )
+#     print(f"[OK] Load Case 3 삭제 완료")
+#     print(f"결과: {delete_lc_result}")
+
+#     # 존재하지 않는 Load Case 변경 시도 (에러 테스트)
+#     print("\n[6-6] 존재하지 않는 Load Case (인덱스 5) 변경 시도 (에러 테스트)")
+#     error_update_result = update_load_case(
+#         session_id=session_id,
+#         case_index=5,
+#         torque=300.0
+#     )
+#     if not error_update_result.get('success'):
+#         print(f"[예상된 에러] {error_update_result.get('error')}")
+#     print(f"결과: {error_update_result}")
+
+#     # Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)
+#     print("\n[6-7] Load Case 1개만 남을 때까지 삭제")
+#     # 현재 2개 남음 (인덱스 0, 1), 인덱스 1 삭제
+#     delete_lc2_result = delete_load_case(
+#         session_id=session_id,
+#         case_index=1
+#     )
+#     print(f"[OK] Load Case 삭제 완료 (1개 남음)")
+#     print(f"결과: {delete_lc2_result}")
+
+#     print("\n[6-8] Load Case 1개만 남은 상태에서 삭제 시도 (에러 테스트)")
+#     error_delete_result = delete_load_case(
+#         session_id=session_id,
+#         case_index=0
+#     )
+#     if not error_delete_result.get('success'):
+#         print(f"[예상된 에러] {error_delete_result.get('error')}")
+#     print(f"결과: {error_delete_result}")
+
+#     # Load Case 포함 모델 저장
+#     print("\n[6-9] Load Case 포함 모델 MASTA 파일 저장")
+#     save_lc_result = save_masta_file(
+#         session_id=session_id,
+#         file_name="full_model_with_load_cases"
+#     )
+#     print(f"[OK] Load Case 포함 모델 저장 완료")
+#     print(f"결과: {save_lc_result}")
+
+#     # ========== 최종 정리 ==========
+#     print("\n" + "=" * 80)
+#     print("최종 세션 정리")
+#     print("=" * 80)
+
+#     # 14. 최종 세션 상태 확인
+#     print("\n[7-1] 최종 세션 상태 확인")
+#     final_status = get_session_status(session_id)
+#     print(f"→ 최종 컴포넌트 수: {final_status['component_count']}")
+#     print(f"결과: {final_status}")
+
+#     # # 15. 세션 정리
+#     # print("\n[7-2] 세션 정리")
+#     # cleanup_result = cleanup_session(session_id)
+#     # print(f"[OK] 세션 정리 완료: {cleanup_result['success']}")
+#     # print(f"결과: {cleanup_result}")
+
+#     print("\n" + "=" * 80)
+#     print("전체 테스트 완료!")
+#     print("=" * 80)
+
+#     # 서버 실행 (필요시 주석 해제)
+#     # mcp.run()
