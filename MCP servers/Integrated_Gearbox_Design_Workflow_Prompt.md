@@ -16,14 +16,12 @@ Phase 2: 기어비 분배 결정 (기어 쌍 개수만 결정)
 Phase 3: Simple Sizing 기반 기어 설계 (mcp_server_gd_ipc)
     - 작동조건 기반 최적 기어 탐색
     - 중심거리, 모듈, 잇수 확정
+    ⏸️ [체크포인트 1: 기어 설계 완료 확인]
     ↓
 Phase 4: MASTA 통합 모델링 (mcp_server_masta_tools)
-    - Phase 3의 실제 중심거리로 축 배치
-    - 기어/베어링/Load 마운트
-    ↓
-Phase 5: 해석 및 검증
-    ↓
-Phase 6: 결과 리포팅
+    - Step 4.1~4.3: 축(Shaft) 및 베어링(Bearing) 모델링
+    ⏸️ [체크포인트 2: 축/베어링 완료 확인]
+    - Step 4.4~4.6: 기어 마운트, Power Load 설정, 파일 저장
 ```
 
 ---
@@ -420,11 +418,9 @@ Phase 1~3이 완료되었습니다:
 - ✅ Phase 3: Simple Sizing 기반 기어 설계 (실제 중심거리 확정)
 
 **다음 단계로 진행하시겠습니까?**
-- Phase 4: MASTA 통합 모델링
-- Phase 5: 해석 및 검증
-- Phase 6: 결과 리포팅
+- Phase 4: MASTA 통합 모델링 (축/베어링 생성 및 기어 마운트)
 
-**사용자에게 계속 진행할지 확인하세요.** 사용자가 "예", "계속", "yes" 등으로 응답하면 Phase 4부터 진행합니다.
+**사용자에게 계속 진행할지 확인하세요.** 사용자가 "예", "계속", "yes" 등으로 응답하면 Phase 4를 시작합니다.
 
 ---
 
@@ -550,6 +546,23 @@ for bearing_name, shaft_name, position, shaft_dia in bearing_config:
 
     print(f"✅ {bearing_name} 마운트: {designation}, 위치 {position}mm")
 ```
+
+---
+
+### ⏸️ 체크포인트 2: 축/베어링 모델링 완료 (Step 4.1~4.4 완료)
+
+축 및 베어링 모델링이 완료되었습니다:
+- ✅ Step 4.1: MASTA 세션 초기화
+- ✅ Step 4.2: 축(Shaft) 생성
+- ✅ Step 4.3: 축 위치 조정 (SimpleSizing 중심거리 기반)
+- ✅ Step 4.4: 베어링 생성 및 마운트
+
+**다음 단계로 진행하시겠습니까?**
+- Step 4.5~4.10: 기어 마운트, Power Load 설정, 파일 저장
+
+**사용자에게 계속 진행할지 확인하세요.** 사용자가 "예", "계속", "yes" 등으로 응답하면 나머지 단계를 진행합니다.
+
+---
 
 ### Step 4.5: 기어 쌍 생성
 
@@ -729,118 +742,24 @@ print("✅ MASTA 세션 정리 완료")
 
 ---
 
-## Phase 5: 해석 및 검증 (Analysis & Validation)
+### ✅ 전체 워크플로우 완료
 
-MASTA 해석 결과를 확인하고 요구사항 만족 여부를 검증합니다.
+Phase 1~4가 모두 완료되었습니다!
 
-### 검증 항목
+- ✅ Phase 1: 요구사항 수집
+- ✅ Phase 2: 기어비 분배 결정
+- ✅ Phase 3: Simple Sizing 기반 기어 설계
+- ✅ Phase 4: MASTA 통합 모델링 및 파일 저장
 
-1. **기어비 확인**
-   ```python
-   actual_ratio = (gear1_specs['WheelTeeth'] / gear1_specs['PinionTeeth']) * \
-                  (gear2_specs['WheelTeeth'] / gear2_specs['PinionTeeth'])
-
-   print(f"설계 기어비: {actual_ratio:.2f} (목표: {total_gear_ratio})")
-   # 예: 3.0 × 3.0 = 9.0 ✓
-   ```
-
-2. **효율 확인**
-   - 일반적으로 헬리컬 기어박스 효율: 95~98%
-   - MASTA 해석 결과가 이 범위 내인지 확인
-
-3. **베어링 수명 확인**
-   - 모든 베어링의 L10 수명 > 요구수명
-
-4. **기어 안전계수 재확인**
-   - SimpleSizing에서 이미 검증했지만 MASTA에서도 재확인
-   - 접촉 안전계수 ≥ 1.2
-   - 굽힘 안전계수 ≥ 1.4
-
-5. **축 처짐 확인**
-   - 최대 처짐 < 0.1mm (일반 기준)
-
----
-
-## Phase 6: 결과 리포팅 (Final Report)
-
-전체 설계 과정과 결과를 사용자에게 보고합니다.
-
-### 리포트 구조
-
-```markdown
-# 기어박스 설계 최종 보고서
-
-## 1. 요구사항
-- 요구수명: 10,000 hr
-- 입력속도: 3,000 rpm
-- 부하토크: 200 N·m (출력)
-- 작동온도: 70 °C
-- 기어비: 9:1
-
-## 2. 시스템 구성
-- 감속 단수: 2단
-- 축 개수: 3개
-- 기어 쌍: 2개
-- 베어링: 6개
-
-## 3. Simple Sizing 결과
-
-### GearSet_1st (1단)
-| 항목 | 값 |
-|------|-----|
-| 모듈 (mm) | 2.0 |
-| 압력각 (°) | 20 |
-| 헬리컬 각도 (°) | 15 |
-| 피니언 잇수 | 18 |
-| 휠 잇수 | 54 |
-| 치폭 (mm) | 20 |
-| **중심거리 (mm)** | **52.5** ⭐ |
-| 안전계수 (접촉) | 1.52 |
-| 안전계수 (굽힘) | 1.85 |
-| PPTE (μm) | 3.2 |
-| 무게 (kg) | 1.5 |
-
-### GearSet_2nd (2단)
-| 항목 | 값 |
-|------|-----|
-| 모듈 (mm) | 1.75 |
-| 압력각 (°) | 20 |
-| 헬리컬 각도 (°) | 18 |
-| 피니언 잇수 | 20 |
-| 휠 잇수 | 60 |
-| 치폭 (mm) | 18 |
-| **중심거리 (mm)** | **48.3** ⭐ |
-| 안전계수 (접촉) | 1.68 |
-| 안전계수 (굽힘) | 2.12 |
-| PPTE (μm) | 2.8 |
-| 무게 (kg) | 1.2 |
-
-## 4. MASTA 축 배치
-- Shaft_1st (Input): (0, 0, 0)
-- Shaft_2nd (Intermediate): **(52.5, 0, 0)** ← GearSet_1st 중심거리
-- Shaft_3rd (Output): **(100.8, 0, 0)** ← 52.5 + 48.3
-
-**설계 철학**: 중심거리를 임의로 정하지 않고, 작동조건 기반 Simple Sizing으로 도출된 실제 중심거리를 사용했습니다.
-
-## 5. MASTA 해석 결과
-- 전체 감속비: 9.0 (목표 달성 ✓)
-- 시스템 효율: 96.5%
-- 베어링 최소 수명: 18,000 hr (요구 10,000 hr 만족 ✓)
-- 최대 축 처짐: 0.06 mm (허용 범위 ✓)
-
-## 6. 생성된 파일
+**생성된 파일:**
 - MASTA 모델: `SimpleSizing_Based_Gearbox.masta`
 - MASTA 시각화: `model_visualization.png`
-- GearSet_1st 2D 도면: `GearSet_1st_2D.png`
-- GearSet_1st 3D 모델: `GearSet_1st_3D.png`
-- GearSet_2nd 2D 도면: `GearSet_2nd_2D.png`
-- GearSet_2nd 3D 모델: `GearSet_2nd_3D.png`
+- 기어 설계 이미지: `GearSet_1st_2D/3D.png`, `GearSet_2nd_2D/3D.png`
 
-## 7. 결론
-Simple Sizing을 통해 작동조건 기반으로 최적화된 기어를 설계하고,
-도출된 중심거리를 MASTA 모델링에 정확히 반영하여
-모든 요구사항을 만족하는 기어박스를 완성했습니다.
-```
+**사용자에게 최종 결과를 요약하여 제시하세요:**
+- 설계된 기어 사양 (모듈, 잇수, 중심거리)
+- MASTA 모델 파일 경로
+- 생성된 이미지 파일 경로
 
 ---
 
@@ -1213,25 +1132,9 @@ cleanup_session(session_id_masta)
 - [ ] Phase 4: 축 위치 = SimpleSizing 중심거리 정확히 반영
 - [ ] Phase 4: 모든 축에 베어링 2개 마운트
 - [ ] Phase 4: 모든 기어가 올바르게 마운트
-- [ ] Phase 4: Power Load 설정 및 Load Case 해석 완료
-- [ ] Phase 5: MASTA 해석 결과 검증 (기어비, 효율, 수명)
-- [ ] Phase 6: 모든 세션 정리 (cleanup_session 호출)
-- [ ] Phase 6: 최종 리포트 작성 완료
-
----
-
-### ✅ 전체 워크플로우 완료
-
-Phase 1~6이 모두 완료되었습니다!
-
-- ✅ Phase 1: 요구사항 수집
-- ✅ Phase 2: 기어비 분배 결정
-- ✅ Phase 3: Simple Sizing 기반 기어 설계
-- ✅ Phase 4: MASTA 통합 모델링
-- ✅ Phase 5: 해석 및 검증
-- ✅ Phase 6: 결과 리포팅
-
-**사용자에게 최종 결과를 요약하여 제시하고, 추가 작업이 필요한지 확인하세요.**
+- [ ] Phase 4: Power Load 설정 완료
+- [ ] Phase 4: MASTA 파일 저장 및 시각화 생성
+- [ ] Phase 4: 모든 세션 정리 (cleanup_session 호출)
 
 ---
 
