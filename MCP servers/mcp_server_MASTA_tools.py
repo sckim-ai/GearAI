@@ -639,7 +639,7 @@ def create_shaft(
 
     Note:
         - 사전에 masta_initialize()가 완료되어야 합니다
-        - 축의 외경/내경은 이후 설정 가능합니다
+        - 축의 내경은 생성 후 설정 가능합니다
     """
     try:
         session = get_session(session_id)
