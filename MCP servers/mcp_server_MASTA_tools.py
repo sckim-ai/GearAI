@@ -610,6 +610,7 @@ def create_shaft(
     session_id: str,
     shaft_name: str,
     length: float,
+    diameter: float = 30.0,
     position_x: float = 0.0,
     position_y: float = 0.0,
     position_z: float = 0.0
@@ -621,6 +622,7 @@ def create_shaft(
         session_id (str): 세션 ID (masta_initialize()로 생성된 ID 필수)
         shaft_name (str): 축 표시 이름 (editable_name으로 설정)
         length (float): 축 길이 (mm)
+        diameter (float): 축 외경 (mm, 기본값: 30.0)
         position_x (float): X축 위치 (mm, 기본값: 0.0)
         position_y (float): Y축 위치 (mm, 기본값: 0.0)
         position_z (float): Z축 위치 (mm, 기본값: 0.0)
@@ -667,6 +669,11 @@ def create_shaft(
 # 축 이름 설정
 {shaft_variable}.editable_name = "{shaft_name}"
 
+# 축 직경 설정
+outer_points = {shaft_variable}.active_definition.outer_profile.points
+for point in outer_points:
+    point.diameter = {diameter}*MM
+
 # 축 위치 설정 (Vector3D 사용)
 from mastapy._private._math.vector_3d import Vector3D
 desired_position = Vector3D({position_x}, {position_y}, {position_z}) * MM
@@ -675,6 +682,7 @@ desired_position = Vector3D({position_x}, {position_y}, {position_z}) * MM
 print(f"축 '{shaft_name}' 생성 완료")
 print(f"  - 변수명: {shaft_variable}")
 print(f"  - 길이: {length} mm")
+print(f"  - 외경: {diameter} mm")
 print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
 """
 
@@ -694,6 +702,7 @@ print(f"  - 위치: ({position_x}, {position_y}, {position_z}) mm")
             "name": shaft_name,
             "variable": shaft_variable,
             "length": length,
+            "diameter": diameter,
             "position": [position_x, position_y, position_z]
         }
         session.shafts.append(shaft_info)
