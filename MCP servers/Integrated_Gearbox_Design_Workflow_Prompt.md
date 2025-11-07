@@ -326,9 +326,6 @@ if calc_result['success']:
 # 2D/3D 이미지 저장
 save_2D_image(session_id=session_id_gear1, file_name="GearSet_1st_2D.png")
 save_3D_image(session_id=session_id_gear1, file_name="GearSet_1st_3D.png")
-
-# 세션 정리
-cleanup_session(session_id=session_id_gear1)
 ```
 
 ### Step 3.3: GearSet_2nd Simple Sizing 수행
@@ -369,9 +366,6 @@ print(f"GearSet_2nd 중심거리: {center_distance_2nd} mm")
 # 이미지 저장
 save_2D_image(session_id=session_id_gear2, file_name="GearSet_2nd_2D.png")
 save_3D_image(session_id=session_id_gear2, file_name="GearSet_2nd_3D.png")
-
-# 세션 정리
-cleanup_session(session_id=session_id_gear2)
 ```
 
 ### Step 3.4: Phase 3 출력 정리
@@ -733,13 +727,6 @@ masta_file_path = result.get('file_path')
 print(f"💾 MASTA 파일: {masta_file_path}")
 ```
 
-### Step 4.10: 세션 정리
-
-```python
-cleanup_session(session_id=session_id_masta)
-print("✅ MASTA 세션 정리 완료")
-```
-
 ---
 
 ### ✅ 전체 워크플로우 완료
@@ -855,7 +842,6 @@ center_distance_1st = apply_result['case_data']['CenterDistance']
 # 이미지 저장
 save_2D_image(session_id_gear1, "GearSet_1st_2D.png")
 save_3D_image(session_id_gear1, "GearSet_1st_3D.png")
-cleanup_session(session_id_gear1)
 
 # === GearSet_2nd ===
 print("\n[Phase 3-2] GearSet_2nd Simple Sizing 시작...")
@@ -893,7 +879,6 @@ center_distance_2nd = apply_result['case_data']['CenterDistance']
 
 save_2D_image(session_id_gear2, "GearSet_2nd_2D.png")
 save_3D_image(session_id_gear2, "GearSet_2nd_3D.png")
-cleanup_session(session_id_gear2)
 
 # Phase 3 결과 요약
 gear_design_summary = {
@@ -998,9 +983,6 @@ update_load_case(session_id_masta, "Nominal_Load",
 show_model(session_id_masta, save_image=True)
 save_masta_file(session_id_masta, "SimpleSizing_Based_Gearbox.masta")
 
-# 정리
-cleanup_session(session_id_masta)
-
 print("\n✅ 전체 워크플로우 완료!")
 print(f"""
 설계 요약:
@@ -1080,22 +1062,6 @@ distance_2_3 = shaft3_x - shaft2_x
 assert abs(distance_2_3 - center_distance_2nd) < 0.01, "축 간격 불일치!"
 ```
 
-### 4. 세션 관리
-
-각 Phase별로 세션을 명확히 분리:
-
-```python
-# Phase 3: mcp_server_gd_ipc 세션
-session_id_gear1 = initialize()['session_id']
-# ... 작업 ...
-cleanup_session(session_id_gear1)
-
-# Phase 4: mcp_server_masta_tools 세션
-session_id_masta = masta_initialize()['session_id']
-# ... 작업 ...
-cleanup_session(session_id_masta)
-```
-
 ---
 
 ## 문제 해결 가이드
@@ -1134,7 +1100,6 @@ cleanup_session(session_id_masta)
 - [ ] Phase 4: 모든 기어가 올바르게 마운트
 - [ ] Phase 4: Power Load 설정 완료
 - [ ] Phase 4: MASTA 파일 저장 및 시각화 생성
-- [ ] Phase 4: 모든 세션 정리 (cleanup_session 호출)
 
 ---
 
