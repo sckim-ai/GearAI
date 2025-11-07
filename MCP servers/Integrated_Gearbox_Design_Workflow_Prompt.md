@@ -412,6 +412,22 @@ gear_design_summary = {
 
 ---
 
+### ⏸️ 중간 체크포인트 (Phase 1~3 완료)
+
+Phase 1~3이 완료되었습니다:
+- ✅ Phase 1: 요구사항 수집
+- ✅ Phase 2: 기어비 분배 결정
+- ✅ Phase 3: Simple Sizing 기반 기어 설계 (실제 중심거리 확정)
+
+**다음 단계로 진행하시겠습니까?**
+- Phase 4: MASTA 통합 모델링
+- Phase 5: 해석 및 검증
+- Phase 6: 결과 리포팅
+
+**사용자에게 계속 진행할지 확인하세요.** 사용자가 "예", "계속", "yes" 등으로 응답하면 Phase 4부터 진행합니다.
+
+---
+
 ## Phase 4: MASTA 통합 모델링 (mcp_server_masta_tools 활용)
 
 **목표**: Phase 3에서 확정된 **실제 중심거리**를 사용하여 축을 배치하고 전체 기어박스를 모델링합니다.
@@ -1201,6 +1217,21 @@ cleanup_session(session_id_masta)
 - [ ] Phase 5: MASTA 해석 결과 검증 (기어비, 효율, 수명)
 - [ ] Phase 6: 모든 세션 정리 (cleanup_session 호출)
 - [ ] Phase 6: 최종 리포트 작성 완료
+
+---
+
+### ✅ 전체 워크플로우 완료
+
+Phase 1~6이 모두 완료되었습니다!
+
+- ✅ Phase 1: 요구사항 수집
+- ✅ Phase 2: 기어비 분배 결정
+- ✅ Phase 3: Simple Sizing 기반 기어 설계
+- ✅ Phase 4: MASTA 통합 모델링
+- ✅ Phase 5: 해석 및 검증
+- ✅ Phase 6: 결과 리포팅
+
+**사용자에게 최종 결과를 요약하여 제시하고, 추가 작업이 필요한지 확인하세요.**
 
 ---
 
